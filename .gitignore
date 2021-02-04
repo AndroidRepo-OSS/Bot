@@ -1,0 +1,6 @@
+bot/config.py
+bot/bot.session*
+bot/__pycache__/
+bot/database/database.*
+bot/database/__pycache__/
+bot/handlers/__pycache__/
