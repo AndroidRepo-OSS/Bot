@@ -13,12 +13,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import os
-import sys
 import asyncio
+import os
+import traceback
+import sys
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
+from meval import meval
 
 
 @Client.on_message(filters.sudo & filters.cmd("restart"))
@@ -63,7 +65,7 @@ async def on_shutdown_m(c: Client, m: Message):
     
     
 @Client.on_message(filters.sudo & filters.cmd("term(inal)? "))
-async def on_term_m(c: Client, m: Message):
+async def on_terminal_m(c: Client, m: Message):
     command = m.text.split()[0]
     code = m.text[len(command)+1:]
     sm = await m.reply_text("Executando...")
@@ -78,5 +80,27 @@ async def on_term_m(c: Client, m: Message):
     for line in lines:
         output += f"<code>{line}</code>\n"
     output_message = f"<b>Entrada\n&gt;</b> <code>{code}</code>\n\n"
-    output_message += f"<b>Saída\n&gt;</b> {output}"
+    if len(output) > 0:
+        output_message += f"<b>Saída\n&gt;</b> {output}"
+    await sm.edit_text(output_message)
+    
+    
+@Client.on_message(filters.sudo & filters.cmd("ev(al)? "))
+async def on_eval_m(c: Client, m: Message):
+    command = m.text.split()[0]
+    code = m.text[len(command)+1:]
+    sm = await m.reply_text("Executando...")
+    try:
+        stdout = await meval(code, globals())
+    except:
+        error = traceback.format_exc()
+        await sm.edit_text(f"Ocorreu um erro enquanto eu executava o código:\n<code>{error}</code>")
+        return
+    output = ''
+    lines = str(stdout).split("\n")
+    for line in lines:
+        output += f"<code>{line}</code>\n"
+    output_message = f"<b>Entrada\n&gt;</b> <code>{code}</code>\n\n"
+    if len(output) > 0:
+        output_message += f"<b>Saída\n&gt;</b> {output}"
     await sm.edit_text(output_message)
