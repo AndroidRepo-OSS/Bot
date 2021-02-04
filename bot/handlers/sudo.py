@@ -104,3 +104,24 @@ async def on_eval_m(c: Client, m: Message):
     if len(output) > 0:
         output_message += f"<b>Saída\n&gt;</b> {output}"
     await sm.edit_text(output_message)
+    
+    
+@Client.on_message(filters.sudo & filters.cmd("ex(ec(ute)?)? "))
+async def on_execute_m(c: Client, m: Message):
+    command = m.text.split()[0]
+    code = m.text[len(command)+1:]
+    sm = await m.reply_text("Executando...")
+    function = f"""
+async def _aexec_(c: Client, m: Message):
+    """
+    for line in code.split("\n"):
+        function += f"\n    {line}"
+    exec(function)
+    try:
+        await locals()["_aexec_"](c, m)
+    except:
+        error = traceback.format_exc()
+        await sm.edit_text(f"Ocorreu um erro enquanto eu executava o código:\n<code>{error}</code>")
+        return
+    output_message = f"<b>Entrada\n&gt;</b> <code>{code}</code>\n\n"
+    await sm.edit_text(output_message)
