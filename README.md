@@ -5,3 +5,6 @@
 AndroidRepo is a bot made for @AndroidRepo (channel and group on Telegram), it was initially thought only to update the Magisk modules in the channel, but we will improve it over time.
 
 Made in Python using [Pyrogram](https://github.com/pyrogram/pyrogram).
+
+## Credits
+- @usernein
