@@ -18,11 +18,23 @@ import os
 from tortoise import fields
 from tortoise import Tortoise
 from tortoise.models import Model
-
-
-class Chats(Model):
+    
+    
+class Modules(Model):
     id = fields.IntField(pk=True)
+    url = fields.TextField()
+    name = fields.TextField()
+    version = fields.IntField()
     last_update = fields.IntField()
+    
+
+class Requests(Model):
+    id = fields.IntField(pk=True)
+    user = fields.IntField()
+    time = fields.IntField()
+    ignore = fields.IntField()
+    request = fields.TextField()
+    attempts = fields.IntField()
 
 
 async def connect_database():
