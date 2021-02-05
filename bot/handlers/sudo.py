@@ -113,7 +113,7 @@ async def on_shutdown_m(c: Client, m: Message):
     sys.exit()
 
 
-@Client.on_message(filters.sudo & filters.cmd("term(inal)? "))
+@Client.on_message(filters.sudo & filters.cmd("(sh(eel)?|term(inal)?) "))
 async def on_terminal_m(c: Client, m: Message):
     command = m.text.split()[0]
     code = m.text[len(command) + 1 :]
