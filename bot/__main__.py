@@ -104,7 +104,7 @@ import re
 
 def cmd_filter(command: str, *args, **kwargs):
     prefix = f"[{re.escape(''.join(PREFIXES))}]"
-    return filters.regex(prefix + command, *args, **kwargs)
+    return filters.regex("^" + prefix + command, *args, **kwargs)
 
 
 filters.sudo = filters.create(sudo_filter, "SudoFilter")
