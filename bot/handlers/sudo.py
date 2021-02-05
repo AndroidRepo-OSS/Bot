@@ -88,10 +88,10 @@ async def on_terminal_m(c: Client, m: Message):
 @Client.on_message(filters.sudo & filters.cmd("ev(al)? "))
 async def on_eval_m(c: Client, m: Message):
     command = m.text.split()[0]
-    code = m.text[len(command) + 1 :]
+    eval_code = m.text[len(command) + 1 :]
     sm = await m.reply_text("Running...")
     try:
-        stdout = await meval(code, globals())
+        stdout = await meval(eval_code, globals(), **locals())
     except:
         error = traceback.format_exc()
         await sm.edit_text(
@@ -102,7 +102,7 @@ async def on_eval_m(c: Client, m: Message):
     lines = str(stdout).split("\n")
     for line in lines:
         output += f"<code>{line}</code>\n"
-    output_message = f"<b>Input\n&gt;</b> <code>{code}</code>\n\n"
+    output_message = f"<b>Input\n&gt;</b> <code>{eval_code}</code>\n\n"
     if len(output) > 0:
         output_message += f"<b>Output\n&gt;</b> {output}"
     await sm.edit_text(output_message)
