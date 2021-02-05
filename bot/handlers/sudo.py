@@ -60,7 +60,7 @@ async def on_upgrade_m(c: Client, m: Message):
 
 @Client.on_message(filters.sudo & filters.cmd("shutdown"))
 async def on_shutdown_m(c: Client, m: Message):
-    await m.reply_text("Bye...")
+    await m.reply_text("Goodbye...")
     sys.exit()
 
 
@@ -68,7 +68,7 @@ async def on_shutdown_m(c: Client, m: Message):
 async def on_terminal_m(c: Client, m: Message):
     command = m.text.split()[0]
     code = m.text[len(command) + 1 :]
-    sm = await m.reply_text("Executando...")
+    sm = await m.reply_text("Running...")
     proc = await asyncio.create_subprocess_shell(
         code,
         stdout=asyncio.subprocess.PIPE,
@@ -89,7 +89,7 @@ async def on_terminal_m(c: Client, m: Message):
 async def on_eval_m(c: Client, m: Message):
     command = m.text.split()[0]
     code = m.text[len(command) + 1 :]
-    sm = await m.reply_text("Executing...")
+    sm = await m.reply_text("Running...")
     try:
         stdout = await meval(code, globals())
     except:
@@ -112,7 +112,7 @@ async def on_eval_m(c: Client, m: Message):
 async def on_execute_m(c: Client, m: Message):
     command = m.text.split()[0]
     code = m.text[len(command) + 1 :]
-    sm = await m.reply_text("Executing...")
+    sm = await m.reply_text("Running...")
     function = f"""
 async def _aexec_(c: Client, m: Message):
     """
