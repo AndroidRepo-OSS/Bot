@@ -1,4 +1,4 @@
-httpx==0.16.1
+httpx[http2]==0.16.1
 KanTeX==0.2.0
 Pyrogram==1.1.13
 pyromod==1.5
