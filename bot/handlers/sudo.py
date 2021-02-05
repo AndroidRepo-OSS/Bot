@@ -49,9 +49,7 @@ async def on_upgrade_m(c: Client, m: Message):
             for hash, commit in commits.items():
                 changelog += f"  - [<code>{hash[:7]}</code>] {commit['title']}\n"
             changelog += f"\n<b>New commits count</b>: <code>{len(commits)}</code>."
-            keyboard = [
-                [("🆕 Upgrade", "upgrade")]
-            ]
+            keyboard = [[("🆕 Upgrade", "upgrade")]]
             await sm.edit_text(changelog, reply_markup=ikb(keyboard))
         else:
             return await sm.edit_text("There is nothing to update.")
@@ -63,8 +61,8 @@ async def on_upgrade_m(c: Client, m: Message):
         await sm.edit_text(
             f"Update failed (process exited with {proc.returncode}):\n{error}"
         )
-        
-        
+
+
 def parse_commits(log: str) -> Dict:
     commits = {}
     last_commit = ""
@@ -107,7 +105,7 @@ async def on_upgrade_cq(c: Client, cq: CallbackQuery):
         await cq.message.edit_text(
             f"Update failed (process exited with {proc.returncode}):\n{error}"
         )
-            
+
 
 @Client.on_message(filters.sudo & filters.cmd("shutdown"))
 async def on_shutdown_m(c: Client, m: Message):
@@ -132,8 +130,10 @@ async def on_terminal_m(c: Client, m: Message):
         output += f"<code>{line}</code>\n"
     output_message = f"<b>Input\n&gt;</b> <code>{code}</code>\n\n"
     if len(output) > 0:
-        if len(output) > (4096-len(output_message)):
-            document = io.BytesIO((output.replace("<code>", "").replace("</code>", "")).encode())
+        if len(output) > (4096 - len(output_message)):
+            document = io.BytesIO(
+                (output.replace("<code>", "").replace("</code>", "")).encode()
+            )
             document.name = "output.txt"
             await c.send_document(chat_id=m.chat.id, document=document)
         else:
@@ -160,8 +160,10 @@ async def on_eval_m(c: Client, m: Message):
         output += f"<code>{line}</code>\n"
     output_message = f"<b>Input\n&gt;</b> <code>{eval_code}</code>\n\n"
     if len(output) > 0:
-        if len(output) > (4096-len(output_message)):
-            document = io.BytesIO((output.replace("<code>", "").replace("</code>", "")).encode())
+        if len(output) > (4096 - len(output_message)):
+            document = io.BytesIO(
+                (output.replace("<code>", "").replace("</code>", "")).encode()
+            )
             document.name = "output.txt"
             await c.send_document(chat_id=m.chat.id, document=document)
         else:
