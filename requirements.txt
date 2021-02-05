@@ -1,8 +1,9 @@
+beautifulsoup4==4.9.3
 httpx[http2]==0.16.1
 KanTeX==0.2.0
+lxml==4.6.2
 Pyrogram==1.1.13
 pyromod==1.5
 python-rapidjson==1.0
 rich==9.10.0
 tgcrypto==1.2.2
-beautifulsoup4==4.9.3
