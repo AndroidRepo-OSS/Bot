@@ -47,7 +47,7 @@ async def on_upgrade_m(c: Client, m: Message):
             args = [sys.executable, "-m", "bot"]
             os.execv(sys.executable, args)
     else:
-        error = ''
+        error = ""
         lines = stdout.decode().split("\n")
         for line in lines:
             error += f"<code>{line}</code>\n"
@@ -62,12 +62,12 @@ async def on_upgrade_m(c: Client, m: Message):
 async def on_shutdown_m(c: Client, m: Message):
     await m.reply_text("Bye...")
     sys.exit()
-    
-    
+
+
 @Client.on_message(filters.sudo & filters.cmd("term(inal)? "))
 async def on_terminal_m(c: Client, m: Message):
     command = m.text.split()[0]
-    code = m.text[len(command)+1:]
+    code = m.text[len(command) + 1 :]
     sm = await m.reply_text("Executando...")
     proc = await asyncio.create_subprocess_shell(
         code,
@@ -75,7 +75,7 @@ async def on_terminal_m(c: Client, m: Message):
         stderr=asyncio.subprocess.STDOUT,
     )
     stdout = (await proc.communicate())[0]
-    output = ''
+    output = ""
     lines = stdout.decode().split("\n")
     for line in lines:
         output += f"<code>{line}</code>\n"
@@ -83,20 +83,22 @@ async def on_terminal_m(c: Client, m: Message):
     if len(output) > 0:
         output_message += f"<b>Output\n&gt;</b> {output}"
     await sm.edit_text(output_message)
-    
-    
+
+
 @Client.on_message(filters.sudo & filters.cmd("ev(al)? "))
 async def on_eval_m(c: Client, m: Message):
     command = m.text.split()[0]
-    code = m.text[len(command)+1:]
+    code = m.text[len(command) + 1 :]
     sm = await m.reply_text("Executing...")
     try:
         stdout = await meval(code, globals())
     except:
         error = traceback.format_exc()
-        await sm.edit_text(f"An error occurred while running the code:\n<code>{error}</code>")
+        await sm.edit_text(
+            f"An error occurred while running the code:\n<code>{error}</code>"
+        )
         return
-    output = ''
+    output = ""
     lines = str(stdout).split("\n")
     for line in lines:
         output += f"<code>{line}</code>\n"
@@ -104,12 +106,12 @@ async def on_eval_m(c: Client, m: Message):
     if len(output) > 0:
         output_message += f"<b>Output\n&gt;</b> {output}"
     await sm.edit_text(output_message)
-    
-    
+
+
 @Client.on_message(filters.sudo & filters.cmd("ex(ec(ute)?)? "))
 async def on_execute_m(c: Client, m: Message):
     command = m.text.split()[0]
-    code = m.text[len(command)+1:]
+    code = m.text[len(command) + 1 :]
     sm = await m.reply_text("Executing...")
     function = f"""
 async def _aexec_(c: Client, m: Message):
@@ -121,7 +123,9 @@ async def _aexec_(c: Client, m: Message):
         await locals()["_aexec_"](c, m)
     except:
         error = traceback.format_exc()
-        await sm.edit_text(f"An error occurred while running the code:\n<code>{error}</code>")
+        await sm.edit_text(
+            f"An error occurred while running the code:\n<code>{error}</code>"
+        )
         return
     output_message = f"<b>Input\n&gt;</b> <code>{code}</code>\n\n"
     await sm.edit_text(output_message)

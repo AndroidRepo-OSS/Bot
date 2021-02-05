@@ -71,7 +71,15 @@ print(Panel.fit(text, border_style="white", box=box.ASCII))
 from pyrogram import Client, filters, idle
 from tortoise import run_async
 from .database import connect_database
-from .config import API_HASH, API_ID, BOT_TOKEN, CHANNEL_ID, CHAT_ID, PREFIXES, SUDO_USERS
+from .config import (
+    API_HASH,
+    API_ID,
+    BOT_TOKEN,
+    CHANNEL_ID,
+    CHAT_ID,
+    PREFIXES,
+    SUDO_USERS,
+)
 
 bot = Client(
     "bot",
@@ -89,20 +97,25 @@ async def sudo_filter(_, __, m):
     if not user:
         return
     return user.id in SUDO_USERS or (user.username and user.username in SUDO_USERS)
-    
+
+
 import re
+
+
 def cmd_filter(command: str, *args, **kwargs):
     prefix = f"[{re.escape(''.join(PREFIXES))}]"
-    return filters.regex(prefix+command, *args, **kwargs)
-    
-filters.sudo = filters.create(sudo_filter, 'SudoFilter')
+    return filters.regex(prefix + command, *args, **kwargs)
+
+
+filters.sudo = filters.create(sudo_filter, "SudoFilter")
 filters.cmd = cmd_filter
 
 
 # Monkeypatch
 async def send_log_message(text: str, *args, **kwargs):
     return await bot.send_message(chat_id=CHAT_ID, text=text, *args, **kwargs)
-    
+
+
 async def send_channel_message(text: str, *args, **kwargs):
     return await bot.send_message(chat_id=CHANNEL_ID, text=text, *args, **kwargs)
 
@@ -111,17 +124,14 @@ async def send_channel_message(text: str, *args, **kwargs):
 async def main():
     bot.send_log_message = send_log_message
     bot.send_channel_message = send_channel_message
-    
-    
+
     # Connect database
     await connect_database()
-    
-    
+
     # Start bot
     await bot.start()
     bot.me = await bot.get_me()
-    
-    
+
     # Send startup message
     import pyrogram
     import pyromod
@@ -137,11 +147,13 @@ async def main():
         try:
             await bot.send_message(chat_id=sudo_user, text=startup_message)
         except:
-            await bot.send_log_message(text=f'Error sending the startup message to <code>{sudo_user}</code>.')
-    
-    
+            await bot.send_log_message(
+                text=f"Error sending the startup message to <code>{sudo_user}</code>."
+            )
+
     # Idle the bot
     await idle()
-    
+
+
 if __name__ == "__main__":
     run_async(main())
