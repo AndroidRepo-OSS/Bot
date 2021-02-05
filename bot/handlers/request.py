@@ -77,7 +77,13 @@ async def on_request_m(c: Client, m: Message):
     )
     if sent:
         await Requests.create(
-                       user=user.id, time=now_time, ignore=0, request=request, attempts=0, request_id=(last_request.request_id if last_request else 0)+1, message_id=sent.message_id
+            user=user.id,
+            time=now_time,
+            ignore=0,
+            request=request,
+            attempts=0,
+            request_id=(last_request.request_id if last_request else 0) + 1,
+            message_id=sent.message_id,
         )
         await m.reply_text("Your request was successfully sent!")
     else:
@@ -88,7 +94,7 @@ async def on_request_m(c: Client, m: Message):
 async def on_myrequests_m(c: Client, m: Message):
     user = m.from_user
     requests = await Requests.filter(user=user.id)
-    
+
     if len(requests) > 0:
         text = f"<b>Ignored</b>: <code>{bool(requests[-1].ignore)}</code>\n\n"
         text += "<b>Requests</b>:\n"
@@ -98,16 +104,16 @@ async def on_myrequests_m(c: Client, m: Message):
         return await m.reply_text(text)
     else:
         return await m.reply_text("You haven't sent any request yet.")
-        
-        
+
+
 @Client.on_message(filters.cmd("cancelrequest (?P<id>\d+)"))
 async def on_cancelrequest_m(c: Client, m: Message):
-    id = m.matches[0]['id']
+    id = m.matches[0]["id"]
     user = m.from_user
     request = await Requests.filter(user=user.id, request_id=id).first()
-    
+
     revoked = await c.delete_log_message(message_id=request.message_id)
-    
+
     if request:
         await request.delete()
         return await m.reply_text("Request canceled successfully!")

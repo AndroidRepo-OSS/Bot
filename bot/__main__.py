@@ -115,8 +115,12 @@ filters.cmd = cmd_filter
 async def send_log_message(text: str, *args, **kwargs):
     return await bot.send_message(chat_id=CHAT_ID, text=text, *args, **kwargs)
 
+
 async def delete_log_message(message_id: int, *args, **kwargs):
-    return await bot.delete_messages(chat_id=CHAT_ID, message_ids=message_id, *args, **kwargs)
+    return await bot.delete_messages(
+        chat_id=CHAT_ID, message_ids=message_id, *args, **kwargs
+    )
+
 
 async def send_channel_message(text: str, *args, **kwargs):
     return await bot.send_message(chat_id=CHANNEL_ID, text=text, *args, **kwargs)
