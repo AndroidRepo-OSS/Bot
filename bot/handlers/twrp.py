@@ -18,6 +18,7 @@ from requests import get
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
+from pyromod.helpers import ikb
 
 
 @Client.on_message(filters.cmd("twrp"))
@@ -26,11 +27,11 @@ async def on_twrp_m(c: Client, m: Message):
     device = m.text[len(command) + 1 :]
 
     if len(device) < 1:
-        await m.reply_text("No codename provided!")
+        return await m.reply_text("No codename provided!")
 
     url = get(f"https://eu.dl.twrp.me/{device}/")
     if url.status_code == 404:
-        await m.reply_text("Couldn't find official TWRP for {device}!\n")
+        return await m.reply_text(f"Couldn't find official TWRP for <b>{device}</b>!\n")
     else:
         reply = f"<b>Latest Official TWRP for {device}:</b>\n"
         page = BeautifulSoup(url.content, "lxml")
@@ -43,6 +44,8 @@ async def on_twrp_m(c: Client, m: Message):
             dl_link = f"https://eu.dl.twrp.me{download['href']}"
             dl_file = download.text
             size = trs[i].find("span", {"class": "filesize"}).text
-            reply += f"<a href='{dl_link}'>{dl_file}</a> - {size}\n"
+            keyboard = [[(f"🖇️  Download - {size}", dl_link, "url")]]
 
-        await m.reply_text(f"{reply}", disable_web_page_preview=True)
+        return await m.reply_text(
+            f"{reply}", reply_markup=ikb(keyboard), disable_web_page_preview=True
+        )
