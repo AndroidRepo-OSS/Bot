@@ -20,8 +20,10 @@ import traceback
 import sys
 
 from pyrogram import Client, filters
-from pyrogram.types import Message
+from pyrogram.types import CallbackQuery, Message
+from pyromod.helpers import ikb
 from meval import meval
+from typing import Dict
 
 
 @Client.on_message(filters.sudo & filters.cmd("restart"))
@@ -35,29 +37,77 @@ async def on_restart_m(c: Client, m: Message):
 async def on_upgrade_m(c: Client, m: Message):
     sm = await m.reply_text("Checking...")
     proc = await asyncio.create_subprocess_shell(
-        "git pull --no-edit",
+        "git log HEAD..origin/main",
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
-    stdout = (await proc.communicate())[0]
+    stdout = (await proc.communicate())[0].decode()
     if proc.returncode == 0:
-        if "Already up to date." in stdout.decode():
-            await sm.edit_text("There is nothing to update.")
+        if len(stdout) > 0:
+            changelog = "<b>Changelog</b>:\n"
+            commits = parse_commits(stdout)
+            for hash, commit in commits.items():
+                changelog += f"  - [<code>{hash[:7]}</code>] {commit['title']}\n"
+            changelog += f"\n<b>New commits count</b>: <code>{len(commits)}</code>."
+            keyboard = [
+                [("🆕 Upgrade", "upgrade")]
+            ]
+            await sm.edit_text(changelog, reply_markup=ikb(keyboard))
         else:
-            await sm.edit_text("Restarting...")
-            args = [sys.executable, "-m", "bot"]
-            os.execv(sys.executable, args)
+            return await sm.edit_text("There is nothing to update.")
     else:
         error = ""
-        lines = stdout.decode().split("\n")
+        lines = stdout.split("\n")
         for line in lines:
             error += f"<code>{line}</code>\n"
         await sm.edit_text(
             f"Update failed (process exited with {proc.returncode}):\n{error}"
         )
-        proc = await asyncio.create_subprocess_shell("git merge --abort")
-        await proc.communicate()
+        
+        
+def parse_commits(log: str) -> Dict:
+    commits = {}
+    last_commit = ""
+    lines = log.split("\n")
+    for line in lines:
+        if "commit" in line:
+            last_commit = line.split()[1]
+            commits[last_commit] = {}
+        if len(line) > 0:
+            if line.startswith("    "):
+                if "title" in commits[last_commit].keys():
+                    commits[last_commit]["message"] = line[4:]
+                else:
+                    commits[last_commit]["title"] = line[4:]
+            else:
+                if ":" in line:
+                    key, value = line.split(": ")
+                    commits[last_commit][key] = value
+    return commits
 
+
+@Client.on_callback_query(filters.sudo & filters.regex("^upgrade"))
+async def on_upgrade_cq(c: Client, cq: CallbackQuery):
+    await cq.message.edit_text("Upgrading...")
+    proc = await asyncio.create_subprocess_shell(
+        "git pull --no-edit",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    stdout = (await proc.communicate())[0].decode()
+    if proc.returncode == 0:
+        await cq.message.edit_text("Restarting...")
+        args = [sys.executable, "-m", "bot"]
+        os.execv(sys.executable, args)
+    else:
+        error = ""
+        lines = stdout.split("\n")
+        for line in lines:
+            error += f"<code>{line}</code>\n"
+        await cq.message.edit_text(
+            f"Update failed (process exited with {proc.returncode}):\n{error}"
+        )
+            
 
 @Client.on_message(filters.sudo & filters.cmd("shutdown"))
 async def on_shutdown_m(c: Client, m: Message):
@@ -82,10 +132,8 @@ async def on_terminal_m(c: Client, m: Message):
         output += f"<code>{line}</code>\n"
     output_message = f"<b>Input\n&gt;</b> <code>{code}</code>\n\n"
     if len(output) > 0:
-        if len(output) > (4096 - len(output_message)):
-            document = io.BytesIO(
-                (output.replace("<code>", "").replace("</code>", "")).encode()
-            )
+        if len(output) > (4096-len(output_message)):
+            document = io.BytesIO((output.replace("<code>", "").replace("</code>", "")).encode())
             document.name = "output.txt"
             await c.send_document(chat_id=m.chat.id, document=document)
         else:
@@ -112,10 +160,8 @@ async def on_eval_m(c: Client, m: Message):
         output += f"<code>{line}</code>\n"
     output_message = f"<b>Input\n&gt;</b> <code>{eval_code}</code>\n\n"
     if len(output) > 0:
-        if len(output) > (4096 - len(output_message)):
-            document = io.BytesIO(
-                (output.replace("<code>", "").replace("</code>", "")).encode()
-            )
+        if len(output) > (4096-len(output_message)):
+            document = io.BytesIO((output.replace("<code>", "").replace("</code>", "")).encode())
             document.name = "output.txt"
             await c.send_document(chat_id=m.chat.id, document=document)
         else:
