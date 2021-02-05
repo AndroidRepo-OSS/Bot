@@ -82,8 +82,10 @@ async def on_terminal_m(c: Client, m: Message):
         output += f"<code>{line}</code>\n"
     output_message = f"<b>Input\n&gt;</b> <code>{code}</code>\n\n"
     if len(output) > 0:
-        if len(output) > (4096-len(output_message)):
-            document = io.BytesIO((output.replace("<code>", "").replace("</code>", "")).encode())
+        if len(output) > (4096 - len(output_message)):
+            document = io.BytesIO(
+                (output.replace("<code>", "").replace("</code>", "")).encode()
+            )
             document.name = "output.txt"
             await c.send_document(chat_id=m.chat.id, document=document)
         else:
@@ -110,8 +112,10 @@ async def on_eval_m(c: Client, m: Message):
         output += f"<code>{line}</code>\n"
     output_message = f"<b>Input\n&gt;</b> <code>{eval_code}</code>\n\n"
     if len(output) > 0:
-        if len(output) > (4096-len(output_message)):
-            document = io.BytesIO((output.replace("<code>", "").replace("</code>", "")).encode())
+        if len(output) > (4096 - len(output_message)):
+            document = io.BytesIO(
+                (output.replace("<code>", "").replace("</code>", "")).encode()
+            )
             document.name = "output.txt"
             await c.send_document(chat_id=m.chat.id, document=document)
         else:

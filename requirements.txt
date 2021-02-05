@@ -5,3 +5,4 @@ pyromod==1.5
 python-rapidjson==1.0
 rich==9.10.0
 tgcrypto==1.2.2
+beautifulsoup4==4.9.3
