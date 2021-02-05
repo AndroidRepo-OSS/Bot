@@ -28,14 +28,16 @@ from ..config import SUDO_USERS
 async def on_request_m(c: Client, m: Message):
     user = m.from_user
     requests = await Requests.filter(user=user.id)
+    last_request = None
 
     last_request_time = 0
     if requests:
         last_request = requests[-1]
         last_request_time = last_request.time
 
+    now_time = time.time()
+
     if user.id not in SUDO_USERS:
-        now_time = time.time()
         now = datetime.datetime.fromtimestamp(now_time)
         if last_request_time > 0:
             last = datetime.datetime.fromtimestamp(last_request_time)
@@ -66,19 +68,51 @@ async def on_request_m(c: Client, m: Message):
         return await m.reply_text("You have reached the requests limit.")
 
     request = m.text[len(m.text.split()[0]) + 1 :]
-    await Requests.create(
-        user=user.id, time=now_time, ignore=0, request=request, attempts=0
-    )
-    if await c.send_log_message(
+    sent = await c.send_log_message(
         f"""
 <b>New request</b>:
     <b>From</b>: {user.mention}
     <b>Request</b>: {request}
     """
-    ):
+    )
+    if sent:
+        await Requests.create(
+                       user=user.id, time=now_time, ignore=0, request=request, attempts=0, request_id=(last_request.request_id if last_request else 0)+1, message_id=sent.message_id
+        )
         await m.reply_text("Your request was successfully sent!")
     else:
         await m.reply_text("There was a problem submitting your request.")
+
+
+@Client.on_message(filters.cmd("myrequests"))
+async def on_myrequests_m(c: Client, m: Message):
+    user = m.from_user
+    requests = await Requests.filter(user=user.id)
+    
+    if len(requests) > 0:
+        text = f"<b>Ignored</b>: <code>{bool(requests[-1].ignore)}</code>\n\n"
+        text += "<b>Requests</b>:\n"
+        for request in requests:
+            text += f"    {request.request_id}: <code>{request.request}</code>\n"
+        text += "\nUse <code>/cancelrequest &lt;id&gt;</code> to cancel a request."
+        return await m.reply_text(text)
+    else:
+        return await m.reply_text("You haven't sent any request yet.")
+        
+        
+@Client.on_message(filters.cmd("cancelrequest (?P<id>\d+)"))
+async def on_cancelrequest_m(c: Client, m: Message):
+    id = m.matches[0]['id']
+    user = m.from_user
+    request = await Requests.filter(user=user.id, request_id=id).first()
+    
+    revoked = await c.delete_log_message(message_id=request.message_id)
+    
+    if request:
+        await request.delete()
+        return await m.reply_text("Request canceled successfully!")
+    else:
+        return await m.reply_text("Request not found.")
 
 
 @Client.on_message(filters.sudo & filters.cmd("ignore"))

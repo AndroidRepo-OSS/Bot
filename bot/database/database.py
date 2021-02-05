@@ -35,6 +35,8 @@ class Requests(Model):
     ignore = fields.IntField()
     request = fields.TextField()
     attempts = fields.IntField()
+    request_id = fields.IntField()
+    message_id = fields.IntField()
 
 
 async def connect_database():
