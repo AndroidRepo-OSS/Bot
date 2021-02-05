@@ -62,6 +62,11 @@ logging.getLogger("pyrogram.client").setLevel(logging.WARNING)
 log = logging.getLogger("rich")
 
 
+# Beautiful init with rich
+text = ":rocket: [bold green]AndroidRepo Running...[/bold green] :rocket:"
+print(Panel.fit(text, border_style="white", box=box.ASCII))
+
+
 # Bot
 from pyrogram import Client, filters, idle
 from tortoise import run_async
@@ -76,11 +81,6 @@ bot = Client(
     parse_mode="html",
     plugins=dict(root="bot/handlers"),
 )
-
-
-# Beautiful init with rich
-text = ":rocket: [bold green]AndroidRepo Running...[/bold green] :rocket:"
-print(Panel.fit(text, border_style="white", box=box.ASCII))
 
 
 # Filters

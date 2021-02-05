@@ -58,13 +58,13 @@ async def on_magisk_m(c: Client, m: Message):
     """
     await sm.edit_text(text, disable_web_page_preview=True, parse_mode="combined")
     
+    
 async def get_changelog(url: str) -> str:
     changelog = ''
     async with httpx.AsyncClient() as client:
         response = await client.get(url)
         data = response.read()
         lines = data.decode().split("\n")
-        print(lines)
         latest_version = False
         for line in lines:
             if len(line) < 1:

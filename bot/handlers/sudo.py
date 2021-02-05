@@ -25,14 +25,14 @@ from meval import meval
 
 @Client.on_message(filters.sudo & filters.cmd("restart"))
 async def on_restart_m(c: Client, m: Message):
-    await m.reply_text("Reiniciando...")
+    await m.reply_text("Restarting...")
     args = [sys.executable, "-m", "bot"]
     os.execv(sys.executable, args)
 
 
 @Client.on_message(filters.sudo & filters.cmd("upgrade"))
 async def on_upgrade_m(c: Client, m: Message):
-    sm = await m.reply_text("Verificando...")
+    sm = await m.reply_text("Checking...")
     proc = await asyncio.create_subprocess_shell(
         "git pull --no-edit",
         stdout=asyncio.subprocess.PIPE,
@@ -41,9 +41,9 @@ async def on_upgrade_m(c: Client, m: Message):
     stdout = (await proc.communicate())[0]
     if proc.returncode == 0:
         if "Already up to date." in stdout.decode():
-            await sm.edit_text("Não há nada para atualizar.")
+            await sm.edit_text("There is nothing to update.")
         else:
-            await sm.edit_text("Reiniciando...")
+            await sm.edit_text("Restarting...")
             args = [sys.executable, "-m", "bot"]
             os.execv(sys.executable, args)
     else:
@@ -52,7 +52,7 @@ async def on_upgrade_m(c: Client, m: Message):
         for line in lines:
             error += f"<code>{line}</code>\n"
         await sm.edit_text(
-            f"Atualização falhou (process exited with {proc.returncode}):\n{error}"
+            f"Update failed (process exited with {proc.returncode}):\n{error}"
         )
         proc = await asyncio.create_subprocess_shell("git merge --abort")
         await proc.communicate()
@@ -60,7 +60,7 @@ async def on_upgrade_m(c: Client, m: Message):
 
 @Client.on_message(filters.sudo & filters.cmd("shutdown"))
 async def on_shutdown_m(c: Client, m: Message):
-    await m.reply_text("Adeus...")
+    await m.reply_text("Bye...")
     sys.exit()
     
     
@@ -79,9 +79,9 @@ async def on_terminal_m(c: Client, m: Message):
     lines = stdout.decode().split("\n")
     for line in lines:
         output += f"<code>{line}</code>\n"
-    output_message = f"<b>Entrada\n&gt;</b> <code>{code}</code>\n\n"
+    output_message = f"<b>Input\n&gt;</b> <code>{code}</code>\n\n"
     if len(output) > 0:
-        output_message += f"<b>Saída\n&gt;</b> {output}"
+        output_message += f"<b>Output\n&gt;</b> {output}"
     await sm.edit_text(output_message)
     
     
@@ -89,20 +89,20 @@ async def on_terminal_m(c: Client, m: Message):
 async def on_eval_m(c: Client, m: Message):
     command = m.text.split()[0]
     code = m.text[len(command)+1:]
-    sm = await m.reply_text("Executando...")
+    sm = await m.reply_text("Executing...")
     try:
         stdout = await meval(code, globals())
     except:
         error = traceback.format_exc()
-        await sm.edit_text(f"Ocorreu um erro enquanto eu executava o código:\n<code>{error}</code>")
+        await sm.edit_text(f"An error occurred while running the code:\n<code>{error}</code>")
         return
     output = ''
     lines = str(stdout).split("\n")
     for line in lines:
         output += f"<code>{line}</code>\n"
-    output_message = f"<b>Entrada\n&gt;</b> <code>{code}</code>\n\n"
+    output_message = f"<b>Input\n&gt;</b> <code>{code}</code>\n\n"
     if len(output) > 0:
-        output_message += f"<b>Saída\n&gt;</b> {output}"
+        output_message += f"<b>Output\n&gt;</b> {output}"
     await sm.edit_text(output_message)
     
     
@@ -110,7 +110,7 @@ async def on_eval_m(c: Client, m: Message):
 async def on_execute_m(c: Client, m: Message):
     command = m.text.split()[0]
     code = m.text[len(command)+1:]
-    sm = await m.reply_text("Executando...")
+    sm = await m.reply_text("Executing...")
     function = f"""
 async def _aexec_(c: Client, m: Message):
     """
@@ -121,7 +121,7 @@ async def _aexec_(c: Client, m: Message):
         await locals()["_aexec_"](c, m)
     except:
         error = traceback.format_exc()
-        await sm.edit_text(f"Ocorreu um erro enquanto eu executava o código:\n<code>{error}</code>")
+        await sm.edit_text(f"An error occurred while running the code:\n<code>{error}</code>")
         return
-    output_message = f"<b>Entrada\n&gt;</b> <code>{code}</code>\n\n"
+    output_message = f"<b>Input\n&gt;</b> <code>{code}</code>\n\n"
     await sm.edit_text(output_message)
