@@ -13,9 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import httpx
 import datetime
-import rapidjson as json
 import time
 
 from pyrogram import Client, filters
@@ -136,7 +134,7 @@ async def on_ignore_m(c: Client, m: Message):
     if not isinstance(user, User):
         try:
             user = await c.get_users(user)
-        except:
+        except BaseException:
             return await m.reply_text("This user was not found.")
 
     if user.id in SUDO_USERS:
@@ -174,7 +172,7 @@ async def on_unignore_m(c: Client, m: Message):
     if not isinstance(user, User):
         try:
             user = await c.get_users(user)
-        except:
+        except BaseException:
             return await m.reply_text("This user was not found.")
 
     if user.id in SUDO_USERS:

@@ -42,7 +42,6 @@ async def on_twrp_m(c: Client, m: Message):
         for i in range(row):
             download = trs[i].find("a")
             dl_link = f"https://eu.dl.twrp.me{download['href']}"
-            dl_file = download.text
             size = trs[i].find("span", {"class": "filesize"}).text
             keyboard = [[(f"🖇️  Download - {size}", dl_link, "url")]]
 

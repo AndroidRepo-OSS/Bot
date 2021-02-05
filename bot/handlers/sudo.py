@@ -148,7 +148,7 @@ async def on_eval_m(c: Client, m: Message):
     sm = await m.reply_text("Running...")
     try:
         stdout = await meval(eval_code, globals(), **locals())
-    except:
+    except BaseException:
         error = traceback.format_exc()
         await sm.edit_text(
             f"An error occurred while running the code:\n<code>{error}</code>"
@@ -176,7 +176,7 @@ async def on_execute_m(c: Client, m: Message):
     command = m.text.split()[0]
     code = m.text[len(command) + 1 :]
     sm = await m.reply_text("Running...")
-    function = f"""
+    function = """
 async def _aexec_(c: Client, m: Message):
     """
     for line in code.split("\n"):
@@ -184,7 +184,7 @@ async def _aexec_(c: Client, m: Message):
     exec(function)
     try:
         await locals()["_aexec_"](c, m)
-    except:
+    except BaseException:
         error = traceback.format_exc()
         await sm.edit_text(
             f"An error occurred while running the code:\n<code>{error}</code>"

@@ -153,7 +153,7 @@ async def main():
     for sudo_user in SUDO_USERS:
         try:
             await bot.send_message(chat_id=sudo_user, text=startup_message)
-        except:
+        except BaseException:
             await bot.send_log_message(
                 text=f"Error sending the startup message to <code>{sudo_user}</code>."
             )
