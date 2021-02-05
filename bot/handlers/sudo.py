@@ -36,6 +36,7 @@ async def on_restart_m(c: Client, m: Message):
 @Client.on_message(filters.sudo & filters.cmd("upgrade"))
 async def on_upgrade_m(c: Client, m: Message):
     sm = await m.reply_text("Checking...")
+    await (await asyncio.create_subprocess_shell("git fetch origin")).communicate()
     proc = await asyncio.create_subprocess_shell(
         "git log HEAD..origin/main",
         stdout=asyncio.subprocess.PIPE,
