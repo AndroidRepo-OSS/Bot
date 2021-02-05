@@ -14,6 +14,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import asyncio
+import io
 import os
 import traceback
 import sys
@@ -81,7 +82,12 @@ async def on_terminal_m(c: Client, m: Message):
         output += f"<code>{line}</code>\n"
     output_message = f"<b>Input\n&gt;</b> <code>{code}</code>\n\n"
     if len(output) > 0:
-        output_message += f"<b>Output\n&gt;</b> {output}"
+        if len(output) > (4096-len(output_message)):
+            document = io.BytesIO((output.replace("<code>", "").replace("</code>", "")).encode())
+            document.name = "output.txt"
+            await c.send_document(chat_id=m.chat.id, document=document)
+        else:
+            output_message += f"<b>Output\n&gt;</b> {output}"
     await sm.edit_text(output_message)
 
 
@@ -104,7 +110,12 @@ async def on_eval_m(c: Client, m: Message):
         output += f"<code>{line}</code>\n"
     output_message = f"<b>Input\n&gt;</b> <code>{eval_code}</code>\n\n"
     if len(output) > 0:
-        output_message += f"<b>Output\n&gt;</b> {output}"
+        if len(output) > (4096-len(output_message)):
+            document = io.BytesIO((output.replace("<code>", "").replace("</code>", "")).encode())
+            document.name = "output.txt"
+            await c.send_document(chat_id=m.chat.id, document=document)
+        else:
+            output_message += f"<b>Output\n&gt;</b> {output}"
     await sm.edit_text(output_message)
 
 
