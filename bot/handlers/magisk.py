@@ -26,7 +26,7 @@ TYPES = ["beta", "stable", "canary"]
 @Client.on_message(filters.cmd("magisk"))
 async def on_magisk_m(c: Client, m: Message):
     command = m.text.split()[0]
-    type = m.text[len(command) :]
+    type = m.text[len(command):]
 
     sm = await m.reply("Checking...")
 
@@ -34,6 +34,8 @@ async def on_magisk_m(c: Client, m: Message):
         type = "stable"
     else:
         type = type[1:]
+        
+    type = type.lower()
 
     if not type in TYPES:
         return await sm.edit(f"The version type <b>{type}</b> was not found.")
