@@ -219,6 +219,30 @@ async def on_reply_m(c: Client, m: Message):
         )
 
 
+@Client.on_message(filters.sudo & filters.cmd("done") & filters.reply)
+async def on_done_m(c: Client, m: Message):
+    query = m.text.split()
+    command = query[0]
+    reply = m.reply_to_message
+    request = await Requests.filter(message_id=reply.message_id)
+    if len(request) > 0:
+        request = request[0]
+        user_id = request.user
+        request_id = request.request_id
+        await c.send_message(
+            chat_id=user_id,
+            text=f"""
+<b>Request done</b>:
+    <b>ID</b>: <code>{request_id}</code>
+    <b>Don't be surprised, it will disappear from your request list.</bb
+    {("<b>Staff message</b>: "+m.text[len(command)+1:]) if len(query) > 1 else ""}
+    <b>Your request</b>: <code>{request.request}</code>
+        """,
+        )
+        await request.delete()
+        await m.reply_text("The request was successfully done.")
+
+
 @Client.on_deleted_messages(filters.chat(STAFF_ID))
 async def on_deleted_m(c: Client, messages: List[Message]):
     for m in messages:
