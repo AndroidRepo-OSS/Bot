@@ -22,7 +22,7 @@ from ..database import Requests
 from ..config import SUDO_USERS
 
 
-@Client.on_message((filters.cmd("request ") | filters.regex("^#request ")))
+@Client.on_message((filters.private | filters.main_group) & (filters.cmd("request ") | filters.regex("^#request ")))
 async def on_request_m(c: Client, m: Message):
     user = m.from_user
     requests = await Requests.filter(user=user.id)
@@ -88,7 +88,7 @@ async def on_request_m(c: Client, m: Message):
         await m.reply_text("There was a problem submitting your request.")
 
 
-@Client.on_message(filters.cmd("myrequests"))
+@Client.on_message((filters.private | filters.main_group) & filters.cmd("myrequests"))
 async def on_myrequests_m(c: Client, m: Message):
     user = m.from_user
     requests = await Requests.filter(user=user.id)
@@ -104,7 +104,7 @@ async def on_myrequests_m(c: Client, m: Message):
         return await m.reply_text("You haven't sent any request yet.")
 
 
-@Client.on_message(filters.cmd("cancelrequest (?P<id>\d+)"))
+@Client.on_message((filters.private | filters.main_group) & filters.cmd("cancelrequest (?P<id>\d+)"))
 async def on_cancelrequest_m(c: Client, m: Message):
     id = m.matches[0]["id"]
     user = m.from_user

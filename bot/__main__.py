@@ -77,6 +77,7 @@ from .config import (
     CHANNEL_ID,
     CHAT_ID,
     PREFIXES,
+    STAFF_ID,
     SUDO_USERS,
 )
 from .database import connect_database
@@ -97,6 +98,11 @@ async def sudo_filter(_, __, m):
     if not user:
         return
     return user.id in SUDO_USERS or (user.username and user.username in SUDO_USERS)
+    
+    
+async def main_group_filter(_, __, m):
+    chat = m.chat
+    return chat.id == CHAT_ID
 
 
 import re
@@ -108,12 +114,13 @@ def cmd_filter(command: str, *args, **kwargs):
 
 
 filters.sudo = filters.create(sudo_filter, "SudoFilter")
+filters.main_group = filters.create(main_group_filter, "MainGroupFilter")
 filters.cmd = cmd_filter
 
 
 # Monkeypatch
 async def send_log_message(text: str, *args, **kwargs):
-    return await bot.send_message(chat_id=CHAT_ID, text=text, *args, **kwargs)
+    return await bot.send_message(chat_id=STAFF_ID, text=text, *args, **kwargs)
 
 
 from typing import BinaryIO, List, Union
@@ -121,7 +128,7 @@ from typing import BinaryIO, List, Union
 
 async def delete_log_messages(message_ids: Union[int, List[int]], *args, **kwargs):
     return await bot.delete_messages(
-        chat_id=CHAT_ID, message_ids=message_ids, *args, **kwargs
+        chat_id=STAFF_ID, message_ids=message_ids, *args, **kwargs
     )
 
 
