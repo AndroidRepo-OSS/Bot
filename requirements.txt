@@ -1,5 +1,5 @@
 aioschedule==0.5.2
-p2autifulsoup4==4.9.3
+beautifulsoup4==4.9.3
 httpx[http2]==0.16.1
 KanTeX==0.2.0
 lxml==4.6.2
@@ -8,3 +8,4 @@ pyromod==1.5
 python-rapidjson==1.0
 rich==9.10.0
 tgcrypto==1.2.2
+tortoise-orm==0.16.21
