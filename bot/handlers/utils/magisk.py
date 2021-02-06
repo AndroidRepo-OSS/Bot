@@ -94,7 +94,7 @@ async def get_modules(m: Message):
             modules_list.append(
                 dict(
                     id=module.id,
-                    url=module.id,
+                    url=module.url,
                     name=module.name,
                     version=module.version,
                     last_update=module.last_update,
