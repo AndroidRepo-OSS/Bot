@@ -40,38 +40,43 @@ async def check_modules(c: Client):
     modules = {}
     updated_modules = []
     excluded_modules = []
-    async with httpx.AsyncClient() as client:
-        response = await client.get(RAW_URL)
-        data = json.loads(response.read())
-        last_update = data["last_update"]
-        if not config.LAST_UPDATE == last_update:
-            config.LAST_UPDATE = last_update
-            modules = data["modules"]
-            for module in modules:
-                module = await parse_module(module)
-                _module = await Modules.filter(id=module["id"])
-                if len(_module) < 1:
-                    await Modules.create(
-                        id=module["id"],
-                        url=module["url"],
-                        name=module["name"],
-                        version=module["version"],
-                        last_update=module["last_update"],
-                    )
-                    continue
-                else:
-                    _module = _module[0]
-                    if (
-                        not _module.version == module["version"]
-                        or not _module.last_update == module["last_update"]
-                    ):
-                        updated_modules.append(module)
-                        await asyncio.sleep(2)
-                        await update_module(c, module)
-        else:
-            return await sent.edit_text(
-                f"<b>No updates were detected.</b>\n<b>Date</b>: {date}\n#Sync"
-            )
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(RAW_URL)
+            data = json.loads(response.read())
+            last_update = data["last_update"]
+            if not config.LAST_UPDATE == last_update:
+                config.LAST_UPDATE = last_update
+                modules = data["modules"]
+                for module in modules:
+                    module = await parse_module(module)
+                    _module = await Modules.filter(id=module["id"])
+                    if len(_module) < 1:
+                        await Modules.create(
+                            id=module["id"],
+                            url=module["url"],
+                            name=module["name"],
+                            version=module["version"],
+                            last_update=module["last_update"],
+                        )
+                        continue
+                    else:
+                        _module = _module[0]
+                        if (
+                            not _module.version == module["version"]
+                            or not _module.last_update == module["last_update"]
+                        ):
+                            updated_modules.append(module)
+                            await asyncio.sleep(2)
+                            await update_module(c, module)
+            else:
+                return await sent.edit_text(
+                    f"<b>No updates were detected.</b>\n<b>Date</b>: {date}\n#Sync"
+                )
+    except httpx.ReadTimeout:
+        return await sent.edit_text(
+            f"<b>Timeout...</b>\n<b>Date</b>: {date}\n#Sync #Timeout"
+        )
     return await sent.edit_text(
         f"""
 <b>Magisk module check finished</b>
