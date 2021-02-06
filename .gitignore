@@ -4,3 +4,4 @@ bot/__pycache__/
 bot/database/database.*
 bot/database/__pycache__/
 bot/handlers/__pycache__/
+bot/handlers/utils/__pycache__/

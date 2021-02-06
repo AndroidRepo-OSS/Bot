@@ -7,3 +7,5 @@ SUDO_USERS = []
 
 CHANNEL_ID = 0
 CHAT_ID = 0
+
+LAST_UPDATE = 0

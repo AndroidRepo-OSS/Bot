@@ -1,4 +1,5 @@
-beautifulsoup4==4.9.3
+aioschedule==0.5.2
+p2autifulsoup4==4.9.3
 httpx[http2]==0.16.1
 KanTeX==0.2.0
 lxml==4.6.2

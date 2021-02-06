@@ -70,7 +70,6 @@ print(Panel.fit(text, border_style="white", box=box.ASCII))
 # Bot
 from pyrogram import Client, filters, idle
 from tortoise import run_async
-from .database import connect_database
 from .config import (
     API_HASH,
     API_ID,
@@ -80,6 +79,7 @@ from .config import (
     PREFIXES,
     SUDO_USERS,
 )
+from .database import connect_database
 
 bot = Client(
     "bot",
@@ -116,21 +116,26 @@ async def send_log_message(text: str, *args, **kwargs):
     return await bot.send_message(chat_id=CHAT_ID, text=text, *args, **kwargs)
 
 
-async def delete_log_message(message_id: int, *args, **kwargs):
+from typing import BinaryIO, List, Union
+
+
+async def delete_log_messages(message_ids: Union[int, List[int]], *args, **kwargs):
     return await bot.delete_messages(
-        chat_id=CHAT_ID, message_ids=message_id, *args, **kwargs
+        chat_id=CHAT_ID, message_ids=message_ids, *args, **kwargs
     )
 
 
-async def send_channel_message(text: str, *args, **kwargs):
-    return await bot.send_message(chat_id=CHANNEL_ID, text=text, *args, **kwargs)
+async def send_channel_document(document: Union[str, BinaryIO], *args, **kwargs):
+    return await bot.send_document(
+        chat_id=CHANNEL_ID, document=document, *args, **kwargs
+    )
 
 
 # Main
 async def main():
     bot.send_log_message = send_log_message
-    bot.delete_log_message = delete_log_message
-    bot.send_channel_message = send_channel_message
+    bot.delete_log_messages = delete_log_messages
+    bot.send_channel_document = send_channel_document
 
     # Connect database
     await connect_database()
@@ -157,6 +162,19 @@ async def main():
             await bot.send_log_message(
                 text=f"Error sending the startup message to <code>{sudo_user}</code>."
             )
+
+    # Check magisk modules
+    from .handlers.utils.magisk import check_modules
+
+    import aioschedule as schedule
+    import asyncio
+
+    await check_modules(bot)
+    schedule.every(1).hours.do(check_modules, c=bot)
+
+    while True:
+        await schedule.run_pending()
+        await asyncio.sleep(0.1)
 
     # Idle the bot
     await idle()

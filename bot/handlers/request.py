@@ -110,7 +110,7 @@ async def on_cancelrequest_m(c: Client, m: Message):
     user = m.from_user
     request = await Requests.filter(user=user.id, request_id=id).first()
 
-    revoked = await c.delete_log_message(message_id=request.message_id)
+    revoked = await c.delete_log_messages(message_ids=request.message_id)
 
     if request:
         await request.delete()

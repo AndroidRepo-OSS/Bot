@@ -18,6 +18,7 @@ import rapidjson as json
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
+from .utils.magisk import get_modules
 
 TYPES = ["beta", "stable", "canary"]
 
@@ -81,3 +82,8 @@ async def get_changelog(url: str) -> str:
             else:
                 changelog += f"\n    {line}"
     return changelog
+
+
+@Client.on_message(filters.sudo & filters.cmd("modules"))
+async def on_modules_m(c: Client, m: Message):
+    return await get_modules(m)

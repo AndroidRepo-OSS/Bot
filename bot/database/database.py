@@ -21,10 +21,10 @@ from tortoise.models import Model
     
     
 class Modules(Model):
-    id = fields.IntField(pk=True)
+    id = fields.CharField(pk=True, max_length=255)
     url = fields.TextField()
     name = fields.TextField()
-    version = fields.IntField()
+    version = fields.TextField()
     last_update = fields.IntField()
     
 
