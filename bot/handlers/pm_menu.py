@@ -25,8 +25,11 @@ async def start(c: Client, m: Message):
         "Hi, I'm the <b>official Android Repository Bot</b>, "
         "here is what I can do for you:\n\n"
         " - <code>/magisk (type)</code>: Returns the latest version of Magisk.\n"
+        "  > <b>Available Magisk types:</b> <code>stable</code>, <code>beta</code>, <code>canary</code>.\n"
         " - <code>/twrp (codename)</code>: Return the latest official version of TWRP to the specified device.\n\n"
-        "<b>Available Magisk types:</b> <code>stable</code>, <code>beta</code>, <code>canary</code>."
+        "You can also place requests for the @AndroidRepo staff using the #request in the bot's PM or in the @AndroidRepo_chat.\n\n"
+        "<b>i.e:</b> <code>#request Update the EdXposed module</code>\n\n"
+        "You can request modules, apps, and other files, if you are a developer also feel free to send us your projects."
     )
     if m.chat.type == "private":
         keyboard.append(
