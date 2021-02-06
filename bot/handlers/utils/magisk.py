@@ -13,15 +13,19 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import aiofiles
+import aiofiles.os
 import asyncio
 import datetime
 import io
 import httpx
 import os
 import rapidjson as json
+import shutil
 
 from pyrogram import Client
 from pyrogram.types import Message
+from zipfile import ZipFile
 from ...database import Modules
 from ... import config
 from typing import Dict
@@ -59,6 +63,7 @@ async def check_modules(c: Client):
                     _module = _module[0]
                     if not _module.version == module["version"]:
                         updated_modules.append(module)
+                        await asyncio.sleep(2)
                         await update_module(c, module)
         else:
             return await sent.edit_text(
@@ -137,8 +142,38 @@ async def update_module(c: Client, module: Dict):
     async with httpx.AsyncClient() as client:
         response = await client.get(module["url"])
         data = response.read()
-        document = io.BytesIO(data)
-    document.name = (module["name"].replace(" ", "_").replace("-", "")) + ".zip"
+        document = data
+    if not os.path.isdir("downloads"):
+        await aiofiles.os.mkdir("downloads")
+    zip_name = (
+        "downloads/"
+        + module["name"].replace(" ", "_").replace("-", "")
+        + "_"
+        + module["version"]
+        + "("
+        + module["versionCode"]
+        + ")"
+        + ".zip"
+    )
+    async with aiofiles.open(zip_name, "wb") as file:
+        await file.write(document)
+        await file.close()
+    folder = module["id"] + "-" + module["url"].split("/")[-1].replace(".zip", "") + "/"
+    files = []
+    with ZipFile(zip_name, "r") as zip_file:
+        for file in zip_file.namelist():
+            if file.startswith(folder):
+                files.append(file)
+                zip_file.extract(member=file, path="downloads/")
+        zip_file.close()
+    await aiofiles.os.remove(zip_name)
+    with ZipFile(zip_name, "w") as zip_file:
+        for file in files:
+            file_name = file[len(file.split("/")[0]) + 1 :]
+            if file_name not in ["", " "] and not file_name.startswith("."):
+                zip_file.write("downloads/" + file, file_name)
+        zip_file.close()
+    shutil.rmtree("downloads/" + folder)
     caption = f"""
 <b>{module["name"]} {"v" if module["version"][0].isdecimal() else ""}{module["version"]} ({module["versionCode"]})</b>
 
@@ -150,8 +185,9 @@ async def update_module(c: Client, module: Dict):
 <b>Follow</b>: @AndroidRepo
     """
     await c.send_channel_document(
-        caption=caption, document=document, force_document=True
+        caption=caption, document=zip_name, force_document=True
     )
+    await aiofiles.os.remove(zip_name)
     mod = (await Modules.filter(id=module["id"]))[0]
     mod.update_from_dict(
         {

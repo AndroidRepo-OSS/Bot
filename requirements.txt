@@ -1,3 +1,4 @@
+aiofiles==0.6.0
 aioschedule==0.5.2
 beautifulsoup4==4.9.3
 httpx[http2]==0.16.1
@@ -6,6 +7,8 @@ lxml==4.6.2
 Pyrogram==1.1.13
 pyromod==1.5
 python-rapidjson==1.0
+meval==2.5
 rich==9.10.0
+requests==2.25.1
 tgcrypto==1.2.2
 tortoise-orm==0.16.21
