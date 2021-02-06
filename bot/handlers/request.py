@@ -213,8 +213,8 @@ async def on_done_m(c: Client, m: Message):
             text=f"""
 <b>Request done</b>:
     <b>ID</b>: <code>{request_id}</code>
-    <b>Don't be surprised, it will disappear from your request list.</bb
-    {("<b>Staff message</b>: "+m.text[len(command)+1:]) if len(query) > 1 else ""}
+    <b>Don't be surprised, it will disappear from your request list.</b>
+    {("<b>Staff message</b>: <code>" + m.text[len(command)+1:] + "</code>") if len(query) > 1 else ""}
     <b>Your request</b>: <code>{request.request}</code>
         """,
         )
