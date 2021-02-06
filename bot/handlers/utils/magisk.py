@@ -61,7 +61,10 @@ async def check_modules(c: Client):
                     continue
                 else:
                     _module = _module[0]
-                    if not _module.version == module["version"]:
+                    if (
+                        not _module.version == module["version"]
+                        or not _module.last_update == module["last_update"]
+                    ):
                         updated_modules.append(module)
                         await asyncio.sleep(2)
                         await update_module(c, module)
