@@ -19,10 +19,14 @@ import time
 from pyrogram import Client, filters
 from pyrogram.types import Message, User
 from ..database import Requests
-from ..config import SUDO_USERS
+from ..config import STAFF_ID, SUDO_USERS
+from typing import List
 
 
-@Client.on_message((filters.private | filters.main_group) & (filters.cmd("request ") | filters.regex("^#request ")))
+@Client.on_message(
+    (filters.private | filters.main_group)
+    & (filters.cmd("request ") | filters.regex("^#request "))
+)
 async def on_request_m(c: Client, m: Message):
     user = m.from_user
     requests = await Requests.filter(user=user.id)
@@ -104,7 +108,9 @@ async def on_myrequests_m(c: Client, m: Message):
         return await m.reply_text("You haven't sent any request yet.")
 
 
-@Client.on_message((filters.private | filters.main_group) & filters.cmd("cancelrequest (?P<id>\d+)"))
+@Client.on_message(
+    (filters.private | filters.main_group) & filters.cmd("cancelrequest (?P<id>\d+)")
+)
 async def on_cancelrequest_m(c: Client, m: Message):
     id = m.matches[0]["id"]
     user = m.from_user
@@ -190,3 +196,22 @@ async def on_unignore_m(c: Client, m: Message):
         return await m.reply_text(f"{user.mention} can send requests again.")
     else:
         return await m.reply_text(f"{user.mention} is not ignored.")
+
+
+@Client.on_deleted_messages(filters.chat(STAFF_ID))
+async def on_deleted_m(c: Client, messages: List[Message]):
+    for m in messages:
+        request = await Requests.filter(message_id=m.message_id)
+        if len(request) > 0:
+            request = request[0]
+            user_id = request.user
+            request_id = request.request_id
+            await c.send_message(
+                chat_id=user_id,
+                text=f"""
+<b>Request canceled</b>:
+    <b>ID</b>: <code>{request_id}</code>
+    <code>{request.request}</code>
+            """,
+            )
+            await request.delete()

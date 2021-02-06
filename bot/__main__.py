@@ -98,8 +98,8 @@ async def sudo_filter(_, __, m):
     if not user:
         return
     return user.id in SUDO_USERS or (user.username and user.username in SUDO_USERS)
-    
-    
+
+
 async def main_group_filter(_, __, m):
     chat = m.chat
     return chat.id == CHAT_ID
