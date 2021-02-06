@@ -18,6 +18,11 @@ import os
 from tortoise import fields
 from tortoise import Tortoise
 from tortoise.models import Model
+
+
+class Contact(Model):
+    id = fields.IntField(pk=True)
+    user = fields.IntField()
     
     
 class Modules(Model):
