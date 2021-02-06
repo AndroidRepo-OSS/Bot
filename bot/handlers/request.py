@@ -198,6 +198,27 @@ async def on_unignore_m(c: Client, m: Message):
         return await m.reply_text(f"{user.mention} is not ignored.")
 
 
+@Client.on_message(
+    filters.chat(STAFF_ID) & filters.reply & filters.regex("^(?P<answer>.+)")
+)
+async def on_reply_m(c: Client, m: Message):
+    answer = m.matches[0]["answer"]
+    reply = m.reply_to_message
+    request = await Requests.filter(message_id=reply.message_id)
+    if len(request) > 0:
+        request = request[0]
+        user_id = request.user
+        request_id = request.request_id
+        await c.send_message(
+            chat_id=user_id,
+            text=f"""
+<b>Answer to your request</b>:
+    <b>ID</b>: <code>{request_id}</code>
+    <b>Answer</b>: <code>{answer}</code>
+        """,
+        )
+
+
 @Client.on_deleted_messages(filters.chat(STAFF_ID))
 async def on_deleted_m(c: Client, messages: List[Message]):
     for m in messages:
