@@ -198,6 +198,7 @@ async def update_module(c: Client, module: Dict):
             "name": module["name"],
             "versionCode": module["versionCode"],
             "version": module["version"],
+            "last_update": module["last_update"],
         }
     )
     await mod.save()
