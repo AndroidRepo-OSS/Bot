@@ -80,9 +80,9 @@ async def check_modules(c: Client):
     <b>Found</b>: <code>{len(modules)}</code>
     <b>Updated</b>: <code>{len(updated_modules)}</code>
     <b>Excluded</b>: <code>{len(excluded_modules)}</code>
-    
+
 <b>Date</b>: {date}
-    
+
 Use <code>/modules</code> to check the list of modules.
 #Sync #Modules #Magisk
     """
@@ -91,7 +91,6 @@ Use <code>/modules</code> to check the list of modules.
 
 async def get_modules(m: Message):
     date = datetime.datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
-    text = ""
     modules = await Modules.all()
     modules_list = []
     if len(modules) > 0:
@@ -180,7 +179,7 @@ async def update_module(c: Client, module: Dict):
         zip_file.close()
     try:
         shutil.rmtree("downloads/" + folder)
-    except:
+    except BaseException:
         return
     caption = f"""
 <b>{module["name"]} {"v" if module["version"][0].isdecimal() else ""}{module["version"]} ({module["versionCode"]})</b>
@@ -188,7 +187,7 @@ async def update_module(c: Client, module: Dict):
 ⚡<i>Magisk Module</i>
 ⚡<i>{module["description"]}</i>
 ⚡️<a href="https://github.com/Magisk-Modules-Repo/{module["id"]}">GitHub Repository</a>
-    
+
 <b>By</b>: {module["author"]}
 <b>Follow</b>: @AndroidRepo
     """

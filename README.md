@@ -9,6 +9,6 @@ Developed in Python using the MTProto library [Pyrogram](https://github.com/pyro
 
 ## Credits
 
-*  [@AndrielFR](https://github.com/AndrielFR): bot developer.
-*  [@HitaloSama](https://github.com/HitaloSama): bot developer (owner of Android Repository).
-*  [@usernein](https://github.com/usernein): for some code like requirements auto update system.
+* [@AndrielFR](https://github.com/AndrielFR): bot developer.
+* [@HitaloSama](https://github.com/HitaloSama): bot developer (owner of Android Repository).
+* [@usernein](https://github.com/usernein): for some code like requirements auto update system.
