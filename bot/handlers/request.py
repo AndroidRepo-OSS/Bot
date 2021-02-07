@@ -125,7 +125,7 @@ async def on_cancelrequest_m(c: Client, m: Message):
         return await m.reply_text("Request not found.")
 
 
-@Client.on_message(filters.sudo & filters.cmd("ignore"))
+@Client.on_message((filters.chat(STAFF_ID) | filters.sudo) & filters.cmd("ignore"))
 async def on_ignore_m(c: Client, m: Message):
     reply = m.reply_to_message
     if reply:
@@ -163,7 +163,7 @@ async def on_ignore_m(c: Client, m: Message):
         return await m.reply_text(f"{user.mention} is already ignored.")
 
 
-@Client.on_message(filters.sudo & filters.cmd("unignore"))
+@Client.on_message((filters.chat(STAFF_ID) | filters.sudo) & filters.cmd("unignore"))
 async def on_unignore_m(c: Client, m: Message):
     reply = m.reply_to_message
     if reply:
@@ -198,7 +198,7 @@ async def on_unignore_m(c: Client, m: Message):
         return await m.reply_text(f"{user.mention} is not ignored.")
 
 
-@Client.on_message(filters.sudo & filters.cmd("done") & filters.reply)
+@Client.on_message(filters.chat(STAFF_ID) & filters.cmd("done") & filters.reply)
 async def on_done_m(c: Client, m: Message):
     query = m.text.split()
     command = query[0]
