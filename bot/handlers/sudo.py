@@ -15,6 +15,10 @@
 
 import asyncio
 import io
+import kantex
+import platform
+import pyrogram
+import pyromod
 import os
 import traceback
 import sys
@@ -22,6 +26,8 @@ import sys
 from pyrogram import Client, filters
 from pyrogram.types import CallbackQuery, Message
 from pyromod.helpers import ikb
+from ..database import Modules
+from kantex.html import Bold, Code, KanTeXDocument, KeyValueItem, Section, SubSection
 from meval import meval
 from typing import Dict
 
@@ -193,3 +199,25 @@ async def _aexec_(c: Client, m: Message):
         return
     output_message = f"<b>Input\n&gt;</b> <code>{code}</code>\n\n"
     await sm.edit_text(output_message)
+
+
+@Client.on_message(filters.sudo & filters.cmd("(info|py)"))
+async def on_info_m(c: Client, m: Message):
+    modules = await Modules.all()
+    source_url = "https://github.com/PyroBugs/AndroidRepo"
+    doc = KanTeXDocument(
+        Section(
+            "AndroidRepo Bot",
+            SubSection(
+                "General",
+                KeyValueItem(Bold("KanTeX"), Code(kantex.__version__)),
+                KeyValueItem(Bold("Python"), Code(platform.python_version())),
+                KeyValueItem(Bold("Pyrogram"), Code(pyrogram.__version__)),
+                KeyValueItem(Bold("Pyromod"), Code(pyromod.__version__)),
+                KeyValueItem(Bold("System"), Code(c.system_version)),
+                KeyValueItem(Bold("Source"), source_url),
+            ),
+            SubSection("Magisk", KeyValueItem(Bold("Modules"), Code(len(modules)))),
+        )
+    )
+    await m.reply_text(doc)
