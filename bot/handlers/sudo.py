@@ -220,4 +220,4 @@ async def on_info_m(c: Client, m: Message):
             SubSection("Magisk", KeyValueItem(Bold("Modules"), Code(len(modules)))),
         )
     )
-    await m.reply_text(doc)
+    await m.reply_text(doc, disable_web_page_preview=True)
