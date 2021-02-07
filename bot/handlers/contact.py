@@ -66,7 +66,7 @@ async def on_message_m(c: Client, m: Message):
     )
 
 
-@Client.on_message(filters.sudo & filters.chat(STAFF_ID) & filters.reply)
+@Client.on_message(filters.chat(STAFF_ID) & filters.reply)
 async def on_answer_m(c: Client, m: Message):
     reply = m.reply_to_message
     if reply.forward_from:
