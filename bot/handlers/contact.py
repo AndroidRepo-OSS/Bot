@@ -52,7 +52,7 @@ async def on_quit_m(c: Client, m: Message):
 async def is_contact(_, __, m) -> bool:
     user = m.from_user
     if not user:
-        return
+        return False
     return len(await Contact.filter(user=user.id)) > 0
 
 
@@ -66,13 +66,23 @@ async def on_message_m(c: Client, m: Message):
     )
 
 
-@Client.on_message(filters.chat(STAFF_ID) & filters.reply)
-async def on_answer_m(c: Client, m: Message):
+async def reply_forwarded(_, __, m) -> bool:
     reply = m.reply_to_message
     if reply.forward_from:
-        user = reply.forward_from
-        contact = await Contact.filter(user=user.id)
-        if len(contact) > 0:
-            await c.copy_message(
-                chat_id=user.id, from_chat_id=m.chat.id, message_id=m.message_id
-            )
+        return True
+    else:
+        return False
+
+
+filters.reply_forwarded = filters.create(reply_forwarded, "ReplyForwardedFilter")
+
+
+@Client.on_message(filters.chat(STAFF_ID) & filters.reply & filters.reply_forwarded)
+async def on_answer_m(c: Client, m: Message):
+    reply = m.reply_to_message
+    user = reply.forward_from
+    contact = await Contact.filter(user=user.id)
+    if len(contact) > 0:
+        await c.copy_message(
+            chat_id=user.id, from_chat_id=m.chat.id, message_id=m.message_id
+        )
