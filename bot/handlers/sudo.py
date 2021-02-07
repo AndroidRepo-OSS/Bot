@@ -69,7 +69,7 @@ def parse_commits(log: str) -> Dict:
     last_commit = ""
     lines = log.split("\n")
     for line in lines:
-        if "commit" in line:
+        if line.startswith("commit"):
             last_commit = line.split()[1]
             commits[last_commit] = {}
         if len(line) > 0:
