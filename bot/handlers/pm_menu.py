@@ -48,6 +48,7 @@ async def start(c: Client, m: Message):
 
 @Client.on_callback_query(filters.regex("^start_back$"))
 async def start_back(c: Client, m: CallbackQuery):
+    text = "Hi, I'm the <b>official Android Repository Bot</b>."
     keyboard = ikb(
         [
             [
@@ -78,7 +79,7 @@ async def help(c: Client, m: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^help_requests$"))
 async def help_requests(c: Client, m: CallbackQuery):
-    keyboard = ikb([[("<-", "start_back")]])
+    keyboard = ikb([[("<-", "help")]])
     text = (
         "<b>Here is what I can do for you:</b>\n\n"
         "You can also place requests for the @AndroidRepo staff using the #request in the bot's PM or in the @AndroidRepo_chat.\n\n"
@@ -94,7 +95,7 @@ async def help_requests(c: Client, m: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^help_commands$"))
 async def help_commands(c: Client, m: CallbackQuery):
-    keyboard = ikb([[("<-", "start_back")]])
+    keyboard = ikb([[("<-", "help")]])
     text = (
         "<b>Here is what I can do for you:</b>\n\n"
         " - <code>/magisk (type)</code>: Returns the latest version of Magisk.\n"

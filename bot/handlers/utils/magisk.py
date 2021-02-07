@@ -62,16 +62,13 @@ async def check_modules(c: Client):
                         continue
                     else:
                         _module = _module[0]
-                        if (
-                            not _module.version == module["version"]
-                            or not _module.last_update == module["last_update"]
-                        ):
+                        if not _module.version == module["version"]:
                             updated_modules.append(module)
                             await asyncio.sleep(2)
                             await update_module(c, module)
             else:
                 return await sent.edit_text(
-                    f"<b>No updates were detected.</b>\n<b>Date</b>: {date}\n#Sync"
+                    f"<b>No updates were detected.</b>\n\n<b>Date</b>: {date}\n\nUse <code>/modules</code> to check the list of modules.\n#Sync"
                 )
     except httpx.ReadTimeout:
         return await sent.edit_text(
@@ -181,7 +178,10 @@ async def update_module(c: Client, module: Dict):
             if file_name not in ["", " "] and not file_name.startswith("."):
                 zip_file.write("downloads/" + file, file_name)
         zip_file.close()
-    shutil.rmtree("downloads/" + folder)
+    try:
+        shutil.rmtree("downloads/" + folder)
+    except:
+        return
     caption = f"""
 <b>{module["name"]} {"v" if module["version"][0].isdecimal() else ""}{module["version"]} ({module["versionCode"]})</b>
 
