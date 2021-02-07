@@ -16,7 +16,7 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from ..database import Contact
-from ..config import STAFF_ID
+from ..config import PREFIXES, STAFF_ID
 
 
 @Client.on_message(filters.private & filters.cmd("contact"))
@@ -61,6 +61,9 @@ filters.is_contact = filters.create(is_contact, "IsContactFilter")
 
 @Client.on_message(filters.private & filters.is_contact)
 async def on_message_m(c: Client, m: Message):
+    for prefix in PREFIXES:
+        if m.text.startswith(prefix):
+            m.continue_propagation()
     await c.forward_messages(
         chat_id=STAFF_ID, from_chat_id=m.chat.id, message_ids=m.message_id
     )
