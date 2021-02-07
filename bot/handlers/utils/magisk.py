@@ -181,7 +181,10 @@ async def update_module(c: Client, module: Dict):
             if file_name not in ["", " "] and not file_name.startswith("."):
                 zip_file.write("downloads/" + file, file_name)
         zip_file.close()
-    shutil.rmtree("downloads/" + folder)
+    try:
+        shutil.rmtree("downloads/" + folder)
+    except:
+        return
     caption = f"""
 <b>{module["name"]} {"v" if module["version"][0].isdecimal() else ""}{module["version"]} ({module["versionCode"]})</b>
 
