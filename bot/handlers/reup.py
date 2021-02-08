@@ -23,7 +23,7 @@ from ..config import CHANNEL_ID
 @Client.on_message(filters.sudo & filters.cmd("reup") & filters.reply)
 async def on_reup_m(c: Client, m: Message):
     command = m.text.split()[0]
-    desc = m.text[len(command) :]
+    desc = m.text[len(command) + 1 :]
 
     await m.reply_text("Starting re-upload...")
 
