@@ -1,4 +1,5 @@
 downloads*
+bit/downloads*
 bot/config.py
 bot/bot.session*
 bot/__pycache__/
