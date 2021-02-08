@@ -241,6 +241,8 @@ async def on_reply_m(c: Client, m: Message):
     <b>Answer</b>: <code>{answer}</code>
         """,
         )
+    else:
+        m.continue_propagation()
 
 
 @Client.on_deleted_messages(filters.chat(STAFF_ID))
