@@ -127,9 +127,13 @@ from typing import BinaryIO, List, Union
 
 
 async def delete_log_messages(message_ids: Union[int, List[int]], *args, **kwargs):
-    return await bot.delete_messages(
+    try:
+        await bot.delete_messages(
         chat_id=STAFF_ID, message_ids=message_ids, *args, **kwargs
     )
+    except BaseException:
+        return
+    return
 
 
 async def send_channel_document(document: Union[str, BinaryIO], *args, **kwargs):
