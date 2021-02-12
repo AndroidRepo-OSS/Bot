@@ -18,14 +18,14 @@ import time
 
 from pyrogram import Client, filters
 from pyrogram.types import Message, User
+from pyromod.helpers import ikb
 from ..database import Requests
-from ..config import STAFF_ID, SUDO_USERS
+from ..config import CHAT_ID, STAFF_ID, SUDO_USERS
 from typing import List
 
 
 @Client.on_message(
-    (filters.private | filters.main_group)
-    & (filters.cmd("request ") | filters.regex("^#request "))
+    filters.private & (filters.cmd("request ") | filters.regex("^#request "))
 )
 async def on_request_m(c: Client, m: Message):
     user = m.from_user
@@ -92,7 +92,7 @@ async def on_request_m(c: Client, m: Message):
         await m.reply_text("There was a problem submitting your request.")
 
 
-@Client.on_message((filters.private | filters.main_group) & filters.cmd("myrequests"))
+@Client.on_message(filters.private & filters.cmd("myrequests"))
 async def on_myrequests_m(c: Client, m: Message):
     user = m.from_user
     requests = await Requests.filter(user=user.id)
@@ -108,15 +108,13 @@ async def on_myrequests_m(c: Client, m: Message):
         return await m.reply_text("You haven't sent any request yet.")
 
 
-@Client.on_message(
-    (filters.private | filters.main_group) & filters.cmd("cancelrequest (?P<id>\d+)")
-)
+@Client.on_message(filters.private & filters.cmd("cancelrequest (?P<id>\d+)"))
 async def on_cancelrequest_m(c: Client, m: Message):
     id = m.matches[0]["id"]
     user = m.from_user
     request = await Requests.filter(user=user.id, request_id=id).first()
 
-    revoked = await c.delete_log_messages(message_ids=request.message_id)
+    await c.delete_log_messages(message_ids=request.message_id)
 
     if request:
         await request.delete()
@@ -215,7 +213,7 @@ async def on_done_m(c: Client, m: Message):
     <b>ID</b>: <code>{request_id}</code>
     <b>Don't be surprised, it will disappear from your request list.</b>
     {("<b>Staff message</b>: <code>" + m.text[len(command)+1:] + "</code>") if len(query) > 1 else ""}
-    <b>Your request</b>: <code>{request.request}</code>
+    <b>Request</b>: <code>{request.request}</code>
         """,
         )
         await request.delete()
@@ -258,7 +256,7 @@ async def on_deleted_m(c: Client, messages: List[Message]):
                 text=f"""
 <b>Request canceled</b>:
     <b>ID</b>: <code>{request_id}</code>
-    <code>{request.request}</code>
+    <b>Request</b>: <code>{request.request}</code>
             """,
             )
             await request.delete()

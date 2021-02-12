@@ -100,11 +100,6 @@ async def sudo_filter(_, __, m):
     return user.id in SUDO_USERS or (user.username and user.username in SUDO_USERS)
 
 
-async def main_group_filter(_, __, m):
-    chat = m.chat
-    return chat.id == CHAT_ID
-
-
 import re
 
 
@@ -114,7 +109,6 @@ def cmd_filter(command: str, *args, **kwargs):
 
 
 filters.sudo = filters.create(sudo_filter, "SudoFilter")
-filters.main_group = filters.create(main_group_filter, "MainGroupFilter")
 filters.cmd = cmd_filter
 
 
@@ -129,8 +123,8 @@ from typing import BinaryIO, List, Union
 async def delete_log_messages(message_ids: Union[int, List[int]], *args, **kwargs):
     try:
         await bot.delete_messages(
-        chat_id=STAFF_ID, message_ids=message_ids, *args, **kwargs
-    )
+            chat_id=STAFF_ID, message_ids=message_ids, *args, **kwargs
+        )
     except BaseException:
         return
     return
