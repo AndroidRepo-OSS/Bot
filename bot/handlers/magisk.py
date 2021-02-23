@@ -57,10 +57,8 @@ async def on_magisk_m(c: Client, m: Message):
         text += f"\n\n<b>Magisk</b>: <a href='https://raw.githubusercontent.com/topjohnwu/magisk_files/canary/app-debug.apk'>{app['versionCode']}</a> (v{app['version']})"
         text += f"\n<b>Changelog</b>: {await get_changelog('https://github.com/topjohnwu/magisk_files/raw/canary/notes.md')}"
     else:
-        text += f"<b>\n\nManager</b>: <a href='{app['link']}'>{app['versionCode']}</a> (v{app['version']})"
-        text += f"<b>\nChangelog</b>: {await get_changelog(app['note'])}"
         text += f"<b>\n\nMagisk</b>: <a href='{magisk['link']}'>{magisk['versionCode']}</a> (v{magisk['version']})"
-        text += f"<b>\nChangelog</b>: {await get_changelog(magisk['note'])}"
+        text += f"<b>\nChangelog</b>: {await get_changelog('https://github.com/topjohnwu/Magisk/raw/master/docs/changes.md')}"
     text += f"\n\n<a href='{data['uninstaller']['link']}'>Uninstaller</a>"
 
     await sm.edit_text(text, disable_web_page_preview=True, parse_mode="combined")
