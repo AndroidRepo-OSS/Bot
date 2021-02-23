@@ -75,7 +75,6 @@ from .config import (
     API_ID,
     BOT_TOKEN,
     CHANNEL_ID,
-    CHAT_ID,
     PREFIXES,
     STAFF_ID,
     SUDO_USERS,

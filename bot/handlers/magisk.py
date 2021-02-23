@@ -37,7 +37,7 @@ async def on_magisk_m(c: Client, m: Message):
 
     type = type.lower()
 
-    if not type in TYPES:
+    if type not in TYPES:
         return await sm.edit(f"The version type <b>{type}</b> was not found.")
 
     if type == "canary":
@@ -56,9 +56,12 @@ async def on_magisk_m(c: Client, m: Message):
     if type == "canary":
         text += f"\n\n<b>Magisk</b>: <a href='https://raw.githubusercontent.com/topjohnwu/magisk_files/canary/app-debug.apk'>{app['versionCode']}</a> (v{app['version']})"
         text += f"\n<b>Changelog</b>: {await get_changelog('https://github.com/topjohnwu/magisk_files/raw/canary/notes.md')}"
-    else:
+    elif type == "stable":
         text += f"<b>\n\nMagisk</b>: <a href='{magisk['link']}'>{magisk['versionCode']}</a> (v{magisk['version']})"
         text += f"<b>\nChangelog</b>: {await get_changelog('https://github.com/topjohnwu/Magisk/raw/master/docs/changes.md')}"
+    elif type == "beta":
+        text += f"<b>\n\nMagisk</b>: <a href='{magisk['link']}'>{magisk['versionCode']}</a> (v{magisk['version']})"
+        text += f"<b>\nChangelog</b>: {await get_changelog(magisk['note'])}"
     text += f"\n\n<a href='{data['uninstaller']['link']}'>Uninstaller</a>"
 
     await sm.edit_text(text, disable_web_page_preview=True, parse_mode="combined")

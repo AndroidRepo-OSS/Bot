@@ -18,9 +18,8 @@ import time
 
 from pyrogram import Client, filters
 from pyrogram.types import Message, User
-from pyromod.helpers import ikb
 from ..database import Requests
-from ..config import CHAT_ID, STAFF_ID, SUDO_USERS
+from ..config import STAFF_ID, SUDO_USERS
 from typing import List
 
 
