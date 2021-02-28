@@ -28,8 +28,18 @@ from pyrogram.types import CallbackQuery, Message
 from pyromod.helpers import ikb
 from ..database import Modules
 from kantex.html import Bold, Code, KanTeXDocument, KeyValueItem, Section, SubSection
+from datetime import datetime
 from meval import meval
 from typing import Dict
+
+
+@Client.on_message(filters.sudo & filters.cmd("ping"))
+async def ping(c: Client, m: Message):
+    first = datetime.now()
+    sent = await m.reply_text("<b>Pong!</b>")
+    second = datetime.now()
+    time = (second - first).microseconds / 1000
+    await sent.edit_text(f"<b>Pong!</b> <code>{time}</code>ms")
 
 
 @Client.on_message(filters.sudo & filters.cmd("restart"))
