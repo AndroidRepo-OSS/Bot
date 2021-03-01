@@ -1,7 +1,7 @@
 aiofiles==0.6.0
 aioschedule==0.5.2
 beautifulsoup4==4.9.3
-httpx[http2]==0.16.1
+httpx[http2]==0.17.0
 KanTeX==0.2.0
 lxml==4.6.2
 Pyrogram==1.1.13
