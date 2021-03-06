@@ -46,6 +46,22 @@ async def start(c: Client, m: Message):
     )
 
 
+@Client.on_message(filters.cmd("help") & filters.private)
+async def help_cmd(c: Client, m: Message):
+    keyboard = ikb(
+        [
+            [("🔧 Utilities", "help_commands"), ("💭 Requests", "help_requests")],
+            [("<-", "start_back")],
+        ]
+    )
+    text = "Choose a category for help!"
+    await m.reply_text(
+        text,
+        reply_markup=keyboard,
+        disable_web_page_preview=True,
+    )
+
+
 @Client.on_callback_query(filters.regex("^start_back$"))
 async def start_back(c: Client, m: CallbackQuery):
     text = "Hi, I'm the <b>official Android Repository Bot</b>."
@@ -82,7 +98,7 @@ async def help_requests(c: Client, m: CallbackQuery):
     keyboard = ikb([[("<-", "help")]])
     text = (
         "<b>Here is what I can do for you:</b>\n\n"
-        "You can also place requests for the @AndroidRepo staff using the #request in the bot's PM or in the @AndroidRepo_chat.\n\n"
+        "You can also place requests for the @AndroidRepo staff using the #request in the bot's PM.\n\n"
         "<b>i.e:</b> <code>#request Update the EdXposed module</code>\n\n"
         "You can request modules, apps, and other files, if you are a developer also feel free to send us your projects."
     )
