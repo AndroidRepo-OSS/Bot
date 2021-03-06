@@ -26,10 +26,9 @@ import shutil
 from pyrogram import Client
 from pyrogram.types import Message
 from zipfile import ZipFile
-from ...database import Modules
-from ... import config
+from bot.database import Modules
+from bot import config
 from typing import Dict
-
 
 RAW_URL = "https://github.com/Magisk-Modules-Repo/submission/raw/modules/modules.json"
 
@@ -41,7 +40,7 @@ async def check_modules(c: Client):
     updated_modules = []
     excluded_modules = []
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(http2=True) as client:
             response = await client.get(RAW_URL)
             data = json.loads(response.read())
             last_update = data["last_update"]
@@ -120,7 +119,7 @@ async def parse_module(to_parse: Dict) -> Dict:
         "url": to_parse["zip_url"],
         "last_update": to_parse["last_update"],
     }
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(http2=True) as client:
         response = await client.get(to_parse["prop_url"])
         data = response.read().decode()
         lines = data.split("\n")
@@ -143,7 +142,7 @@ async def parse_module(to_parse: Dict) -> Dict:
 
 async def update_module(c: Client, module: Dict):
     document = None
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(http2=True) as client:
         response = await client.get(module["url"])
         data = response.read()
         document = data
