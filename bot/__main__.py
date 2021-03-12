@@ -58,6 +58,7 @@ logging.basicConfig(
 # To avoid some pyrogram annoying log
 logging.getLogger("pyrogram.syncer").setLevel(logging.WARNING)
 logging.getLogger("pyrogram.client").setLevel(logging.WARNING)
+logging.getLogger("aiodown").setLevel(logging.WARNING)
 
 log = logging.getLogger("rich")
 

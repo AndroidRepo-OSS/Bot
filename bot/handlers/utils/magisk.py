@@ -153,17 +153,17 @@ async def update_module(c: Client, module: Dict):
     )
     file_path = "./downloads/" + file_name
     async with aiodown.Client() as client:
-        download = client.download(module["url"], "./downloads/", file_name)
+        download = client.add(module["url"], "./downloads/", file_name)
         await client.start()
         while not download.is_finished():
             await asyncio.sleep(0.5)
+        await client.close()
     files = []
     extraction_path = None
     with ZipFile(file_path, "r") as old_zip:
         for file in old_zip.namelist():
             if extraction_path is None:
                 extraction_path = "./downloads/" + "/".join(file.split("/")[:3])
-                print(extraction_path)
             path = "./downloads/" + file
             files.append(path)
             old_zip.extract(member=file, path="./downloads/")
