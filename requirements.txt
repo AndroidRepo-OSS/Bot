@@ -1,5 +1,6 @@
-aiofiles==0.6.0
+aiodown==1.0.0
 aioschedule==0.5.2
+async-files==0.4
 beautifulsoup4==4.9.3
 httpx[http2]==0.17.0
 KanTeX==0.2.0

@@ -13,8 +13,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import aiofiles
-import aiofiles.os
+import aiodown
+import async_files
 import asyncio
 import datetime
 import io
@@ -42,7 +42,7 @@ async def check_modules(c: Client):
     try:
         async with httpx.AsyncClient(http2=True) as client:
             response = await client.get(RAW_URL)
-            data = json.loads(response.read())
+            data = response.json()
             last_update = data["last_update"]
             if not config.LAST_UPDATE == last_update:
                 config.LAST_UPDATE = last_update
@@ -141,45 +141,44 @@ async def parse_module(to_parse: Dict) -> Dict:
 
 
 async def update_module(c: Client, module: Dict):
-    document = None
-    async with httpx.AsyncClient(http2=True) as client:
-        response = await client.get(module["url"])
-        data = response.read()
-        document = data
-    if not os.path.isdir("downloads"):
-        await aiofiles.os.mkdir("downloads")
-    zip_name = (
-        "downloads/"
-        + module["name"].replace(" ", "_").replace("-", "")
+    file_name = (
+        module["name"].replace("-", "").replace(" ", "-").replace("--", "")
         + "_"
         + module["version"]
+        + "_"
         + "("
         + module["versionCode"]
         + ")"
         + ".zip"
     )
-    async with aiofiles.open(zip_name, "wb") as file:
-        await file.write(document)
-        await file.close()
-    folder = module["id"] + "-" + module["url"].split("/")[-1].replace(".zip", "") + "/"
+    file_path = "./downloads/" + file_name
+    async with aiodown.Client() as client:
+        download = client.download(module["url"], "./downloads/", file_name)
+        await client.start()
+        while not download.is_finished():
+            await asyncio.sleep(0.5)
     files = []
-    with ZipFile(zip_name, "r") as zip_file:
-        for file in zip_file.namelist():
-            if file.startswith(folder):
-                files.append(file)
-                zip_file.extract(member=file, path="downloads/")
-        zip_file.close()
-    await aiofiles.os.remove(zip_name)
-    with ZipFile(zip_name, "w") as zip_file:
+    extraction_path = None
+    with ZipFile(file_path, "r") as old_zip:
+        for file in old_zip.namelist():
+            if extraction_path is None:
+                extraction_path = "./downloads/" + "/".join(file.split("/")[:3])
+                print(extraction_path)
+            path = "./downloads/" + file
+            files.append(path)
+            old_zip.extract(member=file, path="./downloads/")
+        old_zip.close()
+    os.remove(file_path)
+    with ZipFile(file_path, "w") as new_zip:
         for file in files:
-            file_name = file[len(file.split("/")[0]) + 1 :]
-            if file_name not in ["", " "] and not file_name.startswith("."):
-                zip_file.write("downloads/" + file, file_name)
-        zip_file.close()
+            name = "/".join(file.split("/")[3:])
+            if name not in [" ", ""] and not name.startswith("."):
+                new_zip.write(file, name)
+        new_zip.close()
     try:
-        shutil.rmtree("downloads/" + folder)
+        shutil.rmtree(extraction_path)
     except BaseException:
-        return
+        pass
     caption = f"""
 <b>{module["name"]} {"v" if module["version"][0].isdecimal() else ""}{module["version"]} ({module["versionCode"]})</b>
 
@@ -191,9 +190,9 @@ async def update_module(c: Client, module: Dict):
 <b>Follow</b>: @AndroidRepo
     """
     await c.send_channel_document(
-        caption=caption, document=zip_name, force_document=True
+        caption=caption, document=file_path, force_document=True
     )
-    await aiofiles.os.remove(zip_name)
+    os.remove(file_path)
     mod = (await Modules.filter(id=module["id"]))[0]
     mod.update_from_dict(
         {

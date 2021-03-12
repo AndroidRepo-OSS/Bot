@@ -1,9 +1,8 @@
-downloads*
-bit/downloads*
-bot/config.py
-bot/bot.session*
-bot/__pycache__/
-bot/database/database.*
-bot/database/__pycache__/
-bot/handlers/__pycache__/
-bot/handlers/utils/__pycache__/
+# Personal files
+downloads/
+config.py
+*.session*
+*.sqlite*
+
+# Byte pre-compiled
+__pycache__/

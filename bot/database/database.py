@@ -23,15 +23,15 @@ from tortoise.models import Model
 class Contact(Model):
     id = fields.IntField(pk=True)
     user = fields.IntField()
-    
-    
+
+
 class Modules(Model):
     id = fields.CharField(pk=True, max_length=255)
     url = fields.TextField()
     name = fields.TextField()
     version = fields.TextField()
     last_update = fields.IntField()
-    
+
 
 class Requests(Model):
     id = fields.IntField(pk=True)
@@ -48,7 +48,9 @@ async def connect_database():
     await Tortoise.init(
         {
             "connections": {
-                "bot_db": os.getenv("DATABASE_URL", "sqlite://bot/database/database.sqlite")
+                "bot_db": os.getenv(
+                    "DATABASE_URL", "sqlite://bot/database/database.sqlite"
+                )
             },
             "apps": {"bot": {"models": [__name__], "default_connection": "bot_db"}},
         }
