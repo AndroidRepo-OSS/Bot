@@ -158,6 +158,8 @@ async def update_module(c: Client, module: Dict):
         while not download.is_finished():
             await asyncio.sleep(0.5)
         await client.close()
+        if download.get_status() == "failed":
+            return
     files = []
     extraction_path = None
     with ZipFile(file_path, "r") as old_zip:
