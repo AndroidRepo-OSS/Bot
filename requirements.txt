@@ -1,4 +1,4 @@
-aiodown==1.0.1
+aiodown==1.0.4
 aioschedule==0.5.2
 async-files==0.4
 beautifulsoup4==4.9.3
