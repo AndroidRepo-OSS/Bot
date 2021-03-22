@@ -40,7 +40,7 @@ async def check_modules(c: Client):
     updated_modules = []
     excluded_modules = []
     try:
-        async with httpx.AsyncClient(http2=True) as client:
+        async with httpx.AsyncClient(http2=True, timeout=10.0) as client:
             response = await client.get(RAW_URL)
             data = response.json()
             last_update = data["last_update"]
@@ -119,7 +119,7 @@ async def parse_module(to_parse: Dict) -> Dict:
         "url": to_parse["zip_url"],
         "last_update": to_parse["last_update"],
     }
-    async with httpx.AsyncClient(http2=True) as client:
+    async with httpx.AsyncClient(http2=True, timeout=10.0) as client:
         response = await client.get(to_parse["prop_url"])
         data = response.read().decode()
         lines = data.split("\n")
@@ -153,11 +153,10 @@ async def update_module(c: Client, module: Dict):
     )
     file_path = "./downloads/" + file_name
     async with aiodown.Client() as client:
-        download = client.add(module["url"], "./downloads/", file_name)
+        download = client.add(module["url"], file_path)
         await client.start()
         while not download.is_finished():
             await asyncio.sleep(0.5)
-        await client.close()
         if download.get_status() == "failed":
             return
     files = []

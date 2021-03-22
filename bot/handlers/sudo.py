@@ -211,7 +211,7 @@ async def _aexec_(c: Client, m: Message):
     await sm.edit_text(output_message)
 
 
-@Client.on_message(filters.sudo & filters.cmd("(info|py)"))
+@Client.on_message(filters.sudo & filters.cmd("(info|py)$"))
 async def on_info_m(c: Client, m: Message):
     modules = await Modules.all()
     source_url = "https://git.io/JtVsY"

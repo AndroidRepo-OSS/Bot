@@ -13,3 +13,4 @@ rich==9.13.0
 requests==2.25.1
 tgcrypto==1.2.2
 tortoise-orm==0.16.21
+aiodown==1.0.4
