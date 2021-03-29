@@ -9,7 +9,7 @@ Pyrogram==1.2.5
 pyromod==1.5
 python-rapidjson==1.0
 meval==2.5
-rich==9.13.0
+rich==10.0.0
 requests==2.25.1
 tgcrypto==1.2.2
 aiodown==1.0.4
