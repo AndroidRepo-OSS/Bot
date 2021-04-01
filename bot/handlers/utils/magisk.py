@@ -1,4 +1,5 @@
 # This file is part of AndroidRepo (Telegram Bot)
+# Copyright (C) 2021 AmanoTeam
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as
@@ -13,22 +14,23 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import io
+import os
+import httpx
+import shutil
 import aiodown
-import async_files
 import asyncio
 import datetime
-import io
-import httpx
-import os
+import async_files
 import rapidjson as json
-import shutil
+from typing import Dict
+from zipfile import ZipFile
 
 from pyrogram import Client
 from pyrogram.types import Message
-from zipfile import ZipFile
+
 from bot.database import Modules
 from bot import config
-from typing import Dict
 
 RAW_URL = "https://github.com/Magisk-Modules-Repo/submission/raw/modules/modules.json"
 

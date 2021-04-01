@@ -1,4 +1,5 @@
 # This file is part of AndroidRepo (Telegram Bot)
+# Copyright (C) 2021 AmanoTeam
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as
@@ -70,6 +71,7 @@ print(Panel.fit(text, border_style="white", box=box.ASCII))
 
 # Bot
 from pyrogram import Client, filters, idle
+from pyrogram.session import Session
 from tortoise import run_async
 from .config import (
     API_HASH,
@@ -90,6 +92,10 @@ bot = Client(
     parse_mode="html",
     plugins=dict(root="bot/handlers"),
 )
+
+
+# Disable ugly pyrogram notice print
+Session.notice_displayed = True
 
 
 # Filters

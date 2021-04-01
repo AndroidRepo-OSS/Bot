@@ -1,4 +1,5 @@
 # This file is part of AndroidRepo (Telegram Bot)
+# Copyright (C) 2021 AmanoTeam
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as
@@ -13,14 +14,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import datetime
 import time
+import datetime
+from typing import List
 
 from pyrogram import Client, filters
 from pyrogram.types import Message, User
-from ..database import Requests
-from ..config import STAFF_ID, SUDO_USERS
-from typing import List
+
+from bot.database import Requests
+from bot.config import STAFF_ID, SUDO_USERS
 
 
 @Client.on_message(

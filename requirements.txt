@@ -12,6 +12,4 @@ meval==2.5
 rich==10.0.1
 requests==2.25.1
 tgcrypto==1.2.2
-aiodown==1.0.5
 tortoise-orm==0.17.1
-

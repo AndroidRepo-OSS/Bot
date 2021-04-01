@@ -1,4 +1,5 @@
 # This file is part of AndroidRepo (Telegram Bot)
+# Copyright (C) 2021 AmanoTeam
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as
@@ -17,7 +18,8 @@ import shutil
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from ..config import CHANNEL_ID
+
+from bot.config import CHANNEL_ID
 
 
 @Client.on_message(filters.sudo & filters.cmd("reup") & filters.reply)

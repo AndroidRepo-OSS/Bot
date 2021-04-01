@@ -1,4 +1,5 @@
 # This file is part of AndroidRepo (Telegram Bot)
+# Copyright (C) 2021 AmanoTeam
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as
@@ -13,24 +14,25 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import asyncio
+import os
 import io
+import sys
 import kantex
+import pyromod
+import asyncio
 import platform
 import pyrogram
-import pyromod
-import os
 import traceback
-import sys
+from meval import meval
+from typing import Dict
+from datetime import datetime
 
 from pyrogram import Client, filters
 from pyrogram.types import CallbackQuery, Message
 from pyromod.helpers import ikb
-from ..database import Modules
 from kantex.html import Bold, Code, KanTeXDocument, KeyValueItem, Section, SubSection
-from datetime import datetime
-from meval import meval
-from typing import Dict
+
+from bot.database import Modules
 
 
 @Client.on_message(filters.sudo & filters.cmd("ping"))
