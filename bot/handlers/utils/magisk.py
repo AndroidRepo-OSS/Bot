@@ -74,7 +74,7 @@ async def check_modules(c: Client):
             f"<b>Timeout...</b>\n<b>Date</b>: {date}\n#Sync #Timeout"
         )
     module_ids = list(map(lambda module: module["id"], modules))
-    for _module in (await Modules.all()):
+    for _module in await Modules.all():
         if _module.id not in module_ids:
             excluded_modules.append(_module)
             for index, module in enumerate(modules):
