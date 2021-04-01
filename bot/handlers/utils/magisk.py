@@ -36,7 +36,7 @@ RAW_URL = "https://github.com/Magisk-Modules-Repo/submission/raw/modules/modules
 async def check_modules(c: Client):
     date = datetime.datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
     sent = await c.send_log_message("<b>Magisk module check started...</b>")
-    modules = {}
+    modules = []
     updated_modules = []
     excluded_modules = []
     try:
@@ -73,6 +73,14 @@ async def check_modules(c: Client):
         return await sent.edit_text(
             f"<b>Timeout...</b>\n<b>Date</b>: {date}\n#Sync #Timeout"
         )
+    module_ids = list(map(lambda module: module["id"], modules))
+    for _module in (await Modules.all()):
+        if _module.id not in module_ids:
+            excluded_modules.append(_module)
+            for index, module in enumerate(modules):
+                if _module.id == module["id"]:
+                    del modules[index]
+            await _module.delete()
     return await sent.edit_text(
         f"""
 <b>Magisk module check finished</b>
