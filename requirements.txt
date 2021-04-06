@@ -5,7 +5,7 @@ beautifulsoup4==4.9.3
 httpx[http2]==0.17.1
 KanTeX==0.2.0
 lxml==4.6.3
-Pyrogram==1.2.6
+Pyrogram==1.2.7
 pyromod==1.5
 python-rapidjson==1.0
 meval==2.5
