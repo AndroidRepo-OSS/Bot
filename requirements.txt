@@ -12,4 +12,4 @@ meval==2.5
 rich==10.1.0
 requests==2.25.1
 tgcrypto==1.2.2
-tortoise-orm==0.17.1
+tortoise-orm==0.17.2
