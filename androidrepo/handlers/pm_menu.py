@@ -16,7 +16,7 @@
 
 from pyrogram import Client, filters
 from pyrogram.types import Message, CallbackQuery
-from pyrogram.helpers import ikb
+from pyromod.helpers import ikb
 
 
 @Client.on_message(filters.cmd("start"))

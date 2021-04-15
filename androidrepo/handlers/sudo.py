@@ -20,15 +20,16 @@ import sys
 import kantex
 import asyncio
 import platform
-import pyrogram
 import traceback
 from meval import meval
 from typing import Dict
 from datetime import datetime
 
+import pyrogram
+import pyromod
 from pyrogram import Client, filters
 from pyrogram.types import CallbackQuery, Message
-from pyrogram.helpers import ikb
+from pyromod.helpers import ikb
 from kantex.html import Bold, Code, KanTeXDocument, KeyValueItem, Section, SubSection
 
 import androidrepo
@@ -228,6 +229,7 @@ async def on_info_m(c: Client, m: Message):
                 KeyValueItem(Bold("KanTeX"), kantex.__version__),
                 KeyValueItem(Bold("Python"), platform.python_version()),
                 KeyValueItem(Bold("Pyrogram"), pyrogram.__version__),
+                KeyValueItem(Bold("Pyromod"), pyromod.__version__),
                 KeyValueItem(Bold("Source"), source_url),
                 KeyValueItem(Bold("System"), c.system_version),
             ),
