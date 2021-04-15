@@ -29,7 +29,7 @@ RESET = 'echo -e "\033[0m"'
 
 if "--no-update" not in sys.argv:
     print("\033[0;32mUpdating requirements...\033[0m")
-    os.system(f"{DGRAY}; {sys.executable} -m pip install -Ur requirements.txt; {RESET}")
+    os.system(f"{DGRAY}; {sys.executable} -m pip install . -U; {RESET}")
     os.system("clear")
 
 print("\033[0m")
@@ -90,7 +90,7 @@ bot = Client(
     API_HASH,
     bot_token=BOT_TOKEN,
     parse_mode="html",
-    plugins=dict(root="bot/handlers"),
+    plugins=dict(root="androidrepo/handlers"),
 )
 
 
@@ -157,12 +157,10 @@ async def main():
 
     # Send startup message
     import pyrogram
-    import pyromod
     import platform
 
     startup_message = f"""<b>AndroidRepo Started...</b>
 - <b>Pyrogram:</b> <code>v{pyrogram.__version__}</code>
-- <b>Pyromod:</b> <code>v{pyromod.__version__}</code>
 - <b>Python:</b> <code>v{platform.python_version()}</code>
 - <b>System:</b> <code>{bot.system_version}</code>
            """

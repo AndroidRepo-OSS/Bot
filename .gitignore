@@ -1,8 +1,11 @@
 # Personal files
 downloads/
-config.py
-*.session*
-*.sqlite*
+androidrepo/config.py
+androidrepo/*.session*
+androidrepo/database/*.sqlite*
 
 # Byte pre-compiled
-__pycache__/
+androidrepo/__pycache__/
+androidrepo/handlers/utils/__pycache__/
+androidrepo/handlers/__pycache__/
+androidrepo/database/__pycache__/

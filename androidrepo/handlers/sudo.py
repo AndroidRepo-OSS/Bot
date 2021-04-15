@@ -18,7 +18,6 @@ import os
 import io
 import sys
 import kantex
-import pyromod
 import asyncio
 import platform
 import pyrogram
@@ -29,10 +28,11 @@ from datetime import datetime
 
 from pyrogram import Client, filters
 from pyrogram.types import CallbackQuery, Message
-from pyromod.helpers import ikb
+from pyrogram.helpers import ikb
 from kantex.html import Bold, Code, KanTeXDocument, KeyValueItem, Section, SubSection
 
-from bot.database import Modules
+import androidrepo
+from ..database import Modules
 
 
 @Client.on_message(filters.sudo & filters.cmd("ping"))
@@ -47,7 +47,9 @@ async def ping(c: Client, m: Message):
 @Client.on_message(filters.sudo & filters.cmd("restart"))
 async def on_restart_m(c: Client, m: Message):
     await m.reply_text("Restarting...")
-    args = [sys.executable, "-m", "bot"]
+    args = [sys.executable, "-m", "androidrepo"]
+    if "--no-update" in sys.argv:
+        args.append("--no-update")
     os.execv(sys.executable, args)
 
 
@@ -114,7 +116,7 @@ async def on_upgrade_cq(c: Client, cq: CallbackQuery):
     stdout = (await proc.communicate())[0].decode()
     if proc.returncode == 0:
         await cq.message.edit_text("Restarting...")
-        args = [sys.executable, "-m", "bot"]
+        args = [sys.executable, "-m", "androidrepo"]
         os.execv(sys.executable, args)
     else:
         error = ""
@@ -216,18 +218,18 @@ async def _aexec_(c: Client, m: Message):
 @Client.on_message(filters.sudo & filters.cmd("(info|py)$"))
 async def on_info_m(c: Client, m: Message):
     modules = await Modules.all()
-    source_url = "https://git.io/JtVsY"
+    source_url = "git.io/JtVsY"
     doc = KanTeXDocument(
         Section(
             "AndroidRepo Bot",
             SubSection(
                 "General",
+                KeyValueItem(Bold("Bot"), androidrepo.__version__),
                 KeyValueItem(Bold("KanTeX"), kantex.__version__),
                 KeyValueItem(Bold("Python"), platform.python_version()),
                 KeyValueItem(Bold("Pyrogram"), pyrogram.__version__),
-                KeyValueItem(Bold("Pyromod"), pyromod.__version__),
-                KeyValueItem(Bold("System"), c.system_version),
                 KeyValueItem(Bold("Source"), source_url),
+                KeyValueItem(Bold("System"), c.system_version),
             ),
             SubSection("Magisk", KeyValueItem(Bold("Modules"), Code(len(modules)))),
         )

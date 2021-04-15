@@ -21,8 +21,8 @@ from typing import List
 from pyrogram import Client, filters
 from pyrogram.types import Message, User
 
-from bot.database import Requests
-from bot.config import STAFF_ID, SUDO_USERS
+from ..database import Requests
+from ..config import STAFF_ID, SUDO_USERS
 
 
 @Client.on_message(

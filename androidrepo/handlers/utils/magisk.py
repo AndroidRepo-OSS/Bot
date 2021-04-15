@@ -29,8 +29,8 @@ from zipfile import ZipFile
 from pyrogram import Client
 from pyrogram.types import Message
 
-from bot.database import Modules
-from bot import config
+from ...database import Modules
+from ... import config
 
 RAW_URL = "https://github.com/Magisk-Modules-Repo/submission/raw/modules/modules.json"
 

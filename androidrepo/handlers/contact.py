@@ -17,8 +17,8 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from bot.database import Contact
-from bot.config import PREFIXES, STAFF_ID
+from ..database import Contact
+from ..config import PREFIXES, STAFF_ID
 
 
 @Client.on_message(filters.private & filters.cmd("contact"))

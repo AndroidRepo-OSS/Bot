@@ -50,7 +50,7 @@ async def connect_database():
         {
             "connections": {
                 "bot_db": os.getenv(
-                    "DATABASE_URL", "sqlite://bot/database/database.sqlite"
+                    "DATABASE_URL", "sqlite://androidrepo/database/database.sqlite"
                 )
             },
             "apps": {"bot": {"models": [__name__], "default_connection": "bot_db"}},

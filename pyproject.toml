@@ -1,0 +1,49 @@
+[tool.poetry]
+name = "androidrepo"
+version = "1.0.0"
+description = "The official bot of AndroidRepo @ Telegram"
+authors = ["Hitalo <contacyt@amanoteam.com>"]
+license = "GPLv3+"
+readme = "README.md"
+repository = "https://github.com/AmanoTeam/AndroidRepo"
+documentation = "https://github.com/AmanoTeam/AndroidRepo/blob/main/README.md"
+
+keywords = ["chat", "telegram", "telegram-bot", "pyrogram", "bot"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Framework :: AsyncIO",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+]
+
+exclude = ["androidrepo/config.py", "androidrepo/bot.session", "androidrepo/bot.session-journal", "androidrepo/database/*.sqlite", "downloads/"]
+
+[tool.poetry.urls]
+"Bug Tracker" = "https://github.com/AmanoTeam/AndroidRepo/issues"
+"Community" = "https://t.me/AndroidRepo_chat"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+pyrogram = {git = "https://github.com/AmanoTeam/Pyrogram"}
+aiodown = "1.0.5"
+aioschedule = "0.5.2"
+async-files = "0.4"
+beautifulsoup4 = "4.9.3"
+httpx = {version = "0.17.1", extras = ["http2"]}
+kantex = "0.2.0"
+lxml = "4.6.3"
+python-rapidjson = "1.0"
+meval = "2.5"
+rich = "10.0.1"
+requests = "2.25.1"
+TgCrypto = "1.2.2"
+tortoise-orm = "0.17.1"
+
+[tool.poetry.dev-dependencies]
+black = "^20.8b1"
+flake8 = "^3.9.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
