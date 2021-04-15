@@ -19,7 +19,7 @@ from bs4 import BeautifulSoup
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from pyrogram.helpers import ikb
+from pyromod.helpers import ikb
 
 
 @Client.on_message(filters.cmd("twrp"))

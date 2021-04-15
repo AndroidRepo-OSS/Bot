@@ -25,7 +25,6 @@ exclude = ["androidrepo/config.py", "androidrepo/bot.session", "androidrepo/bot.
 
 [tool.poetry.dependencies]
 python = "^3.9"
-pyrogram = {git = "https://github.com/AmanoTeam/Pyrogram"}
 aiodown = "1.0.5"
 aioschedule = "0.5.2"
 async-files = "0.4"
@@ -39,6 +38,8 @@ rich = "10.0.1"
 requests = "2.25.1"
 TgCrypto = "1.2.2"
 tortoise-orm = "0.17.1"
+pyromod = "1.5"
+Pyrogram = "1.2.9"
 
 [tool.poetry.dev-dependencies]
 black = "^20.8b1"
