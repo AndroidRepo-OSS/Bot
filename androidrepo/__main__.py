@@ -158,9 +158,10 @@ async def main():
     # Send startup message
     import pyrogram
     import pyromod
+    import androidrepo
     import platform
 
-    startup_message = f"""<b>AndroidRepo Started...</b>
+    startup_message = f"""<b>AndroidRepo</b> <code>v{androidrepo.__version__}</code> <b>Started...</b>
 - <b>Pyrogram:</b> <code>v{pyrogram.__version__}</code>
 - <b>Pyromod:</b> <code>v{pyromod.__version__}</code>
 - <b>Python:</b> <code>v{platform.python_version()}</code>

@@ -27,7 +27,6 @@ exclude = ["androidrepo/config.py", "androidrepo/bot.session", "androidrepo/bot.
 python = "^3.9"
 aiodown = "1.0.5"
 aioschedule = "0.5.2"
-async-files = "0.4"
 beautifulsoup4 = "4.9.3"
 httpx = {version = "0.17.1", extras = ["http2"]}
 kantex = "0.2.0"
