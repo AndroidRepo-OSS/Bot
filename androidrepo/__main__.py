@@ -73,7 +73,7 @@ print(Panel.fit(text, border_style="white", box=box.ASCII))
 from pyrogram import Client, filters, idle
 from pyrogram.session import Session
 from tortoise import run_async
-from .config import (
+from androidrepo.config import (
     API_HASH,
     API_ID,
     BOT_TOKEN,
@@ -82,7 +82,7 @@ from .config import (
     STAFF_ID,
     SUDO_USERS,
 )
-from .database import connect_database
+from androidrepo.database import connect_database
 
 bot = Client(
     "bot",

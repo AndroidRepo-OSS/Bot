@@ -20,7 +20,7 @@ import rapidjson as json
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from .utils.magisk import get_modules
+from androidrepo.handlers.utils.magisk import get_modules
 
 TYPES = ["beta", "stable", "canary"]
 

@@ -19,7 +19,7 @@ import shutil
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from ..config import CHANNEL_ID
+from androidrepo.config import CHANNEL_ID
 
 
 @Client.on_message(filters.sudo & filters.cmd("reup") & filters.reply)

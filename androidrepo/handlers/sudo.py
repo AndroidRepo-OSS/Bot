@@ -33,7 +33,7 @@ from pyromod.helpers import ikb
 from kantex.html import Bold, Code, KanTeXDocument, KeyValueItem, Section, SubSection
 
 import androidrepo
-from ..database import Modules
+from androidrepo.database import Modules
 
 
 @Client.on_message(filters.sudo & filters.cmd("ping"))
