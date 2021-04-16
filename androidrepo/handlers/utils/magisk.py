@@ -142,7 +142,7 @@ async def parse_module(to_parse: Dict) -> Dict:
                     "versionCode",
                 ]:
                     module[key] = value
-            except:
+            except BaseException:
                 continue
     return module
 

@@ -65,8 +65,8 @@ log = logging.getLogger("rich")
 
 
 # Beautiful init with rich
-text = ":rocket: [bold green]AndroidRepo Running...[/bold green] :rocket:"
-print(Panel.fit(text, border_style="white", box=box.ASCII))
+header = ":rocket: [bold green]AndroidRepo Running...[/bold green] :rocket:"
+print(Panel.fit(header, border_style="white", box=box.ASCII))
 
 
 # Bot
@@ -161,7 +161,7 @@ async def main():
     import androidrepo
     import platform
 
-    startup_message = f"""<b>AndroidRepo</b> <code>v{androidrepo.__version__}</code> <b>Started...</b>
+    startup_message = f"""<b>AndroidRepo</b> <code>v{androidrepo.__version__}</code> <b>started...</b>
 - <b>Pyrogram:</b> <code>v{pyrogram.__version__}</code>
 - <b>Pyromod:</b> <code>v{pyromod.__version__}</code>
 - <b>Python:</b> <code>v{platform.python_version()}</code>
