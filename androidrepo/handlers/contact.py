@@ -71,9 +71,7 @@ async def on_message_m(c: Client, m: Message):
 
 async def reply_forwarded(_, __, m) -> bool:
     reply = m.reply_to_message
-    if reply.forward_from:
-        return True
-    return False
+    return bool(reply.forward_from)
 
 
 filters.reply_forwarded = filters.create(reply_forwarded, "ReplyForwardedFilter")
