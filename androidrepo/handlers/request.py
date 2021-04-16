@@ -47,15 +47,14 @@ async def on_request_m(c: Client, m: Message):
             if last_request.attempts > 3:
                 if bool(last_request.ignore):
                     return
-                else:
-                    last_request.update_from_dict({"ignore": 1})
-                    await last_request.save()
-                    await c.send_log_message(
-                        f"{user.mention} was spamming requests and has been ignored."
-                    )
-                    return await m.reply_text(
-                        "You have spammed too many requests, so you will be ignored."
-                    )
+                last_request.update_from_dict({"ignore": 1})
+                await last_request.save()
+                await c.send_log_message(
+                    f"{user.mention} was spamming requests and has been ignored."
+                )
+                return await m.reply_text(
+                    "You have spammed too many requests, so you will be ignored."
+                )
             else:
                 if (now - last).seconds < (3 * 60):
                     last_request.update_from_dict(
@@ -105,8 +104,7 @@ async def on_myrequests_m(c: Client, m: Message):
             text += f"    {request.request_id}: <code>{request.request}</code>\n"
         text += "\nUse <code>/cancelrequest &lt;id&gt;</code> to cancel a request."
         return await m.reply_text(text)
-    else:
-        return await m.reply_text("You haven't sent any request yet.")
+    return await m.reply_text("You haven't sent any request yet.")
 
 
 @Client.on_message(filters.private & filters.cmd("cancelrequest (?P<id>\d+)"))
@@ -133,8 +131,7 @@ async def on_ignore_m(c: Client, m: Message):
         text_splited = m.text.split()
         if len(text_splited) > 1:
             user = text_splited[1]
-        else:
-            return await m.reply_text("Specify someone.")
+        return await m.reply_text("Specify someone.")
 
     if not isinstance(user, User):
         try:
@@ -171,8 +168,7 @@ async def on_unignore_m(c: Client, m: Message):
         text_splited = m.text.split()
         if len(text_splited) > 1:
             user = text_splited[1]
-        else:
-            return await m.reply_text("Specify someone.")
+        return await m.reply_text("Specify someone.")
 
     if not isinstance(user, User):
         try:
@@ -193,8 +189,7 @@ async def on_unignore_m(c: Client, m: Message):
         last_request.update_from_dict({"attempts": 0, "ignore": 0})
         await last_request.save()
         return await m.reply_text(f"{user.mention} can send requests again.")
-    else:
-        return await m.reply_text(f"{user.mention} is not ignored.")
+    return await m.reply_text(f"{user.mention} is not ignored.")
 
 
 @Client.on_message(filters.chat(STAFF_ID) & filters.cmd("done") & filters.reply)

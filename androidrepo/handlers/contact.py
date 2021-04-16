@@ -29,12 +29,11 @@ async def on_contact_m(c: Client, m: Message):
         return await m.reply_text(
             "You are already in contact mode, you can start talking."
         )
-    else:
-        await Contact.create(user=user.id)
-        await c.send_log_message(f"{user.mention} enter contact mode.")
-        return await m.reply_text(
-            "You have successfully entered contact mode, everything you send here will be forwarded to the staff group."
-        )
+    await Contact.create(user=user.id)
+    await c.send_log_message(f"{user.mention} enter contact mode.")
+    return await m.reply_text(
+        "You have successfully entered contact mode, everything you send here will be forwarded to the staff group."
+    )
 
 
 @Client.on_message(filters.private & filters.cmd("quit"))
@@ -47,8 +46,7 @@ async def on_quit_m(c: Client, m: Message):
         return await m.reply_text(
             "You have successfully exited contact mode, I will no longer forward your messages."
         )
-    else:
-        return await m.reply_text("You are not in contact mode.")
+    return await m.reply_text("You are not in contact mode.")
 
 
 async def is_contact(_, __, m) -> bool:
@@ -75,8 +73,7 @@ async def reply_forwarded(_, __, m) -> bool:
     reply = m.reply_to_message
     if reply.forward_from:
         return True
-    else:
-        return False
+    return False
 
 
 filters.reply_forwarded = filters.create(reply_forwarded, "ReplyForwardedFilter")

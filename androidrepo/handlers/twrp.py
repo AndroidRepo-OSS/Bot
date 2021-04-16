@@ -34,23 +34,22 @@ async def on_twrp_m(c: Client, m: Message):
         url = await http.get(f"https://eu.dl.twrp.me/{device}/")
     if url.status_code == 404:
         return await m.reply_text(f"Couldn't find official TWRP for <b>{device}</b>!\n")
-    else:
-        reply = "<b><u>TeamWin Recovery <i>official</i> release</u></b>\n"
-        reply += f"  <b>Device:</b> {device}\n"
-        page = BeautifulSoup(url.content, "lxml")
-        date = page.find("em").text.strip()
-        reply += f"  <b>Updated:</b> <code>{date}</code>\n"
-        trs = page.find("table").find_all("tr")
-        row = 2 if trs[0].find("a").text.endswith("tar") else 1
+    reply = "<b><u>TeamWin Recovery <i>official</i> release</u></b>\n"
+    reply += f"  <b>Device:</b> {device}\n"
+    page = BeautifulSoup(url.content, "lxml")
+    date = page.find("em").text.strip()
+    reply += f"  <b>Updated:</b> <code>{date}</code>\n"
+    trs = page.find("table").find_all("tr")
+    row = 2 if trs[0].find("a").text.endswith("tar") else 1
 
-        for i in range(row):
-            download = trs[i].find("a")
-            dl_link = f"https://dl.twrp.me{download['href']}"
-            dl_file = download.text
-            size = trs[i].find("span", {"class": "filesize"}).text
-        reply += f"  <b>File:</b> <code>{dl_file.lower()}</code>"
-        keyboard = [[(f"⬇️ Download - {size}", dl_link, "url")]]
+    for i in range(row):
+        download = trs[i].find("a")
+        dl_link = f"https://dl.twrp.me{download['href']}"
+        dl_file = download.text
+        size = trs[i].find("span", {"class": "filesize"}).text
+    reply += f"  <b>File:</b> <code>{dl_file.lower()}</code>"
+    keyboard = [[(f"⬇️ Download - {size}", dl_link, "url")]]
 
-        return await m.reply_text(
-            f"{reply}", reply_markup=ikb(keyboard), disable_web_page_preview=True
-        )
+    return await m.reply_text(
+        f"{reply}", reply_markup=ikb(keyboard), disable_web_page_preview=True
+    )

@@ -118,8 +118,7 @@ async def get_modules(m: Message):
             caption=f"<b>Modules count</b>: <code>{len(modules)}</code>\n<b>Date</b>: {date}\n#Dump #Modules #Magisk",
             document=document,
         )
-    else:
-        return await m.reply_text("No modules were found.")
+    return await m.reply_text("No modules were found.")
 
 
 async def parse_module(to_parse: Dict) -> Dict:
