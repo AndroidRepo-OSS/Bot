@@ -38,6 +38,6 @@ async def on_reup_m(c: Client, m: Message):
         await c.send_document(
             chat_id=CHANNEL_ID, document=download_path, caption=f"{desc}"
         )
-        shutil.rmtree("bot/downloads/")
+        shutil.rmtree("androidrepo/downloads/")
     except BaseException as e:
         return await m.reply_text(f"<b>Error!</b>\n<code>{e}</code>")
