@@ -40,7 +40,7 @@ pyromod = "1.5"
 Pyrogram = "1.2.9"
 
 [tool.poetry.dev-dependencies]
-black = "^21.4b2"
+black = "^21.5b0"
 flake8 = "^3.9.1"
 
 [build-system]
