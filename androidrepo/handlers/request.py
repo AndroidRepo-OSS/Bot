@@ -55,16 +55,15 @@ async def on_request_m(c: Client, m: Message):
                 return await m.reply_text(
                     "You have spammed too many requests, so you will be ignored."
                 )
-            else:
-                if (now - last).seconds < (3 * 60):
-                    last_request.update_from_dict(
-                        {"attempts": (last_request.attempts) + 1}
-                    )
-                    await last_request.save()
-                    await c.send_log_message(f"{user.mention} is spamming requests.")
-                    return await m.reply_text(
-                        "You cannot send multiple requests one after the other, wait 3 minutes."
-                    )
+            if (now - last).seconds < (3 * 60):
+                last_request.update_from_dict(
+                    {"attempts": (last_request.attempts) + 1}
+                )
+                await last_request.save()
+                await c.send_log_message(f"{user.mention} is spamming requests.")
+                return await m.reply_text(
+                    "You cannot send multiple requests one after the other, wait 3 minutes."
+                )
 
     if len(requests) > 15:
         return await m.reply_text("You have reached the requests limit.")
@@ -118,8 +117,7 @@ async def on_cancelrequest_m(c: Client, m: Message):
     if request:
         await request.delete()
         return await m.reply_text("Request canceled successfully!")
-    else:
-        return await m.reply_text("Request not found.")
+    return await m.reply_text("Request not found.")
 
 
 @Client.on_message((filters.chat(STAFF_ID) | filters.sudo) & filters.cmd("ignore"))
@@ -155,8 +153,7 @@ async def on_ignore_m(c: Client, m: Message):
         last_request.update_from_dict({"ignore": 1})
         await last_request.save()
         return await m.reply_text(f"{user.mention} can't send requests.")
-    else:
-        return await m.reply_text(f"{user.mention} is already ignored.")
+    return await m.reply_text(f"{user.mention} is already ignored.")
 
 
 @Client.on_message((filters.chat(STAFF_ID) | filters.sudo) & filters.cmd("unignore"))
