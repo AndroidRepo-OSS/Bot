@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from pyrogram import Client, filters
-from pyrogram.types import Message, CallbackQuery
+from pyrogram.types import CallbackQuery, Message
 from pyromod.helpers import ikb
 
 
@@ -116,7 +116,6 @@ async def help_commands(c: Client, m: CallbackQuery):
     text = (
         "<b>Here is what I can do for you:</b>\n\n"
         " - <code>/magisk (type)</code>: Returns the latest version of Magisk.\n"
-        " - <code>/twrp (codename)</code>: Return the latest official version of TWRP to the specified device.\n\n"
         "<b>Available Magisk types:</b> <code>stable</code>, <code>beta</code>, <code>canary</code>."
     )
     await m.message.edit_text(

@@ -14,26 +14,27 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import os
-import io
-import sys
-import kantex
 import asyncio
+import io
+import os
 import platform
+import sys
 import traceback
-from meval import meval
-from typing import Dict
 from datetime import datetime
+from typing import Dict
 
+import kantex
 import pyrogram
 import pyromod
+from kantex.html import Bold, Code, KanTeXDocument, KeyValueItem, Section, SubSection
+from meval import meval
 from pyrogram import Client, filters
 from pyrogram.types import CallbackQuery, Message
 from pyromod.helpers import ikb
-from kantex.html import Bold, Code, KanTeXDocument, KeyValueItem, Section, SubSection
 
 import androidrepo
 from androidrepo.database import Modules
+from androidrepo.utils import modules
 
 
 @Client.on_message(filters.sudo & filters.cmd("ping"))
@@ -237,3 +238,13 @@ async def on_info_m(c: Client, m: Message):
         )
     )
     await m.reply_text(doc, disable_web_page_preview=True)
+
+
+@Client.on_message(filters.sudo & filters.cmd("reload"))
+async def modules_reload(c: Client, m: Message):
+    sent = await m.reply_text("<b>Reloading modules...</b>")
+    first = datetime.now()
+    modules.reload(c)
+    second = datetime.now()
+    time = (second - first).microseconds / 1000
+    await sent.edit_text(f"<b>Modules reloaded in</b> <code>{time}ms</code>!")

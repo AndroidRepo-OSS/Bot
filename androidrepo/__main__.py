@@ -14,37 +14,35 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import os
-
-
-# Clean terminal
-os.system("clear")
-
-
-# Update requirements
-import sys
-
-DGRAY = 'echo -e "\033[1;30m"'
-RESET = 'echo -e "\033[0m"'
-
-if "--no-update" not in sys.argv:
-    print("\033[0;32mUpdating requirements...\033[0m")
-    os.system(f"{DGRAY}; {sys.executable} -m pip install . -U; {RESET}")
-    os.system("clear")
-
-print("\033[0m")
-
-
-# Clean terminal
-os.system("clear")
-
-
-# Start logger
+import asyncio
 import logging
+import platform
+import re
+from typing import BinaryIO, List, Union
+
+import aioschedule as schedule
+import pyrogram
+import pyromod
+from pyrogram import Client, filters, idle
+from pyrogram.session import Session
 from rich import box, print
 from rich.logging import RichHandler
 from rich.panel import Panel
+from tortoise import run_async
 
+import androidrepo
+from androidrepo.config import (
+    API_HASH,
+    API_ID,
+    BOT_TOKEN,
+    CHANNEL_ID,
+    PREFIXES,
+    STAFF_ID,
+    SUDO_USERS,
+)
+from androidrepo.database import connect_database
+from androidrepo.handlers.utils.magisk import check_modules
+from androidrepo.utils import filters, modules
 
 # Logging colorized by rich
 FORMAT = "%(message)s"
@@ -68,29 +66,12 @@ log = logging.getLogger("rich")
 header = ":rocket: [bold green]AndroidRepo Running...[/bold green] :rocket:"
 print(Panel.fit(header, border_style="white", box=box.ASCII))
 
-
-# Bot
-from pyrogram import Client, filters, idle
-from pyrogram.session import Session
-from tortoise import run_async
-from androidrepo.config import (
-    API_HASH,
-    API_ID,
-    BOT_TOKEN,
-    CHANNEL_ID,
-    PREFIXES,
-    STAFF_ID,
-    SUDO_USERS,
-)
-from androidrepo.database import connect_database
-
 bot = Client(
     "bot",
     API_ID,
     API_HASH,
     bot_token=BOT_TOKEN,
     parse_mode="html",
-    plugins=dict(root="androidrepo/handlers"),
 )
 
 
@@ -98,32 +79,9 @@ bot = Client(
 Session.notice_displayed = True
 
 
-# Filters
-async def sudo_filter(_, __, m):
-    user = m.from_user
-    if not user:
-        return
-    return user.id in SUDO_USERS or (user.username and user.username in SUDO_USERS)
-
-
-import re
-
-
-def cmd_filter(command: str, *args, **kwargs):
-    prefix = f"[{re.escape(''.join(PREFIXES))}]"
-    return filters.regex("^" + prefix + command, *args, **kwargs)
-
-
-filters.sudo = filters.create(sudo_filter, "SudoFilter")
-filters.cmd = cmd_filter
-
-
 # Monkeypatch
 async def send_log_message(text: str, *args, **kwargs):
     return await bot.send_message(chat_id=STAFF_ID, text=text, *args, **kwargs)
-
-
-from typing import BinaryIO, List, Union
 
 
 async def delete_log_messages(message_ids: Union[int, List[int]], *args, **kwargs):
@@ -148,18 +106,16 @@ async def main():
     bot.delete_log_messages = delete_log_messages
     bot.send_channel_document = send_channel_document
 
-    # Connect database
+    # Start bot and connect to db
     await connect_database()
-
-    # Start bot
     await bot.start()
+
+    # Monkeypatch
     bot.me = await bot.get_me()
 
-    # Send startup message
-    import pyrogram
-    import pyromod
-    import androidrepo
-    import platform
+    # Built-in modules and filters system
+    filters.load(bot)
+    modules.load(bot)
 
     startup_message = f"""<b>AndroidRepo</b> <code>v{androidrepo.__version__}</code> <b>started...</b>
 - <b>Pyrogram:</b> <code>v{pyrogram.__version__}</code>
@@ -174,12 +130,6 @@ async def main():
             await bot.send_log_message(
                 text=f"Error sending the startup message to <code>{sudo_user}</code>."
             )
-
-    # Check magisk modules
-    from .handlers.utils.magisk import check_modules
-
-    import aioschedule as schedule
-    import asyncio
 
     await check_modules(bot)
     schedule.every(1).hours.do(check_modules, c=bot)

@@ -14,22 +14,22 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import io
-import os
-import httpx
-import shutil
-import aiodown
 import asyncio
 import datetime
-import rapidjson as json
+import io
+import os
+import shutil
 from typing import Dict
 from zipfile import ZipFile
 
+import aiodown
+import httpx
+import rapidjson as json
 from pyrogram import Client
 from pyrogram.types import Message
 
-from androidrepo.database import Modules
 from androidrepo import config
+from androidrepo.database import Modules
 
 RAW_URL = "https://github.com/Magisk-Modules-Repo/submission/raw/modules/modules.json"
 

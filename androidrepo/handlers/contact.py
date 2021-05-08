@@ -17,8 +17,8 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from androidrepo.database import Contact
 from androidrepo.config import PREFIXES, STAFF_ID
+from androidrepo.database import Contact
 
 
 @Client.on_message(filters.private & filters.cmd("contact"))
