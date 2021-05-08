@@ -1,3 +1,4 @@
+"""The bot database."""
 # This file is part of AndroidRepo (Telegram Bot)
 # Copyright (C) 2021 AmanoTeam
 

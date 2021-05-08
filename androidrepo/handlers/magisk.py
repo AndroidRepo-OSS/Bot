@@ -27,29 +27,28 @@ TYPES = ["beta", "stable", "canary"]
 @Client.on_message(filters.cmd("magisk"))
 async def on_magisk_m(c: Client, m: Message):
     command = m.text.split()[0]
-    type = m.text[len(command) :]
+    m_type = m.text[len(command) :]
 
     sm = await m.reply("Checking...")
 
-    if len(type) < 1:
-        type = "stable"
+    if len(m_type) < 1:
+        m_type = "stable"
     else:
-        type = type[1:]
+        m_type = m_type[1:]
 
-    type = type.lower()
+    m_type = m_type.lower()
 
-    if type not in TYPES:
-        return await sm.edit(f"The version type <b>{type}</b> was not found.")
+    if m_type not in TYPES:
+        return await sm.edit(f"The version type <b>{m_type}</b> was not found.")
 
     RAW_URL = "https://github.com/topjohnwu/magisk-files/raw/master"
     async with httpx.AsyncClient() as client:
-        response = await client.get(f"{RAW_URL}/{type}.json")
+        response = await client.get(f"{RAW_URL}/{m_type}.json")
         data = json.loads(response.read())
 
     magisk = data["magisk"]
-    stub = data["stub"]
 
-    text = f"<b>Type</b>: <code>{type}</code>"
+    text = f"<b>Type</b>: <code>{m_type}</code>"
     text += f"<b>\n\nMagisk</b>: <a href='{magisk['link']}'>{magisk['versionCode']}</a> ({'v' if magisk['version'][0].isdecimal() else ''}{magisk['version']})"
     text += f"<b>\nChangelog</b>: {await get_changelog(magisk['note'])}"
 

@@ -50,8 +50,6 @@ async def ping(c: Client, m: Message):
 async def on_restart_m(c: Client, m: Message):
     await m.reply_text("Restarting...")
     args = [sys.executable, "-m", "androidrepo"]
-    if "--no-update" in sys.argv:
-        args.append("--no-update")
     os.execv(sys.executable, args)
 
 
@@ -219,7 +217,7 @@ async def _aexec_(c: Client, m: Message):
 
 @Client.on_message(filters.sudo & filters.cmd("(info|py)$"))
 async def on_info_m(c: Client, m: Message):
-    modules = await Modules.all()
+    magisk_modules = await Modules.all()
     source_url = "git.io/JtVsY"
     doc = KanTeXDocument(
         Section(
@@ -234,7 +232,9 @@ async def on_info_m(c: Client, m: Message):
                 KeyValueItem(Bold("Source"), source_url),
                 KeyValueItem(Bold("System"), c.system_version),
             ),
-            SubSection("Magisk", KeyValueItem(Bold("Modules"), Code(len(modules)))),
+            SubSection(
+                "Magisk", KeyValueItem(Bold("Modules"), Code(len(magisk_modules)))
+            ),
         )
     )
     await m.reply_text(doc, disable_web_page_preview=True)

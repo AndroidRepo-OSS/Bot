@@ -17,15 +17,15 @@
 import asyncio
 import logging
 import platform
-import re
 from typing import BinaryIO, List, Union
 
 import aioschedule as schedule
 import pyrogram
 import pyromod
-from pyrogram import Client, filters, idle
+from pyrogram import Client, idle
 from pyrogram.session import Session
-from rich import box, print
+from rich import box
+from rich import print as rprint
 from rich.logging import RichHandler
 from rich.panel import Panel
 from tortoise import run_async
@@ -36,7 +36,6 @@ from androidrepo.config import (
     API_ID,
     BOT_TOKEN,
     CHANNEL_ID,
-    PREFIXES,
     STAFF_ID,
     SUDO_USERS,
 )
@@ -64,7 +63,7 @@ log = logging.getLogger("rich")
 
 # Beautiful init with rich
 header = ":rocket: [bold green]AndroidRepo Running...[/bold green] :rocket:"
-print(Panel.fit(header, border_style="white", box=box.ASCII))
+rprint(Panel.fit(header, border_style="white", box=box.ASCII))
 
 bot = Client(
     "bot",

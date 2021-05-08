@@ -64,7 +64,7 @@ async def help_cmd(c: Client, m: Message):
 
 
 @Client.on_callback_query(filters.regex("^start_back$"))
-async def start_back(c: Client, m: CallbackQuery):
+async def start_cb(c: Client, m: CallbackQuery):
     text = "Hi, I'm the <b>official Android Repository Bot</b>."
     keyboard = ikb(
         [
@@ -79,7 +79,7 @@ async def start_back(c: Client, m: CallbackQuery):
 
 
 @Client.on_callback_query(filters.regex("^help$"))
-async def help(c: Client, m: CallbackQuery):
+async def help_cb(c: Client, m: CallbackQuery):
     keyboard = ikb(
         [
             [("🔧 Utilities", "help_commands"), ("💭 Requests", "help_requests")],

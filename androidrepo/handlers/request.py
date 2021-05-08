@@ -56,9 +56,7 @@ async def on_request_m(c: Client, m: Message):
                     "You have spammed too many requests, so you will be ignored."
                 )
             if (now - last).seconds < (3 * 60):
-                last_request.update_from_dict(
-                    {"attempts": (last_request.attempts) + 1}
-                )
+                last_request.update_from_dict({"attempts": (last_request.attempts) + 1})
                 await last_request.save()
                 await c.send_log_message(f"{user.mention} is spamming requests.")
                 return await m.reply_text(
@@ -106,7 +104,7 @@ async def on_myrequests_m(c: Client, m: Message):
     return await m.reply_text("You haven't sent any request yet.")
 
 
-@Client.on_message(filters.private & filters.cmd("cancelrequest (?P<id>\d+)"))
+@Client.on_message(filters.private & filters.cmd(r"cancelrequest (?P<id>\d+)"))
 async def on_cancelrequest_m(c: Client, m: Message):
     id = m.matches[0]["id"]
     user = m.from_user
