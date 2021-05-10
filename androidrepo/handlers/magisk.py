@@ -16,16 +16,18 @@
 
 import httpx
 import rapidjson as json
-from pyrogram import Client, filters
+from pyrogram import filters
 from pyrogram.types import Message
 
 from androidrepo.handlers.utils.magisk import get_modules
 
+from ..androidrepo import AndroidRepo
+
 TYPES = ["beta", "stable", "canary"]
 
 
-@Client.on_message(filters.cmd("magisk"))
-async def on_magisk_m(c: Client, m: Message):
+@AndroidRepo.on_message(filters.cmd("magisk"))
+async def on_magisk_m(c: AndroidRepo, m: Message):
     command = m.text.split()[0]
     m_type = m.text[len(command) :]
 
@@ -42,7 +44,7 @@ async def on_magisk_m(c: Client, m: Message):
         return await sm.edit(f"The version type <b>{m_type}</b> was not found.")
 
     RAW_URL = "https://github.com/topjohnwu/magisk-files/raw/master"
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(http2=True) as client:
         response = await client.get(f"{RAW_URL}/{m_type}.json")
         data = json.loads(response.read())
 
@@ -57,7 +59,7 @@ async def on_magisk_m(c: Client, m: Message):
 
 async def get_changelog(url: str) -> str:
     changelog = ""
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(http2=True) as client:
         response = await client.get(url)
         data = response.read()
         lines = data.decode().split("\n")
@@ -75,6 +77,6 @@ async def get_changelog(url: str) -> str:
     return changelog
 
 
-@Client.on_message(filters.sudo & filters.cmd("modules"))
-async def on_modules_m(c: Client, m: Message):
+@AndroidRepo.on_message(filters.sudo & filters.cmd("modules"))
+async def on_modules_m(c: AndroidRepo, m: Message):
     return await get_modules(m)

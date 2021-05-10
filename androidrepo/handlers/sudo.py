@@ -28,17 +28,18 @@ import pyrogram
 import pyromod
 from kantex.html import Bold, Code, KanTeXDocument, KeyValueItem, Section, SubSection
 from meval import meval
-from pyrogram import Client, filters
+from pyrogram import filters
 from pyrogram.types import CallbackQuery, Message
-from pyromod.helpers import ikb
 
 import androidrepo
 from androidrepo.database import Modules
 from androidrepo.utils import modules
 
+from ..androidrepo import AndroidRepo
 
-@Client.on_message(filters.sudo & filters.cmd("ping"))
-async def ping(c: Client, m: Message):
+
+@AndroidRepo.on_message(filters.sudo & filters.cmd("ping"))
+async def ping(c: AndroidRepo, m: Message):
     first = datetime.now()
     sent = await m.reply_text("<b>Pong!</b>")
     second = datetime.now()
@@ -46,15 +47,15 @@ async def ping(c: Client, m: Message):
     await sent.edit_text(f"<b>Pong!</b> <code>{time}</code>ms")
 
 
-@Client.on_message(filters.sudo & filters.cmd("restart"))
-async def on_restart_m(c: Client, m: Message):
+@AndroidRepo.on_message(filters.sudo & filters.cmd("reboot"))
+async def on_restart_m(c: AndroidRepo, m: Message):
     await m.reply_text("Restarting...")
     args = [sys.executable, "-m", "androidrepo"]
     os.execv(sys.executable, args)
 
 
-@Client.on_message(filters.sudo & filters.cmd("upgrade"))
-async def on_upgrade_m(c: Client, m: Message):
+@AndroidRepo.on_message(filters.sudo & filters.cmd("upgrade"))
+async def on_upgrade_m(c: AndroidRepo, m: Message):
     sm = await m.reply_text("Checking...")
     await (await asyncio.create_subprocess_shell("git fetch origin")).communicate()
     proc = await asyncio.create_subprocess_shell(
@@ -71,7 +72,7 @@ async def on_upgrade_m(c: Client, m: Message):
                 changelog += f"  - [<code>{hash[:7]}</code>] {commit['title']}\n"
             changelog += f"\n<b>New commits count</b>: <code>{len(commits)}</code>."
             keyboard = [[("🆕 Upgrade", "upgrade")]]
-            await sm.edit_text(changelog, reply_markup=ikb(keyboard))
+            await sm.edit_text(changelog, reply_markup=c.ikb(keyboard))
         else:
             return await sm.edit_text("There is nothing to update.")
     else:
@@ -105,8 +106,8 @@ def parse_commits(log: str) -> Dict:
     return commits
 
 
-@Client.on_callback_query(filters.sudo & filters.regex("^upgrade"))
-async def on_upgrade_cq(c: Client, cq: CallbackQuery):
+@AndroidRepo.on_callback_query(filters.sudo & filters.regex("^upgrade"))
+async def on_upgrade_cq(c: AndroidRepo, cq: CallbackQuery):
     await cq.message.edit_text("Upgrading...")
     proc = await asyncio.create_subprocess_shell(
         "git pull --no-edit",
@@ -128,14 +129,14 @@ async def on_upgrade_cq(c: Client, cq: CallbackQuery):
         )
 
 
-@Client.on_message(filters.sudo & filters.cmd("shutdown"))
-async def on_shutdown_m(c: Client, m: Message):
+@AndroidRepo.on_message(filters.sudo & filters.cmd("shutdown"))
+async def on_shutdown_m(c: AndroidRepo, m: Message):
     await m.reply_text("Goodbye...")
     sys.exit()
 
 
-@Client.on_message(filters.sudo & filters.cmd("(sh(eel)?|term(inal)?) "))
-async def on_terminal_m(c: Client, m: Message):
+@AndroidRepo.on_message(filters.sudo & filters.cmd("(sh(eel)?|term(inal)?) "))
+async def on_terminal_m(c: AndroidRepo, m: Message):
     command = m.text.split()[0]
     code = m.text[len(command) + 1 :]
     sm = await m.reply_text("Running...")
@@ -162,8 +163,8 @@ async def on_terminal_m(c: Client, m: Message):
     await sm.edit_text(output_message)
 
 
-@Client.on_message(filters.sudo & filters.cmd("ev(al)? "))
-async def on_eval_m(c: Client, m: Message):
+@AndroidRepo.on_message(filters.sudo & filters.cmd("ev(al)? "))
+async def on_eval_m(c: AndroidRepo, m: Message):
     command = m.text.split()[0]
     eval_code = m.text[len(command) + 1 :]
     sm = await m.reply_text("Running...")
@@ -192,13 +193,13 @@ async def on_eval_m(c: Client, m: Message):
     await sm.edit_text(output_message)
 
 
-@Client.on_message(filters.sudo & filters.cmd("ex(ec(ute)?)? "))
-async def on_execute_m(c: Client, m: Message):
+@AndroidRepo.on_message(filters.sudo & filters.cmd("ex(ec(ute)?)? "))
+async def on_execute_m(c: AndroidRepo, m: Message):
     command = m.text.split()[0]
     code = m.text[len(command) + 1 :]
     sm = await m.reply_text("Running...")
     function = """
-async def _aexec_(c: Client, m: Message):
+async def _aexec_(c: AndroidRepo, m: Message):
     """
     for line in code.split("\n"):
         function += f"\n    {line}"
@@ -215,8 +216,8 @@ async def _aexec_(c: Client, m: Message):
     await sm.edit_text(output_message)
 
 
-@Client.on_message(filters.sudo & filters.cmd("(info|py)$"))
-async def on_info_m(c: Client, m: Message):
+@AndroidRepo.on_message(filters.sudo & filters.cmd("(info|py)$"))
+async def on_info_m(c: AndroidRepo, m: Message):
     magisk_modules = await Modules.all()
     source_url = "git.io/JtVsY"
     doc = KanTeXDocument(
@@ -240,8 +241,8 @@ async def on_info_m(c: Client, m: Message):
     await m.reply_text(doc, disable_web_page_preview=True)
 
 
-@Client.on_message(filters.sudo & filters.cmd("reload"))
-async def modules_reload(c: Client, m: Message):
+@AndroidRepo.on_message(filters.sudo & filters.cmd("reload"))
+async def modules_reload(c: AndroidRepo, m: Message):
     sent = await m.reply_text("<b>Reloading modules...</b>")
     first = datetime.now()
     modules.reload(c)

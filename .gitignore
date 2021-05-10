@@ -1,3 +1,7 @@
+# Distribution / packaging
+dist/
+*.egg-info/
+
 # Personal files
 downloads/
 androidrepo/config.py
@@ -10,3 +14,18 @@ androidrepo/handlers/utils/__pycache__/
 androidrepo/handlers/__pycache__/
 androidrepo/database/__pycache__/
 androidrepo/utils/__pycache__/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# PyCharm project
+.idea/
+
+# Visual Studio Code workspace settings
+.vscode

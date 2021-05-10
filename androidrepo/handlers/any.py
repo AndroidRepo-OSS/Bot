@@ -14,10 +14,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from pyrogram import Client, filters
+from pyrogram import filters
 from pyrogram.types import Message
 
+from ..androidrepo import AndroidRepo
 
-@Client.on_message(filters.edited)
-async def on_reject_m(c: Client, m: Message):
+
+@AndroidRepo.on_message(filters.edited)
+async def on_reject_m(c: AndroidRepo, m: Message):
     m.stop_propagation()

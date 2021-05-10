@@ -14,15 +14,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from pyrogram import Client, filters
+from pyrogram import filters
 from pyrogram.types import Message
 
 from androidrepo.config import PREFIXES, STAFF_ID
 from androidrepo.database import Contact
 
+from ..androidrepo import AndroidRepo
 
-@Client.on_message(filters.private & filters.cmd("contact"))
-async def on_contact_m(c: Client, m: Message):
+
+@AndroidRepo.on_message(filters.private & filters.cmd("contact"))
+async def on_contact_m(c: AndroidRepo, m: Message):
     user = m.from_user
     contact = await Contact.filter(user=user.id)
     if len(contact) > 0:
@@ -36,8 +38,8 @@ async def on_contact_m(c: Client, m: Message):
     )
 
 
-@Client.on_message(filters.private & filters.cmd("quit"))
-async def on_quit_m(c: Client, m: Message):
+@AndroidRepo.on_message(filters.private & filters.cmd("quit"))
+async def on_quit_m(c: AndroidRepo, m: Message):
     user = m.from_user
     contact = await Contact.filter(user=user.id)
     if len(contact) > 0:
@@ -59,10 +61,10 @@ async def is_contact(_, __, m) -> bool:
 filters.is_contact = filters.create(is_contact, "IsContactFilter")
 
 
-@Client.on_message(filters.private & filters.is_contact)
-async def on_message_m(c: Client, m: Message):
+@AndroidRepo.on_message(filters.private & filters.is_contact)
+async def on_message_m(c: AndroidRepo, m: Message):
     for prefix in PREFIXES:
-        if m.text.startswith(prefix):
+        if m.text and m.text.startswith(prefix):
             m.continue_propagation()
     await c.forward_messages(
         chat_id=STAFF_ID, from_chat_id=m.chat.id, message_ids=m.message_id
@@ -77,8 +79,10 @@ async def reply_forwarded(_, __, m) -> bool:
 filters.reply_forwarded = filters.create(reply_forwarded, "ReplyForwardedFilter")
 
 
-@Client.on_message(filters.chat(STAFF_ID) & filters.reply & filters.reply_forwarded)
-async def on_answer_m(c: Client, m: Message):
+@AndroidRepo.on_message(
+    filters.chat(STAFF_ID) & filters.reply & filters.reply_forwarded
+)
+async def on_answer_m(c: AndroidRepo, m: Message):
     reply = m.reply_to_message
     user = reply.forward_from
     contact = await Contact.filter(user=user.id)

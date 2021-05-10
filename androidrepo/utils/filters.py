@@ -15,15 +15,15 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import re
-from typing import Callable
+from typing import Callable, Union
 
 from pyrogram import Client, filters
-from pyrogram.types import Message
+from pyrogram.types import CallbackQuery, Message
 
-from androidrepo.config import PREFIXES, SUDO_USERS
+from androidrepo.config import PREFIXES
 
 
-def load(bot):
+def load(client):
     def command_filter(
         command: str,
         flags: int = 0,
@@ -34,14 +34,14 @@ def load(bot):
         if not pattern.endswith(("$", " ")):
             pattern += r"(?:\s|$)"
 
-        async def func(flt, bot: Client, message: Message):
+        async def func(flt, client: Client, message: Message):
             value = message.text or message.caption
 
             if bool(value):
                 command = value.split()[0]
                 if "@" in command:
                     b = command.split("@")[1]
-                    if b.lower() == bot.me.username.lower():
+                    if b.lower() == client.me.username.lower():
                         value = (
                             command.split("@")[0]
                             + (" " if len(value.split()) > 1 else "")
@@ -60,11 +60,11 @@ def load(bot):
             p=re.compile(pattern, flags, *args, **kwargs),
         )
 
-    async def sudo_filter(_, __, m):
-        user = m.from_user
+    async def sudo_filter(_, client, union: Union[CallbackQuery, Message]) -> Callable:
+        user = union.from_user
         if not user:
-            return
-        return user.id in SUDO_USERS or (user.username and user.username in SUDO_USERS)
+            return False
+        return client.is_sudoer(user)
 
     filters.cmd = command_filter
     filters.sudo = filters.create(sudo_filter, "SudoFilter")

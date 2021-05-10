@@ -18,17 +18,19 @@ import datetime
 import time
 from typing import List
 
-from pyrogram import Client, filters
+from pyrogram import filters
 from pyrogram.types import Message, User
 
 from androidrepo.config import STAFF_ID, SUDO_USERS
 from androidrepo.database import Requests
 
+from ..androidrepo import AndroidRepo
 
-@Client.on_message(
+
+@AndroidRepo.on_message(
     filters.private & (filters.cmd("request ") | filters.regex("^#request "))
 )
-async def on_request_m(c: Client, m: Message):
+async def on_request_m(c: AndroidRepo, m: Message):
     user = m.from_user
     requests = await Requests.filter(user=user.id)
     last_request = None
@@ -89,8 +91,8 @@ async def on_request_m(c: Client, m: Message):
         await m.reply_text("There was a problem submitting your request.")
 
 
-@Client.on_message(filters.private & filters.cmd("myrequests"))
-async def on_myrequests_m(c: Client, m: Message):
+@AndroidRepo.on_message(filters.private & filters.cmd("myrequests"))
+async def on_myrequests_m(c: AndroidRepo, m: Message):
     user = m.from_user
     requests = await Requests.filter(user=user.id)
 
@@ -104,8 +106,8 @@ async def on_myrequests_m(c: Client, m: Message):
     return await m.reply_text("You haven't sent any request yet.")
 
 
-@Client.on_message(filters.private & filters.cmd(r"cancelrequest (?P<id>\d+)"))
-async def on_cancelrequest_m(c: Client, m: Message):
+@AndroidRepo.on_message(filters.private & filters.cmd(r"cancelrequest (?P<id>\d+)"))
+async def on_cancelrequest_m(c: AndroidRepo, m: Message):
     id = m.matches[0]["id"]
     user = m.from_user
     request = await Requests.filter(user=user.id, request_id=id).first()
@@ -118,8 +120,8 @@ async def on_cancelrequest_m(c: Client, m: Message):
     return await m.reply_text("Request not found.")
 
 
-@Client.on_message((filters.chat(STAFF_ID) | filters.sudo) & filters.cmd("ignore"))
-async def on_ignore_m(c: Client, m: Message):
+@AndroidRepo.on_message((filters.chat(STAFF_ID) | filters.sudo) & filters.cmd("ignore"))
+async def on_ignore_m(c: AndroidRepo, m: Message):
     reply = m.reply_to_message
     if reply:
         user = reply.from_user
@@ -154,8 +156,10 @@ async def on_ignore_m(c: Client, m: Message):
     return await m.reply_text(f"{user.mention} is already ignored.")
 
 
-@Client.on_message((filters.chat(STAFF_ID) | filters.sudo) & filters.cmd("unignore"))
-async def on_unignore_m(c: Client, m: Message):
+@AndroidRepo.on_message(
+    (filters.chat(STAFF_ID) | filters.sudo) & filters.cmd("unignore")
+)
+async def on_unignore_m(c: AndroidRepo, m: Message):
     reply = m.reply_to_message
     if reply:
         user = reply.from_user
@@ -187,8 +191,8 @@ async def on_unignore_m(c: Client, m: Message):
     return await m.reply_text(f"{user.mention} is not ignored.")
 
 
-@Client.on_message(filters.chat(STAFF_ID) & filters.cmd("done") & filters.reply)
-async def on_done_m(c: Client, m: Message):
+@AndroidRepo.on_message(filters.chat(STAFF_ID) & filters.cmd("done") & filters.reply)
+async def on_done_m(c: AndroidRepo, m: Message):
     query = m.text.split()
     command = query[0]
     reply = m.reply_to_message
@@ -211,10 +215,10 @@ async def on_done_m(c: Client, m: Message):
         await m.reply_text("The request was successfully done.")
 
 
-@Client.on_message(
+@AndroidRepo.on_message(
     filters.chat(STAFF_ID) & filters.reply & filters.regex("^(?P<answer>.+)")
 )
-async def on_reply_m(c: Client, m: Message):
+async def on_reply_m(c: AndroidRepo, m: Message):
     answer = m.matches[0]["answer"]
     reply = m.reply_to_message
     request = await Requests.filter(message_id=reply.message_id)
@@ -234,8 +238,8 @@ async def on_reply_m(c: Client, m: Message):
         m.continue_propagation()
 
 
-@Client.on_deleted_messages(filters.chat(STAFF_ID))
-async def on_deleted_m(c: Client, messages: List[Message]):
+@AndroidRepo.on_deleted_messages(filters.chat(STAFF_ID))
+async def on_deleted_m(c: AndroidRepo, messages: List[Message]):
     for m in messages:
         request = await Requests.filter(message_id=m.message_id)
         if len(request) > 0:

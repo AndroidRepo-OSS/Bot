@@ -14,13 +14,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from pyrogram import Client, filters
+from pyrogram import filters
 from pyrogram.types import CallbackQuery, Message
-from pyromod.helpers import ikb
+
+from ..androidrepo import AndroidRepo
 
 
-@Client.on_message(filters.cmd("start"))
-async def start(c: Client, m: Message):
+@AndroidRepo.on_message(filters.cmd("start"))
+async def start(c: AndroidRepo, m: Message):
     keyboard = []
     text = "Hi, I'm the <b>official Android Repository Bot</b>."
     if m.chat.type == "private":
@@ -43,13 +44,13 @@ async def start(c: Client, m: Message):
         )
     await m.reply_text(
         text,
-        reply_markup=ikb(keyboard),
+        reply_markup=c.ikb(keyboard),
     )
 
 
-@Client.on_message(filters.cmd("help") & filters.private)
-async def help_cmd(c: Client, m: Message):
-    keyboard = ikb(
+@AndroidRepo.on_message(filters.cmd("help") & filters.private)
+async def help_cmd(c: AndroidRepo, m: Message):
+    keyboard = c.ikb(
         [
             [("🔧 Utilities", "help_commands"), ("💭 Requests", "help_requests")],
             [("<-", "start_back")],
@@ -63,10 +64,10 @@ async def help_cmd(c: Client, m: Message):
     )
 
 
-@Client.on_callback_query(filters.regex("^start_back$"))
-async def start_cb(c: Client, m: CallbackQuery):
+@AndroidRepo.on_callback_query(filters.regex("^start_back$"))
+async def start_cb(c: AndroidRepo, m: CallbackQuery):
     text = "Hi, I'm the <b>official Android Repository Bot</b>."
-    keyboard = ikb(
+    keyboard = c.ikb(
         [
             [
                 ("💬 Group", "https://t.me/AndroidRepo_chat", "url"),
@@ -78,9 +79,9 @@ async def start_cb(c: Client, m: CallbackQuery):
     await m.message.edit_text(text, reply_markup=keyboard)
 
 
-@Client.on_callback_query(filters.regex("^help$"))
-async def help_cb(c: Client, m: CallbackQuery):
-    keyboard = ikb(
+@AndroidRepo.on_callback_query(filters.regex("^help$"))
+async def help_cb(c: AndroidRepo, m: CallbackQuery):
+    keyboard = c.ikb(
         [
             [("🔧 Utilities", "help_commands"), ("💭 Requests", "help_requests")],
             [("<-", "start_back")],
@@ -94,9 +95,9 @@ async def help_cb(c: Client, m: CallbackQuery):
     )
 
 
-@Client.on_callback_query(filters.regex("^help_requests$"))
-async def help_requests(c: Client, m: CallbackQuery):
-    keyboard = ikb([[("<-", "help")]])
+@AndroidRepo.on_callback_query(filters.regex("^help_requests$"))
+async def help_requests(c: AndroidRepo, m: CallbackQuery):
+    keyboard = c.ikb([[("<-", "help")]])
     text = (
         "<b>Here is what I can do for you:</b>\n\n"
         "You can also place requests for the @AndroidRepo staff using the #request in the bot's PM.\n\n"
@@ -110,9 +111,9 @@ async def help_requests(c: Client, m: CallbackQuery):
     )
 
 
-@Client.on_callback_query(filters.regex("^help_commands$"))
-async def help_commands(c: Client, m: CallbackQuery):
-    keyboard = ikb([[("<-", "help")]])
+@AndroidRepo.on_callback_query(filters.regex("^help_commands$"))
+async def help_commands(c: AndroidRepo, m: CallbackQuery):
+    keyboard = c.ikb([[("<-", "help")]])
     text = (
         "<b>Here is what I can do for you:</b>\n\n"
         " - <code>/magisk (type)</code>: Returns the latest version of Magisk.\n"
