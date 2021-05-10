@@ -21,12 +21,20 @@ from types import ModuleType
 from typing import List
 
 modules: List[ModuleType] = []
-log = logging.getLogger()
+log = logging.getLogger(__name__)
 
 
 def load(bot):
-    files = glob.glob("androidrepo/handlers/*.py")
-    files = sorted(files, key=lambda file: file.split("/")[2])
+    files = glob.glob("androidrepo/handlers/**/*.py", recursive=True)
+    main_dir = sorted(
+        [*filter(lambda file: len(file.split("/")) == 3, files)],
+        key=lambda file: file.split("/")[2],
+    )
+    sub_dirs = sorted(
+        [*filter(lambda file: len(file.split("/")) >= 4, files)],
+        key=lambda file: file.split("/")[3],
+    )
+    files = main_dir + sub_dirs
 
     for file_name in files:
         try:
@@ -48,8 +56,9 @@ def load(bot):
                 bot.add_handler(*handler)
 
     log.info(
-        "%s imported successfully!",
-        f"{len(modules)} module{'s' if len(modules) != 1 else ''}",
+        "%s module%s imported successfully!",
+        len(modules),
+        "s" if len(modules) != 1 else "",
     )
 
 
@@ -77,6 +86,7 @@ def reload(bot):
                 bot.add_handler(*handler)
 
     log.info(
-        "%s reloaded successfully!",
-        f"{len(modules)} module{'s' if len(modules) != 1 else ''}",
+        "%s module%s reloaded successfully!",
+        len(modules),
+        "s" if len(modules) != 1 else "",
     )
