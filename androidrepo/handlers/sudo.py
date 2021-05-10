@@ -108,7 +108,8 @@ def parse_commits(log: str) -> Dict:
 
 @AndroidRepo.on_callback_query(filters.sudo & filters.regex("^upgrade"))
 async def on_upgrade_cq(c: AndroidRepo, cq: CallbackQuery):
-    await cq.message.edit_text("Upgrading...")
+    await cq.edit_message_reply_markup({})
+    sent = await cq.message.reply_text("Upgrading...")
     proc = await asyncio.create_subprocess_shell(
         "git pull --no-edit",
         stdout=asyncio.subprocess.PIPE,
@@ -116,7 +117,7 @@ async def on_upgrade_cq(c: AndroidRepo, cq: CallbackQuery):
     )
     stdout = (await proc.communicate())[0].decode()
     if proc.returncode == 0:
-        await cq.message.edit_text("Restarting...")
+        await sent.edit_text("Restarting...")
         args = [sys.executable, "-m", "androidrepo"]
         os.execv(sys.executable, args)
     else:
@@ -124,7 +125,7 @@ async def on_upgrade_cq(c: AndroidRepo, cq: CallbackQuery):
         lines = stdout.split("\n")
         for line in lines:
             error += f"<code>{line}</code>\n"
-        await cq.message.edit_text(
+        await sent.edit_text(
             f"Update failed (process exited with {proc.returncode}):\n{error}"
         )
 
