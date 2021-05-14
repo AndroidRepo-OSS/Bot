@@ -14,6 +14,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from typing import Union
+
 from pyrogram import filters
 from pyrogram.types import CallbackQuery, Message
 
@@ -21,66 +23,46 @@ from ..androidrepo import AndroidRepo
 
 
 @AndroidRepo.on_message(filters.cmd("start"))
-async def start(c: AndroidRepo, m: Message):
+@AndroidRepo.on_callback_query(filters.regex("^start_back$"))
+async def start(c: AndroidRepo, m: Union[Message, CallbackQuery]):
     keyboard = []
     text = "Hi, I'm the <b>official Android Repository Bot</b>."
-    if m.chat.type == "private":
-        keyboard.append(
-            [
-                ("💬 Group", "https://t.me/AndroidRepo_chat", "url"),
-                ("📢 Channel", "https://t.me/AndroidRepo", "url"),
-            ]
-        )
-        keyboard.append([("❔ Help", "help")])
-    else:
-        keyboard.append(
-            [
-                (
-                    "Click here for help!",
-                    f"http://t.me/{(await c.get_me()).username}?start",
-                    "url",
-                )
-            ]
-        )
-    await m.reply_text(
-        text,
-        reply_markup=c.ikb(keyboard),
+    keyboard.append(
+        [
+            ("💬 Group", "https://t.me/AndroidRepo_chat", "url"),
+            ("📢 Channel", "https://t.me/AndroidRepo", "url"),
+        ]
     )
+    if isinstance(m, Message):
+        if m.chat.type == "private":
+            keyboard.append([("❔ Help", "help")])
+        else:
+            keyboard.append(
+                [
+                    (
+                        "Click here for help!",
+                        f"http://t.me/{(await c.get_me()).username}?start",
+                        "url",
+                    )
+                ]
+            )
+        await m.reply_text(
+            text,
+            reply_markup=c.ikb(keyboard),
+            disable_web_page_preview=True,
+        )
+    if isinstance(m, CallbackQuery):
+        keyboard.append([("❔ Help", "help")])
+        await m.message.edit_text(
+            text,
+            reply_markup=c.ikb(keyboard),
+            disable_web_page_preview=True,
+        )
 
 
 @AndroidRepo.on_message(filters.cmd("help") & filters.private)
-async def help_cmd(c: AndroidRepo, m: Message):
-    keyboard = c.ikb(
-        [
-            [("🔧 Utilities", "help_commands"), ("💭 Requests", "help_requests")],
-            [("<-", "start_back")],
-        ]
-    )
-    text = "Choose a category for help!"
-    await m.reply_text(
-        text,
-        reply_markup=keyboard,
-        disable_web_page_preview=True,
-    )
-
-
-@AndroidRepo.on_callback_query(filters.regex("^start_back$"))
-async def start_cb(c: AndroidRepo, m: CallbackQuery):
-    text = "Hi, I'm the <b>official Android Repository Bot</b>."
-    keyboard = c.ikb(
-        [
-            [
-                ("💬 Group", "https://t.me/AndroidRepo_chat", "url"),
-                ("📢 Channel", "https://t.me/AndroidRepo", "url"),
-            ],
-            [("❔ Help", "help")],
-        ]
-    )
-    await m.message.edit_text(text, reply_markup=keyboard)
-
-
 @AndroidRepo.on_callback_query(filters.regex("^help$"))
-async def help_cb(c: AndroidRepo, m: CallbackQuery):
+async def on_help(c: AndroidRepo, m: Union[Message, CallbackQuery]):
     keyboard = c.ikb(
         [
             [("🔧 Utilities", "help_commands"), ("💭 Requests", "help_requests")],
@@ -88,11 +70,18 @@ async def help_cb(c: AndroidRepo, m: CallbackQuery):
         ]
     )
     text = "Choose a category for help!"
-    await m.message.edit_text(
-        text,
-        reply_markup=keyboard,
-        disable_web_page_preview=True,
-    )
+    if isinstance(m, Message):
+        await m.reply_text(
+            text,
+            reply_markup=keyboard,
+            disable_web_page_preview=True,
+        )
+    if isinstance(m, CallbackQuery):
+        await m.message.edit_text(
+            text,
+            reply_markup=keyboard,
+            disable_web_page_preview=True,
+        )
 
 
 @AndroidRepo.on_callback_query(filters.regex("^help_requests$"))
