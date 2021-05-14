@@ -100,8 +100,8 @@ class AndroidRepo(Client):
         await super().stop()
         log.info("AndroidRepo stopped... Bye.")
 
-    async def send_log_message(self, text: str, *args, **kwargs):
-        return await self.send_message(chat_id=STAFF_ID, text=text, *args, **kwargs)
+    async def send_log_message(self, chat_id: int, text: str, *args, **kwargs):
+        return await self.send_message(chat_id=chat_id, text=text, *args, **kwargs)
 
     async def delete_log_messages(
         self, message_ids: Union[int, List[int]], *args, **kwargs

@@ -32,7 +32,7 @@ async def on_contact_m(c: AndroidRepo, m: Message):
             "You are already in contact mode, you can start talking."
         )
     await Contact.create(user=user.id)
-    await c.send_log_message(f"{user.mention} enter contact mode.")
+    await c.send_log_message(STAFF_ID, f"{user.mention} enter contact mode.")
     return await m.reply_text(
         "You have successfully entered contact mode, everything you send here will be forwarded to the staff group."
     )
@@ -44,7 +44,7 @@ async def on_quit_m(c: AndroidRepo, m: Message):
     contact = await Contact.filter(user=user.id)
     if len(contact) > 0:
         await contact[0].delete()
-        await c.send_log_message(f"{user.mention} left contact mode.")
+        await c.send_log_message(STAFF_ID, f"{user.mention} left contact mode.")
         return await m.reply_text(
             "You have successfully exited contact mode, I will no longer forward your messages."
         )

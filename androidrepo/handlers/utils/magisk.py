@@ -36,7 +36,9 @@ RAW_URL = "https://github.com/Magisk-Modules-Repo/submission/raw/modules/modules
 
 async def check_modules(c: Client):
     date = datetime.datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
-    sent = await c.send_log_message("<b>Magisk module check started...</b>")
+    sent = await c.send_log_message(
+        config.LOGS_ID, "<b>Magisk module check started...</b>"
+    )
     modules = []
     updated_modules = []
     excluded_modules = []

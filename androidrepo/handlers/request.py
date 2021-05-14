@@ -52,7 +52,8 @@ async def on_request_m(c: AndroidRepo, m: Message):
                 last_request.update_from_dict({"ignore": 1})
                 await last_request.save()
                 await c.send_log_message(
-                    f"{user.mention} was spamming requests and has been ignored."
+                    STAFF_ID,
+                    f"{user.mention} was spamming requests and has been ignored.",
                 )
                 return await m.reply_text(
                     "You have spammed too many requests, so you will be ignored."
@@ -60,7 +61,9 @@ async def on_request_m(c: AndroidRepo, m: Message):
             if (now - last).seconds < (3 * 60):
                 last_request.update_from_dict({"attempts": (last_request.attempts) + 1})
                 await last_request.save()
-                await c.send_log_message(f"{user.mention} is spamming requests.")
+                await c.send_log_message(
+                    STAFF_ID, f"{user.mention} is spamming requests."
+                )
                 return await m.reply_text(
                     "You cannot send multiple requests one after the other, wait 3 minutes."
                 )
@@ -70,11 +73,12 @@ async def on_request_m(c: AndroidRepo, m: Message):
 
     request = m.text[len(m.text.split()[0]) + 1 :]
     sent = await c.send_log_message(
+        STAFF_ID,
         f"""
 <b>New request</b>:
     <b>From</b>: {user.mention}
     <b>Request</b>: {request}
-    """
+    """,
     )
     if sent:
         await Requests.create(
