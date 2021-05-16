@@ -133,7 +133,8 @@ async def on_ignore_m(c: AndroidRepo, m: Message):
         text_splited = m.text.split()
         if len(text_splited) > 1:
             user = text_splited[1]
-        return await m.reply_text("Specify someone.")
+        elif not len(text_splited):
+            return await m.reply_text("Specify someone.")
 
     if not isinstance(user, User):
         try:
@@ -156,7 +157,7 @@ async def on_ignore_m(c: AndroidRepo, m: Message):
     if not bool(last_request.ignore):
         last_request.update_from_dict({"ignore": 1})
         await last_request.save()
-        return await m.reply_text(f"{user.mention} can't send requests.")
+        return await m.reply_text(f"{user.mention} is prevented from sending requests.")
     return await m.reply_text(f"{user.mention} is already ignored.")
 
 
@@ -171,7 +172,8 @@ async def on_unignore_m(c: AndroidRepo, m: Message):
         text_splited = m.text.split()
         if len(text_splited) > 1:
             user = text_splited[1]
-        return await m.reply_text("Specify someone.")
+        elif not len(text_splited):
+            return await m.reply_text("Specify someone.")
 
     if not isinstance(user, User):
         try:

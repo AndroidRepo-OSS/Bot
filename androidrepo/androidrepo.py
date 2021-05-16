@@ -87,7 +87,6 @@ class AndroidRepo(Client):
                 await self.send_message(chat_id=user, text=start_message)
         except BadRequest:
             log.warning("Unable to send the startup message to the SUDO_USERS")
-            pass
 
         # Sync Magisk modules on startup
         await check_modules(self)

@@ -66,4 +66,3 @@ if __name__ == "__main__":
         run_async(main())
     except KeyboardInterrupt:
         log.warning("Forced stop... Bye!")
-        pass
