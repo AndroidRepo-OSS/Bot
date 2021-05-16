@@ -15,10 +15,10 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import asyncio
-import datetime
 import io
 import os
 import shutil
+from datetime import datetime
 from typing import Dict
 from zipfile import ZipFile
 
@@ -37,7 +37,7 @@ RAW_URL: str = (
 
 
 async def check_modules(c: Client):
-    date = datetime.datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
+    date = datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
     sent = await c.send_log_message(
         config.LOGS_ID, "<b>Magisk Modules check started...</b>"
     )
@@ -71,11 +71,15 @@ async def check_modules(c: Client):
                         await update_module(c, module)
             else:
                 return await sent.edit_text(
-                    f"<b>No updates were detected.</b>\n\n<b>Date</b>: {date}\n\nUse <code>/modules</code> to check the list of modules.\n#Sync"
+                    f"<b>No updates were detected.</b>\n\n"
+                    f"<b>Date</b>: <code>{date}</code>\n"
+                    "#Sync #Magisk #Modules"
                 )
     except httpx.ReadTimeout:
         return await sent.edit_text(
-            f"<b>Timeout...</b>\n<b>Date</b>: {date}\n#Sync #Timeout"
+            f"<b>Check timeout...</b>\n"
+            f"<b>Date</b>: <code>{date}</code>\n"
+            f"#Sync #Timeout #Magisk #Modules"
         )
     module_ids = list(map(lambda module: module["id"], modules))
     for _module in await Modules.all():
@@ -87,21 +91,20 @@ async def check_modules(c: Client):
             await _module.delete()
     return await sent.edit_text(
         f"""
-<b>Magisk module check finished</b>
+<b>Magisk Modules check finished</b>
     <b>Found</b>: <code>{len(modules)}</code>
     <b>Updated</b>: <code>{len(updated_modules)}</code>
     <b>Excluded</b>: <code>{len(excluded_modules)}</code>
 
-<b>Date</b>: {date}
+<b>Date</b>: <code>{date}</code>
 
-Use <code>/modules</code> to check the list of modules.
-#Sync #Modules #Magisk
+#Sync #Magisk #Modules
     """
     )
 
 
 async def get_modules(m: Message):
-    date = datetime.datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
+    date = datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
     modules = await Modules.all()
     modules_list = []
     if len(modules) > 0:
@@ -116,9 +119,12 @@ async def get_modules(m: Message):
                 )
             )
         document = io.BytesIO(str(json.dumps(modules_list, indent=4)).encode())
-        document.name = "modules.txt"
+        document.name = "modules.json"
         return await m.reply_document(
-            caption=f"<b>Modules count</b>: <code>{len(modules)}</code>\n<b>Date</b>: {date}\n#Dump #Modules #Magisk",
+            caption=(
+                f"<b>Modules count</b>: <code>{len(modules)}</code>\n"
+                f"<b>Date</b>: <code>{date}</code>"
+            ),
             document=document,
         )
     return await m.reply_text("No modules were found.")
