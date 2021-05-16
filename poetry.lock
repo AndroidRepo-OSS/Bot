@@ -1,4 +1,19 @@
 [[package]]
+name = "aiocron"
+version = "1.4"
+description = "Crontabs for asyncio"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+croniter = "*"
+tzlocal = "*"
+
+[package.extras]
+test = ["coverage"]
+
+[[package]]
 name = "aiodown"
 version = "1.0.5"
 description = "A fully async file downloader with httpx"
@@ -10,14 +25,6 @@ python-versions = ">=3.8"
 async-files = ">=0.4"
 httpx = {version = ">=0.14", extras = ["http2"]}
 humanize = ">=3.2.0"
-
-[[package]]
-name = "aioschedule"
-version = "0.5.2"
-description = "Job scheduling for humans."
-category = "main"
-optional = false
-python-versions = "*"
 
 [[package]]
 name = "aiosqlite"
@@ -124,6 +131,17 @@ python-versions = "*"
 
 [package.extras]
 test = ["flake8 (==3.7.8)", "hypothesis (==3.55.3)"]
+
+[[package]]
+name = "croniter"
+version = "1.0.13"
+description = "croniter provides iteration for datetime object with cron like format"
+category = "main"
+optional = false
+python-versions = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
+
+[package.dependencies]
+python-dateutil = "*"
 
 [[package]]
 name = "flake8"
@@ -348,6 +366,17 @@ optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
 
 [[package]]
+name = "python-dateutil"
+version = "2.8.1"
+description = "Extensions to the standard Python datetime module"
+category = "main"
+optional = false
+python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,>=2.7"
+
+[package.dependencies]
+six = ">=1.5"
+
+[[package]]
 name = "python-rapidjson"
 version = "1.0"
 description = "Python wrapper around rapidjson"
@@ -400,6 +429,14 @@ pygments = ">=2.6.0,<3.0.0"
 
 [package.extras]
 jupyter = ["ipywidgets (>=7.5.1,<8.0.0)"]
+
+[[package]]
+name = "six"
+version = "1.16.0"
+description = "Python 2 and 3 compatibility utilities"
+category = "main"
+optional = false
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*"
 
 [[package]]
 name = "sniffio"
@@ -462,18 +499,30 @@ category = "main"
 optional = false
 python-versions = "*"
 
+[[package]]
+name = "tzlocal"
+version = "2.1"
+description = "tzinfo object for the local timezone"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+pytz = "*"
+
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
-content-hash = "270892c79e3fc61e788635cbdd82e87a41b440ffbb4df4a51b8142b0858311d9"
+content-hash = "6c3badcab4e898a5196edffd1966d96287577083bca007e1376e35d533233b3c"
 
 [metadata.files]
+aiocron = [
+    {file = "aiocron-1.4-py2.py3-none-any.whl", hash = "sha256:3146674bd8f0ad5de5525d865eac02a4cc2207e15ff564f72288f4b900268ac7"},
+    {file = "aiocron-1.4.tar.gz", hash = "sha256:89d598f6cfa07d344144cb87378ea285aadcf4c731becb575f275ac6c1153b5e"},
+]
 aiodown = [
     {file = "aiodown-1.0.5-py3-none-any.whl", hash = "sha256:6142e1951e7fe5c9eee0cacd1f92ccf19115242ab024172690cd1280ae0a6b81"},
     {file = "aiodown-1.0.5.tar.gz", hash = "sha256:7fda4efe1d6f46d1c238d91cd4645e44f95382a75a73ebfdd01ad51d845b80fd"},
-]
-aioschedule = [
-    {file = "aioschedule-0.5.2.tar.gz", hash = "sha256:1fe8621d287f58cbba3d73695fbbd890355294ac0c01981a1fd1e4f0510fc744"},
 ]
 aiosqlite = [
     {file = "aiosqlite-0.16.1-py3-none-any.whl", hash = "sha256:1df802815bb1e08a26c06d5ea9df589bcb8eec56e5f3378103b0f9b223c6703c"},
@@ -513,6 +562,10 @@ colorama = [
 commonmark = [
     {file = "commonmark-0.9.1-py2.py3-none-any.whl", hash = "sha256:da2f38c92590f83de410ba1a3cbceafbc74fee9def35f9251ba9a971d6d66fd9"},
     {file = "commonmark-0.9.1.tar.gz", hash = "sha256:452f9dc859be7f06631ddcb328b6919c67984aca654e5fefb3914d54691aed60"},
+]
+croniter = [
+    {file = "croniter-1.0.13-py2.py3-none-any.whl", hash = "sha256:0c67c8afbf0f9ac3fce587caa7c911f871be8a42f6169e9f486ae125ab54a1b0"},
+    {file = "croniter-1.0.13.tar.gz", hash = "sha256:57f36df4f5a1c31bbf50bbffa3551612c19f6156ab1e88e2e42342ccbb9f9b9a"},
 ]
 flake8 = [
     {file = "flake8-3.9.2-py2.py3-none-any.whl", hash = "sha256:bf8fd333346d844f616e8d47905ef3a3384edae6b4e9beb0c5101e25e3110907"},
@@ -605,6 +658,10 @@ pysocks = [
     {file = "PySocks-1.7.1-py3-none-any.whl", hash = "sha256:2725bd0a9925919b9b51739eea5f9e2bae91e83288108a9ad338b2e3a4435ee5"},
     {file = "PySocks-1.7.1.tar.gz", hash = "sha256:3f8804571ebe159c380ac6de37643bb4685970655d3bba243530d6558b799aa0"},
 ]
+python-dateutil = [
+    {file = "python-dateutil-2.8.1.tar.gz", hash = "sha256:73ebfe9dbf22e832286dafa60473e4cd239f8592f699aa5adaf10050e6e1823c"},
+    {file = "python_dateutil-2.8.1-py2.py3-none-any.whl", hash = "sha256:75bb3f31ea686f1197762692a9ee6a7550b59fc6ca3a1f4b5d7e32fb98e2da2a"},
+]
 python-rapidjson = [
     {file = "python-rapidjson-1.0.tar.gz", hash = "sha256:a61fa61e41b0b85ba9e78444242fddcb3be724de1df79314e6b4766b66e4e11c"},
     {file = "python_rapidjson-1.0-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:ac728d59984e556ed56e59f497da4281bf96eb84bd035a866621dcfb90656ce5"},
@@ -691,6 +748,10 @@ rich = [
     {file = "rich-10.2.0-py3-none-any.whl", hash = "sha256:2701b69b9646a12b05d80f9d96a48615d4b68678fbfa67a60aa2834a62ad01e7"},
     {file = "rich-10.2.0.tar.gz", hash = "sha256:a30429d82363d42e7c64e324c2c8735c045f190cba609feee91a7b9f563a64b5"},
 ]
+six = [
+    {file = "six-1.16.0-py2.py3-none-any.whl", hash = "sha256:8abb2f1d86890a2dfb989f9a77cfcfd3e47c2a354b01111771326f8aa26e0254"},
+    {file = "six-1.16.0.tar.gz", hash = "sha256:1e61c37477a1626458e36f7b1d82aa5c9b094fa4802892072e49de9c60c4c926"},
+]
 sniffio = [
     {file = "sniffio-1.2.0-py3-none-any.whl", hash = "sha256:471b71698eac1c2112a40ce2752bb2f4a4814c22a54a3eed3676bc0f5ca9f663"},
     {file = "sniffio-1.2.0.tar.gz", hash = "sha256:c4666eecec1d3f50960c6bdf61ab7bc350648da6c126e3cf6898d8cd4ddcd3de"},
@@ -746,4 +807,8 @@ typing-extensions = [
     {file = "typing_extensions-3.7.4.3-py2-none-any.whl", hash = "sha256:dafc7639cde7f1b6e1acc0f457842a83e722ccca8eef5270af2d74792619a89f"},
     {file = "typing_extensions-3.7.4.3-py3-none-any.whl", hash = "sha256:7cb407020f00f7bfc3cb3e7881628838e69d8f3fcab2f64742a5e76b2f841918"},
     {file = "typing_extensions-3.7.4.3.tar.gz", hash = "sha256:99d4073b617d30288f569d3f13d2bd7548c3a7e4c8de87db09a9d29bb3a4a60c"},
+]
+tzlocal = [
+    {file = "tzlocal-2.1-py2.py3-none-any.whl", hash = "sha256:e2cb6c6b5b604af38597403e9852872d7f534962ae2954c7f35efcb1ccacf4a4"},
+    {file = "tzlocal-2.1.tar.gz", hash = "sha256:643c97c5294aedc737780a49d9df30889321cbe1204eac2c2ec6134035a92e44"},
 ]

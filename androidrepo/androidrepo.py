@@ -19,7 +19,7 @@ import logging
 import platform
 from typing import BinaryIO, List, Union
 
-import aioschedule as schedule
+import aiocron
 import pyrogram
 import pyromod
 from pyrogram import Client
@@ -89,12 +89,12 @@ class AndroidRepo(Client):
             log.warning("Unable to send the startup message to the SUDO_USERS")
             pass
 
+        # Sync Magisk modules on startup
         await check_modules(self)
-        schedule.every(1).hours.do(check_modules, c=self)
-
-        while True:
-            await schedule.run_pending()
-            await asyncio.sleep(0.1)
+        # Sync Magisk modules every 1h
+        @aiocron.crontab("0 * * * *")
+        async def modules_sync():
+            await check_modules(self)
 
     async def stop(self, *args):
         await super().stop()
