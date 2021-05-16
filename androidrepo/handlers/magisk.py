@@ -43,10 +43,11 @@ async def on_magisk_m(c: AndroidRepo, m: Message):
     m_type = m_type.lower()
 
     if m_type not in TYPES:
-        return await sm.edit(f"The version type <b>{m_type}</b> was not found.")
+        await sm.edit(f"The version type '<b>{m_type}</b>' was not found.")
+        return
 
     RAW_URL = "https://github.com/topjohnwu/magisk-files/raw/master"
-    async with httpx.AsyncClient(http2=True) as client:
+    async with httpx.AsyncClient(http2=True, timeout=10.0) as client:
         response = await client.get(f"{RAW_URL}/{m_type}.json")
         data = json.loads(response.read())
 
@@ -56,12 +57,19 @@ async def on_magisk_m(c: AndroidRepo, m: Message):
     text += f"<b>\n\nMagisk</b>: <a href='{magisk['link']}'>{magisk['versionCode']}</a> ({'v' if magisk['version'][0].isdecimal() else ''}{magisk['version']})"
     text += f"<b>\nChangelog</b>: {await get_changelog(magisk['note'])}"
 
-    await sm.edit_text(text, disable_web_page_preview=True, parse_mode="combined")
+    keyboard = [[("Full Changelog", magisk["note"], "url")]]
+
+    await sm.edit_text(
+        text,
+        reply_markup=c.ikb(keyboard),
+        disable_web_page_preview=True,
+        parse_mode="combined",
+    )
 
 
 async def get_changelog(url: str) -> str:
     changelog = ""
-    async with httpx.AsyncClient(http2=True) as client:
+    async with httpx.AsyncClient(http2=True, timeout=10.0) as client:
         response = await client.get(url)
         data = response.read()
         lines = data.decode().split("\n")
