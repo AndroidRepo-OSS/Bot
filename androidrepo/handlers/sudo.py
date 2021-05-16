@@ -32,6 +32,7 @@ from pyrogram import filters
 from pyrogram.types import CallbackQuery, Message
 
 import androidrepo
+from androidrepo.config import OWNER_ID
 from androidrepo.database import Modules
 from androidrepo.utils import modules
 
@@ -136,7 +137,7 @@ async def on_shutdown_m(c: AndroidRepo, m: Message):
     sys.exit()
 
 
-@AndroidRepo.on_message(filters.sudo & filters.cmd("(sh(eel)?|term(inal)?) "))
+@AndroidRepo.on_message(filters.cmd("(sh(eel)?|term(inal)?) ") & filters.user(OWNER_ID))
 async def on_terminal_m(c: AndroidRepo, m: Message):
     command = m.text.split()[0]
     code = m.text[len(command) + 1 :]

@@ -14,6 +14,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from typing import List
+
 import httpx
 import rapidjson as json
 from pyrogram import filters
@@ -23,7 +25,7 @@ from androidrepo.handlers.utils.magisk import get_modules
 
 from ..androidrepo import AndroidRepo
 
-TYPES = ["beta", "stable", "canary"]
+TYPES: List[str] = ["beta", "stable", "canary"]
 
 
 @AndroidRepo.on_message(filters.cmd("magisk"))

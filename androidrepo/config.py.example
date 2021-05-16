@@ -1,13 +1,19 @@
-API_ID = 0
-API_HASH = ""
-BOT_TOKEN = ""
+from typing import List
 
-PREFIXES = ["/", "!"]
-SUDO_USERS = []
+API_ID: int = 0
+API_HASH: str = ""
+BOT_TOKEN: str = ""
 
-CHANNEL_ID = 0
-CHAT_ID = 0
-STAFF_ID = 0
-LOGS_ID = 0
+PREFIXES: List[str] = ["/", "!"]
 
-LAST_UPDATE = 0
+OWNER_ID: int = 918317361
+SUDO_USERS List[int] = []
+SUDO_USERS.append(OWNER)
+
+CHANNEL_ID: int = 0
+CHAT_ID: int = 0
+STAFF_ID: int = 0
+LOGS_ID: int = 0
+
+# Don't change if you don't know what it's for
+LAST_UPDATE: int = 0

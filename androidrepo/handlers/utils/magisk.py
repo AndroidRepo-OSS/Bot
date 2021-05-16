@@ -31,13 +31,15 @@ from pyrogram.types import Message
 from androidrepo import config
 from androidrepo.database import Modules
 
-RAW_URL = "https://github.com/Magisk-Modules-Repo/submission/raw/modules/modules.json"
+RAW_URL: str = (
+    "https://github.com/Magisk-Modules-Repo/submission/raw/modules/modules.json"
+)
 
 
 async def check_modules(c: Client):
     date = datetime.datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
     sent = await c.send_log_message(
-        config.LOGS_ID, "<b>Magisk module check started...</b>"
+        config.LOGS_ID, "<b>Magisk Modules check started...</b>"
     )
     modules = []
     updated_modules = []

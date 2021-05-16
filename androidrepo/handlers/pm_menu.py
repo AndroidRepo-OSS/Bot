@@ -63,30 +63,28 @@ async def start(c: AndroidRepo, m: Union[Message, CallbackQuery]):
 @AndroidRepo.on_message(filters.cmd("help") & filters.private)
 @AndroidRepo.on_callback_query(filters.regex("^help$"))
 async def on_help(c: AndroidRepo, m: Union[Message, CallbackQuery]):
-    keyboard = c.ikb(
-        [
-            [("🔧 Utilities", "help_commands"), ("💭 Requests", "help_requests")],
-            [("<-", "start_back")],
-        ]
-    )
+    keyboard = [
+        [("🔧 Utilities", "help_commands"), ("💭 Requests", "help_requests")],
+        [("<-", "start_back")],
+    ]
     text = "Choose a category for help!"
     if isinstance(m, Message):
         await m.reply_text(
             text,
-            reply_markup=keyboard,
+            reply_markup=c.ikb(keyboard),
             disable_web_page_preview=True,
         )
     if isinstance(m, CallbackQuery):
         await m.message.edit_text(
             text,
-            reply_markup=keyboard,
+            reply_markup=c.ikb(keyboard),
             disable_web_page_preview=True,
         )
 
 
 @AndroidRepo.on_callback_query(filters.regex("^help_requests$"))
 async def help_requests(c: AndroidRepo, m: CallbackQuery):
-    keyboard = c.ikb([[("<-", "help")]])
+    keyboard = [[("<-", "help")]]
     text = (
         "<b>Here is what I can do for you:</b>\n\n"
         "You can also place requests for the @AndroidRepo staff using the #request in the bot's PM.\n\n"
@@ -95,14 +93,14 @@ async def help_requests(c: AndroidRepo, m: CallbackQuery):
     )
     await m.message.edit_text(
         text,
-        reply_markup=keyboard,
+        reply_markup=c.ikb(keyboard),
         disable_web_page_preview=True,
     )
 
 
 @AndroidRepo.on_callback_query(filters.regex("^help_commands$"))
 async def help_commands(c: AndroidRepo, m: CallbackQuery):
-    keyboard = c.ikb([[("<-", "help")]])
+    keyboard = [[("<-", "help")]]
     text = (
         "<b>Here is what I can do for you:</b>\n\n"
         " - <code>/magisk (type)</code>: Returns the latest version of Magisk.\n"
@@ -110,6 +108,6 @@ async def help_commands(c: AndroidRepo, m: CallbackQuery):
     )
     await m.message.edit_text(
         text,
-        reply_markup=keyboard,
+        reply_markup=c.ikb(keyboard),
         disable_web_page_preview=True,
     )
