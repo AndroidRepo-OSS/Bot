@@ -19,7 +19,7 @@ import io
 import os
 import shutil
 from datetime import datetime
-from typing import Dict
+from typing import Dict, List
 from zipfile import ZipFile
 
 import aiodown
@@ -29,11 +29,13 @@ from pyrogram import Client
 from pyrogram.types import Message
 
 from androidrepo import config
-from androidrepo.database import Modules
+from androidrepo.database import Magisk, Modules
 
-RAW_URL: str = (
+DOWNLOAD_DIR: str = "./downloads/"
+MODULES_URL: str = (
     "https://github.com/Magisk-Modules-Repo/submission/raw/modules/modules.json"
 )
+MAGISK_URL: str = "https://github.com/topjohnwu/magisk-files/raw/master/{}.json"
 
 
 async def check_modules(c: Client):
@@ -46,7 +48,7 @@ async def check_modules(c: Client):
     excluded_modules = []
     try:
         async with httpx.AsyncClient(http2=True, timeout=10.0) as client:
-            response = await client.get(RAW_URL)
+            response = await client.get(MODULES_URL)
             data = response.json()
             last_update = data["last_update"]
             if not config.LAST_UPDATE == last_update:
@@ -97,7 +99,6 @@ async def check_modules(c: Client):
     <b>Excluded</b>: <code>{len(excluded_modules)}</code>
 
 <b>Date</b>: <code>{date}</code>
-
 #Sync #Magisk #Modules
     """
     )
@@ -122,6 +123,7 @@ async def get_modules(m: Message):
         document.name = "modules.json"
         return await m.reply_document(
             caption=(
+                "<b>Magisk Modules</b>\n"
                 f"<b>Modules count</b>: <code>{len(modules)}</code>\n"
                 f"<b>Date</b>: <code>{date}</code>"
             ),
@@ -168,7 +170,7 @@ async def update_module(c: Client, module: Dict):
         + ")"
         + ".zip"
     )
-    file_path = "./downloads/" + file_name
+    file_path = DOWNLOAD_DIR + file_name
     async with aiodown.Client() as client:
         download = client.add(module["url"], file_path)
         await client.start()
@@ -181,10 +183,10 @@ async def update_module(c: Client, module: Dict):
     with ZipFile(file_path, "r") as old_zip:
         for file in old_zip.namelist():
             if extraction_path is None:
-                extraction_path = "./downloads/" + "/".join(file.split("/")[:3])
-            path = "./downloads/" + file
+                extraction_path = DOWNLOAD_DIR + "/".join(file.split("/")[:3])
+            path = DOWNLOAD_DIR + file
             files.append(path)
-            old_zip.extract(member=file, path="./downloads/")
+            old_zip.extract(member=file, path=DOWNLOAD_DIR)
         old_zip.close()
     os.remove(file_path)
     with ZipFile(file_path, "w") as new_zip:
@@ -222,3 +224,103 @@ async def update_module(c: Client, module: Dict):
         }
     )
     await mod.save()
+
+
+async def get_changelog(url: str) -> str:
+    changelog = ""
+    async with httpx.AsyncClient(http2=True, timeout=10.0) as client:
+        response = await client.get(url)
+        data = response.read()
+        lines = data.decode().split("\n")
+        latest_version = False
+        for line in lines:
+            if len(line) < 1:
+                continue
+            if line.startswith("##"):
+                if not latest_version:
+                    latest_version = True
+                else:
+                    break
+            else:
+                changelog += f"\n{line}"
+    return changelog
+
+
+async def check_magisk(c: Client, m_type: str = "canary"):
+    date = datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
+    sent = await c.send_log_message(
+        config.LOGS_ID, "<b>Magisk Releases check started...</b>"
+    )
+
+    TYPES: List[str] = ["beta", "stable", "canary"]
+    if m_type not in TYPES:
+        return
+
+    URL = MAGISK_URL.format(m_type)
+    async with httpx.AsyncClient(http2=True, timeout=10.0) as client:
+        response = await client.get(URL)
+        data = response.json()
+        magisk = data["magisk"]
+        _magisk = await Magisk.get_or_none(branch=m_type)
+        if _magisk is None:
+            await Magisk.create(
+                branch=m_type,
+                version_code=magisk["versionCode"],
+            )
+            return await sent.edit_text(
+                "<b>No data in the database.</b>\n"
+                "<b>Saving Magisk data for the next sync...</b>\n\n"
+                f"<b>Date</b>: <code>{date}</code>\n"
+                "#Sync #Magisk #Releases"
+            )
+        elif int(_magisk.version_code) == int(magisk["versionCode"]):
+            return await sent.edit_text(
+                "<b>No updates were detected.</b>\n\n"
+                f"<b>Date</b>: <code>{date}</code>\n"
+                "#Sync #Magisk #Releases"
+            )
+        else:
+            file_name = f"Magisk-{magisk['version']}_({magisk['versionCode']}).apk"
+            file_path = DOWNLOAD_DIR + file_name
+            async with aiodown.Client() as client:
+                download = client.add(magisk["link"], file_path)
+                await client.start()
+                while not download.is_finished():
+                    await asyncio.sleep(0.5)
+                if download.get_status() == "failed":
+                    return
+
+            text = f"<b>Magisk {'v' if magisk['version'][0].isdecimal() else ''}{magisk['version']} ({magisk['versionCode']})</b>\n\n"
+            text += f"⚡<i>Magisk {m_type}</i>\n"
+            if m_type == "canary":
+                changelog = await get_changelog(magisk["note"])
+                text += "\n⚙️<b>Changelog</b>"
+                text += f"{changelog}\n\n"
+            else:
+                changelog = magisk["note"]
+                text += f"⚡<a href='{changelog}'>Changelog</a>\n\n"
+            text += "<b>Follow:</b> @AndroidRepo"
+
+            await c.send_channel_document(
+                caption=text,
+                document=file_path,
+                parse_mode="combined",
+                force_document=True,
+            )
+            os.remove(file_path)
+            _magisk.update_from_dict(
+                {
+                    "versionCode": magisk["versionCode"],
+                }
+            )
+            await _magisk.save()
+            return await sent.edit_text(
+                f"""
+<b>Magisk Releases check finished</b>
+    <b>Updated</b>: <code>{m_type}</code>
+    <b>Version</b>: <code>{magisk['version']} ({magisk['versionCode']})</code>
+
+<b>Date</b>: <code>{date}</code>
+#Sync #Magisk #Releases
+    """
+            )

@@ -21,7 +21,7 @@ import rapidjson as json
 from pyrogram import filters
 from pyrogram.types import Message
 
-from androidrepo.handlers.utils.magisk import get_modules
+from androidrepo.handlers.utils.magisk import get_changelog, get_modules
 
 from ..androidrepo import AndroidRepo
 
@@ -54,8 +54,8 @@ async def on_magisk_m(c: AndroidRepo, m: Message):
     magisk = data["magisk"]
 
     text = f"<b>Type</b>: <code>{m_type}</code>"
-    text += f"<b>\n\nMagisk</b>: <a href='{magisk['link']}'>{magisk['versionCode']}</a> ({'v' if magisk['version'][0].isdecimal() else ''}{magisk['version']})"
-    text += f"<b>\nChangelog</b>: {await get_changelog(magisk['note'])}"
+    text += f"\n\n<b>Magisk</b>: <a href='{magisk['link']}'>{magisk['versionCode']}</a> ({'v' if magisk['version'][0].isdecimal() else ''}{magisk['version']})"
+    text += f"\n<b>Changelog</b>: {await get_changelog(magisk['note'])}"
 
     keyboard = [[("Full Changelog", magisk["note"], "url")]]
 
@@ -65,26 +65,6 @@ async def on_magisk_m(c: AndroidRepo, m: Message):
         disable_web_page_preview=True,
         parse_mode="combined",
     )
-
-
-async def get_changelog(url: str) -> str:
-    changelog = ""
-    async with httpx.AsyncClient(http2=True, timeout=10.0) as client:
-        response = await client.get(url)
-        data = response.read()
-        lines = data.decode().split("\n")
-        latest_version = False
-        for line in lines:
-            if len(line) < 1:
-                continue
-            if line.startswith("##"):
-                if not latest_version:
-                    latest_version = True
-                else:
-                    break
-            else:
-                changelog += f"\n    {line}"
-    return changelog
 
 
 @AndroidRepo.on_message(filters.sudo & filters.cmd("modules"))

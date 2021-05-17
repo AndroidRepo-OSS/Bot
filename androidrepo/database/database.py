@@ -33,6 +33,11 @@ class Modules(Model):
     last_update = fields.IntField()
 
 
+class Magisk(Model):
+    branch = fields.TextField(pk=True)
+    version_code = fields.IntField()
+
+
 class Requests(Model):
     id = fields.IntField(pk=True)
     user = fields.IntField()

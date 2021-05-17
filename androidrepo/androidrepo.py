@@ -37,7 +37,7 @@ from androidrepo.config import (
     STAFF_ID,
     SUDO_USERS,
 )
-from androidrepo.handlers.utils.magisk import check_modules
+from androidrepo.handlers.utils.magisk import check_magisk, check_modules
 from androidrepo.utils import filters, modules
 
 log = logging.getLogger(__name__)
@@ -88,12 +88,13 @@ class AndroidRepo(Client):
         except BadRequest:
             log.warning("Unable to send the startup message to the SUDO_USERS")
 
-        # Sync Magisk modules on startup
-        await check_modules(self)
-        # Sync Magisk modules every 1h
+        # Sync Magisk every 1h
         @aiocron.crontab("0 * * * *")
         async def modules_sync():
             await check_modules(self)
+            await check_magisk(self, stable)
+            # await check_magisk(self, beta)
+            await check_magisk(self, canary)
 
     async def stop(self, *args):
         await super().stop()
