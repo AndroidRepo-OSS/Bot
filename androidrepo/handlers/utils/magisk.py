@@ -269,13 +269,15 @@ async def check_magisk(c: Client, m_type: str = "canary"):
             )
             return await sent.edit_text(
                 "<b>No data in the database.</b>\n"
-                "<b>Saving Magisk data for the next sync...</b>\n\n"
+                "<b>Saving Magisk data for the next sync...</b>\n"
+                f"    <b>Magisk</b>: <code>{m_type}</code>\n\n"
                 f"<b>Date</b>: <code>{date}</code>\n"
                 "#Sync #Magisk #Releases"
             )
         elif int(_magisk.version_code) == int(magisk["versionCode"]):
             return await sent.edit_text(
-                "<b>No updates were detected.</b>\n\n"
+                "<b>No updates were detected.</b>\n"
+                f"    <b>Magisk</b>: <code>{m_type}</code>\n\n"
                 f"<b>Date</b>: <code>{date}</code>\n"
                 "#Sync #Magisk #Releases"
             )
@@ -292,6 +294,7 @@ async def check_magisk(c: Client, m_type: str = "canary"):
 
             text = f"<b>Magisk {'v' if magisk['version'][0].isdecimal() else ''}{magisk['version']} ({magisk['versionCode']})</b>\n\n"
             text += f"⚡<i>Magisk {m_type}</i>\n"
+            text += "⚡️<a href='https://github.com/topjohnwu/Magisk'>GitHub Repository</a>\n"
             if m_type == "canary":
                 changelog = await get_changelog(magisk["note"])
                 text += "\n⚙️<b>Changelog</b>"
