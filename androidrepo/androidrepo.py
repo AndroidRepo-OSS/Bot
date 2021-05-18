@@ -92,9 +92,9 @@ class AndroidRepo(Client):
         @aiocron.crontab("0 * * * *")
         async def modules_sync():
             await check_modules(self)
-            await check_magisk(self, stable)
-            # await check_magisk(self, beta)
-            await check_magisk(self, canary)
+            await check_magisk(self, "stable")
+            # await check_magisk(self, "beta")
+            await check_magisk(self, "canary")
 
     async def stop(self, *args):
         await super().stop()
