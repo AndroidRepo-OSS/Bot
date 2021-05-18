@@ -35,7 +35,10 @@ class Modules(Model):
 
 class Magisk(Model):
     branch = fields.TextField(pk=True)
+    version = fields.TextField()
     version_code = fields.IntField()
+    link = fields.TextField()
+    note = fields.TextField()
 
 
 class Requests(Model):

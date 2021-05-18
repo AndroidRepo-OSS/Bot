@@ -21,7 +21,7 @@ import rapidjson as json
 from pyrogram import filters
 from pyrogram.types import Message
 
-from androidrepo.handlers.utils.magisk import get_changelog, get_modules
+from androidrepo.handlers.utils.magisk import get_changelog, get_magisk, get_modules
 
 from ..androidrepo import AndroidRepo
 
@@ -70,3 +70,8 @@ async def on_magisk_m(c: AndroidRepo, m: Message):
 @AndroidRepo.on_message(filters.sudo & filters.cmd("modules"))
 async def on_modules_m(c: AndroidRepo, m: Message):
     return await get_modules(m)
+
+
+@AndroidRepo.on_message(filters.sudo & filters.cmd("magisks"))
+async def on_magisks_m(c: AndroidRepo, m: Message):
+    return await get_magisk(m)

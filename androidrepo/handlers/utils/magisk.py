@@ -132,6 +132,30 @@ async def get_modules(m: Message):
     return await m.reply_text("No modules were found.")
 
 
+async def get_magisk(m: Message):
+    date = datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
+    magisks = await Magisk.all()
+    magisks_list = []
+    if len(magisks) > 0:
+        for magisk in magisks:
+            magisks_list.append(
+                dict(
+                    branch=magisk.branch,
+                    version=magisk.version,
+                    versionCode=magisk.version_code,
+                    link=magisk.link,
+                    note=magisk.note,
+                )
+            )
+        document = io.BytesIO(str(json.dumps(magisks_list, indent=4)).encode())
+        document.name = "magisk.json"
+        return await m.reply_document(
+            caption=("<b>Magisk Releases</b>\n" f"<b>Date</b>: <code>{date}</code>"),
+            document=document,
+        )
+    return await m.reply_text("No Magisks found.")
+
+
 async def parse_module(to_parse: Dict) -> Dict:
     module = {
         "id": to_parse["id"],
@@ -246,7 +270,7 @@ async def get_changelog(url: str) -> str:
     return changelog
 
 
-async def check_magisk(c: Client, m_type: str = "canary"):
+async def check_magisk(c: Client, m_type: str = "stable"):
     date = datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
     sent = await c.send_log_message(
         config.LOGS_ID, "<b>Magisk Releases check started...</b>"
@@ -265,7 +289,10 @@ async def check_magisk(c: Client, m_type: str = "canary"):
         if _magisk is None:
             await Magisk.create(
                 branch=m_type,
+                version=magisk["version"],
                 version_code=magisk["versionCode"],
+                link=magisk["link"],
+                note=magisk["note"],
             )
             return await sent.edit_text(
                 "<b>No data in the database.</b>\n"
@@ -313,7 +340,10 @@ async def check_magisk(c: Client, m_type: str = "canary"):
             os.remove(file_path)
             _magisk.update_from_dict(
                 {
+                    "version": magisk["version"],
                     "versionCode": magisk["versionCode"],
+                    "link": magisk["link"],
+                    "note": magisk["note"],
                 }
             )
             await _magisk.save()
