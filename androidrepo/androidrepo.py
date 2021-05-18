@@ -90,7 +90,7 @@ class AndroidRepo(Client):
 
         # Sync Magisk every 1h
         @aiocron.crontab("0 * * * *")
-        async def modules_sync():
+        async def magisk_sync():
             await check_modules(self)
             await check_magisk(self, "stable")
             # await check_magisk(self, "beta")

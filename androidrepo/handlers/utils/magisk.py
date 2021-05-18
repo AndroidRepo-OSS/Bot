@@ -79,9 +79,9 @@ async def check_modules(c: Client):
                 )
     except httpx.ReadTimeout:
         return await sent.edit_text(
-            f"<b>Check timeout...</b>\n"
+            "<b>Check timeout...</b>\n"
             f"<b>Date</b>: <code>{date}</code>\n"
-            f"#Sync #Timeout #Magisk #Modules"
+            "#Sync #Timeout #Magisk #Modules"
         )
     module_ids = list(map(lambda module: module["id"], modules))
     for _module in await Modules.all():
@@ -294,6 +294,7 @@ async def check_magisk(c: Client, m_type: str = "stable"):
                 link=magisk["link"],
                 note=magisk["note"],
             )
+            await asyncio.sleep(3)
             return await sent.edit_text(
                 "<b>No data in the database.</b>\n"
                 "<b>Saving Magisk data for the next sync...</b>\n"
@@ -302,6 +303,7 @@ async def check_magisk(c: Client, m_type: str = "stable"):
                 "#Sync #Magisk #Releases"
             )
         elif int(_magisk.version_code) == int(magisk["versionCode"]):
+            await asyncio.sleep(3)
             return await sent.edit_text(
                 "<b>No updates were detected.</b>\n"
                 f"    <b>Magisk</b>: <code>{m_type}</code>\n\n"
@@ -321,6 +323,7 @@ async def check_magisk(c: Client, m_type: str = "stable"):
 
             text = f"<b>Magisk {'v' if magisk['version'][0].isdecimal() else ''}{magisk['version']} ({magisk['versionCode']})</b>\n\n"
             text += f"⚡<i>Magisk {m_type}</i>\n"
+            text += "⚡<i>Magisk is a suite of open source software for customizing Android, supporting devices higher than Android 5.0.</i>\n"
             text += "⚡️<a href='https://github.com/topjohnwu/Magisk'>GitHub Repository</a>\n"
             if m_type == "canary":
                 changelog = await get_changelog(magisk["note"])
@@ -329,6 +332,7 @@ async def check_magisk(c: Client, m_type: str = "stable"):
             else:
                 changelog = magisk["note"]
                 text += f"⚡<a href='{changelog}'>Changelog</a>\n\n"
+            text += "<b>By:</b> <a href='https://github.com/topjohnwu'>John Wu</a>\n"
             text += "<b>Follow:</b> @AndroidRepo"
 
             await c.send_channel_document(
