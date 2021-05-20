@@ -416,7 +416,7 @@ idna2008 = ["idna"]
 
 [[package]]
 name = "rich"
-version = "10.2.1"
+version = "10.2.2"
 description = "Render rich text, tables, progress bars, syntax highlighting, markdown and more to the terminal"
 category = "main"
 optional = false
@@ -513,7 +513,7 @@ pytz = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
-content-hash = "6ab4d3428235c834236c4ac37283382a5415bfd73a3cfc10d4b5c3ba17a4b00d"
+content-hash = "7952b1cb4b1fcc049db4e2eea8138864055db9d435d4273b136f815a36af62a1"
 
 [metadata.files]
 aiocron = [
@@ -745,8 +745,8 @@ rfc3986 = [
     {file = "rfc3986-1.5.0.tar.gz", hash = "sha256:270aaf10d87d0d4e095063c65bf3ddbc6ee3d0b226328ce21e036f946e421835"},
 ]
 rich = [
-    {file = "rich-10.2.1-py3-none-any.whl", hash = "sha256:0ea4ece572d6fa94c40983bbf49c6fdce01b9790558c3645f2e1736bb91cdc0b"},
-    {file = "rich-10.2.1.tar.gz", hash = "sha256:34865558d322f7151a3012357caa3622df966e51d7a639e4b1fd1b3675b302fc"},
+    {file = "rich-10.2.2-py3-none-any.whl", hash = "sha256:203e79c9012f57e0148a2132d0b43fe070a5c213cf080982c186e1d3ae4f8e1d"},
+    {file = "rich-10.2.2.tar.gz", hash = "sha256:17b3f486c38e79cc219d8848974b277ef532a82d12b3ad6eb37bb8c6f22ab5fc"},
 ]
 six = [
     {file = "six-1.16.0-py2.py3-none-any.whl", hash = "sha256:8abb2f1d86890a2dfb989f9a77cfcfd3e47c2a354b01111771326f8aa26e0254"},
