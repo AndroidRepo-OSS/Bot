@@ -36,7 +36,7 @@ TgCrypto = "1.2.2"
 tortoise-orm = "0.17.3"
 pyromod = "1.5"
 Pyrogram = "1.2.9"
-aiocron = "1.4"
+aiocron = "1.6"
 
 [tool.poetry.dev-dependencies]
 black = "^21.5b1"

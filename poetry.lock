@@ -1,6 +1,6 @@
 [[package]]
 name = "aiocron"
-version = "1.4"
+version = "1.6"
 description = "Crontabs for asyncio"
 category = "main"
 optional = false
@@ -513,12 +513,12 @@ pytz = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
-content-hash = "14c5cdb8e6814daa7b36fccfb8505f2029874ac387a9095f2f6c2b14513d6945"
+content-hash = "e5a3db2c91bb28858bbeeba422566db6fd6f981f528728b5f38698d0a135a4d6"
 
 [metadata.files]
 aiocron = [
-    {file = "aiocron-1.4-py2.py3-none-any.whl", hash = "sha256:3146674bd8f0ad5de5525d865eac02a4cc2207e15ff564f72288f4b900268ac7"},
-    {file = "aiocron-1.4.tar.gz", hash = "sha256:89d598f6cfa07d344144cb87378ea285aadcf4c731becb575f275ac6c1153b5e"},
+    {file = "aiocron-1.6-py3-none-any.whl", hash = "sha256:ab451380199ef09757f95085220cd34bf6970239bdb77863e3413ee08297fcc5"},
+    {file = "aiocron-1.6.tar.gz", hash = "sha256:21f00288e9993f4e44ae2e51d4301b7822512962fc900b59317d11299c125a6a"},
 ]
 aiodown = [
     {file = "aiodown-1.0.5-py3-none-any.whl", hash = "sha256:6142e1951e7fe5c9eee0cacd1f92ccf19115242ab024172690cd1280ae0a6b81"},
