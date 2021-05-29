@@ -52,7 +52,7 @@ async def ping(c: AndroidRepo, m: Message):
 async def on_restart_m(c: AndroidRepo, m: Message):
     await m.reply_text("Restarting...")
     args = [sys.executable, "-m", "androidrepo"]
-    os.execv(sys.executable, args)
+    os.execv(sys.executable, args)  # skipcq: BAN-B606
 
 
 @AndroidRepo.on_message(filters.sudo & filters.cmd("upgrade"))

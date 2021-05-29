@@ -15,4 +15,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from .database import *
+from typing import List
+
+from .database import Contact, Magisk, Modules, Requests, connect_database
+
+__all__: List[str] = ["connect_database", "Contact", "Modules", "Magisk", "Requests"]

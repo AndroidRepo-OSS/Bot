@@ -49,7 +49,7 @@ async def reupload(c: AndroidRepo, m: Message):
         await m.reply_text("Operation cancelled! The description was not provided.")
         return
 
-    if not (file_url.startswith("http://") or file_url.startswith("https://")):
+    if not file_url.startswith(("http://", "https://")):
         file_url = f"https://{file_url}"
 
     sent = await m.reply_text("<code>Processing...</code>")
@@ -135,7 +135,7 @@ async def reupload(c: AndroidRepo, m: Message):
                     await sent.edit("The specified url was not found.")
                 else:
                     await sent.edit(f"<b>Error {response.status_code}</b>")
-        except Exception as e:
+        except BaseException as e:
             await sent.edit(f"<b>Error:</b> <code>{e.__class__.__name__}</code> - {e}")
             return
         finally:
@@ -185,6 +185,6 @@ async def reupload(c: AndroidRepo, m: Message):
             os.remove(file_path)
         else:
             await sent.edit("The file to upload was not found.")
-    except Exception as e:
+    except BaseException as e:
         await sent.edit(f"<b>Error:</b> <code>{e.__class__.__name__}</code> - {e}")
         return
