@@ -294,7 +294,6 @@ async def check_magisk(c: Client, m_type: str = "stable"):
                 link=magisk["link"],
                 note=magisk["note"],
             )
-            await asyncio.sleep(3)
             return await sent.edit_text(
                 "<b>No data in the database.</b>\n"
                 "<b>Saving Magisk data for the next sync...</b>\n"
@@ -303,7 +302,6 @@ async def check_magisk(c: Client, m_type: str = "stable"):
                 "#Sync #Magisk #Releases"
             )
         elif int(_magisk.version_code) == int(magisk["versionCode"]):
-            await asyncio.sleep(3)
             return await sent.edit_text(
                 "<b>No updates were detected.</b>\n"
                 f"    <b>Magisk</b>: <code>{m_type}</code>\n\n"
