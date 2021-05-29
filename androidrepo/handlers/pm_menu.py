@@ -65,7 +65,7 @@ async def start(c: AndroidRepo, m: Union[Message, CallbackQuery]):
 async def on_help(c: AndroidRepo, m: Union[Message, CallbackQuery]):
     keyboard = [
         [("🔧 Utilities", "help_commands"), ("💭 Requests", "help_requests")],
-        [("<-", "start_back")],
+        [("🔙 Back", "start_back")],
     ]
     text = "Choose a category for help!"
     if isinstance(m, Message):
@@ -84,7 +84,7 @@ async def on_help(c: AndroidRepo, m: Union[Message, CallbackQuery]):
 
 @AndroidRepo.on_callback_query(filters.regex("^help_requests$"))
 async def help_requests(c: AndroidRepo, m: CallbackQuery):
-    keyboard = [[("<-", "help")]]
+    keyboard = [[("🔙 Back", "help")]]
     text = (
         "<b>Here is what I can do for you:</b>\n\n"
         "You can also place requests for the @AndroidRepo staff using the #request in the bot's PM.\n\n"
@@ -100,7 +100,7 @@ async def help_requests(c: AndroidRepo, m: CallbackQuery):
 
 @AndroidRepo.on_callback_query(filters.regex("^help_commands$"))
 async def help_commands(c: AndroidRepo, m: CallbackQuery):
-    keyboard = [[("<-", "help")]]
+    keyboard = [[("🔙 Back", "help")]]
     text = (
         "<b>Here is what I can do for you:</b>\n\n"
         " - <code>/magisk (type)</code>: Returns the latest version of Magisk.\n"

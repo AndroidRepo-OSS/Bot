@@ -43,7 +43,7 @@ async def reupload(c: AndroidRepo, m: Message):
             "Send me the file description as markdown...",
             reply_to_message_id=m.message_id,
             filters=filters.sudo,
-            timeout=60,
+            timeout=120,
         )
     except asyncio.exceptions.TimeoutError:
         await m.reply_text("Operation cancelled! The description was not provided.")

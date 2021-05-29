@@ -19,6 +19,7 @@ import time
 from typing import List
 
 from pyrogram import filters
+from pyrogram.errors import UserIsBlocked
 from pyrogram.types import Message, User
 
 from androidrepo.config import STAFF_ID, SUDO_USERS
@@ -207,16 +208,19 @@ async def on_done_m(c: AndroidRepo, m: Message):
         request = request[0]
         user_id = request.user
         request_id = request.request_id
-        await c.send_message(
-            chat_id=user_id,
-            text=f"""
+        try:
+            await c.send_message(
+                chat_id=user_id,
+                text=f"""
 <b>Request done</b>:
     <b>ID</b>: <code>{request_id}</code>
     <b>Don't be surprised, it will disappear from your request list.</b>
     {("<b>Staff message</b>: <code>" + m.text[len(command)+1:] + "</code>") if len(query) > 1 else ""}
     <b>Request</b>: <code>{request.request}</code>
         """,
-        )
+            )
+        except UserIsBlocked:
+            pass
         await request.delete()
         await m.reply_text("The request was successfully done.")
 
@@ -232,14 +236,18 @@ async def on_reply_m(c: AndroidRepo, m: Message):
         request = request[0]
         user_id = request.user
         request_id = request.request_id
-        await c.send_message(
-            chat_id=user_id,
-            text=f"""
+        try:
+            await c.send_message(
+                chat_id=user_id,
+                text=f"""
 <b>Answer to your request</b>:
     <b>ID</b>: <code>{request_id}</code>
     <b>Answer</b>: <code>{answer}</code>
         """,
-        )
+            )
+        except UserIsBlocked:
+            await m.reply_text("The user has blocked the bot!")
+            return
     else:
         m.continue_propagation()
 
