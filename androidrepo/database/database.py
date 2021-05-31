@@ -30,6 +30,7 @@ class Modules(Model):
     url = fields.TextField()
     name = fields.TextField()
     version = fields.TextField()
+    version_code = fields.IntField()
     last_update = fields.IntField()
 
 
