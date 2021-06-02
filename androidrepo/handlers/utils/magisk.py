@@ -68,10 +68,9 @@ async def check_modules(c: Client):
                         )
                         continue
                     _module = _module[0]
-                    if (
-                        not _module.version_code == module["versionCode"]
-                        or _module.version == module["version"]
-                    ):
+                    if not _module.version == module["version"] or not int(
+                        _module.version_code
+                    ) == int(module["versionCode"]):
                         updated_modules.append(module)
                         await asyncio.sleep(2)
                         await update_module(c, module)
