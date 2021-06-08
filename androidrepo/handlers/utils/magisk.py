@@ -246,7 +246,7 @@ async def update_module(c: Client, module: Dict):
         {
             "description": module["description"],
             "name": module["name"],
-            "versionCode": module["versionCode"],
+            "version_code": module["versionCode"],
             "version": module["version"],
             "last_update": module["last_update"],
         }
