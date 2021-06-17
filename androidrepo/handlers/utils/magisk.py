@@ -172,7 +172,7 @@ async def parse_module(to_parse: Dict) -> Dict:
         lines = data.split("\n")
         for line in lines:
             try:
-                key, value = line.split("=")
+                key, value = line.split("=", 1)
                 if key in [
                     "api",
                     "author",
