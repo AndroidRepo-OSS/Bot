@@ -2,7 +2,7 @@
 name = "androidrepo"
 version = "1.0.0"
 description = "The official bot of AndroidRepo @ Telegram"
-authors = ["Hitalo <contacyt@amanoteam.com>"]
+authors = ["Hitalo <contact@amanoteam.com>"]
 license = "GPLv3+"
 readme = "README.md"
 repository = "https://github.com/AmanoTeam/AndroidRepo"
@@ -34,9 +34,8 @@ meval = "2.5"
 rich = "10.7.0"
 TgCrypto = "1.2.2"
 tortoise-orm = "0.17.6"
-pyromod = "1.5"
-Pyrogram = "1.2.9"
 aiocron = "1.6"
+pyrogram = {git = "https://github.com/AmanoTeam/pyrogram"}
 
 [tool.poetry.dev-dependencies]
 black = "^21.7b0"

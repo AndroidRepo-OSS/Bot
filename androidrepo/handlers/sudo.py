@@ -18,6 +18,7 @@ import asyncio
 import io
 import os
 import platform
+import signal
 import sys
 import traceback
 from datetime import datetime
@@ -25,7 +26,6 @@ from typing import Dict
 
 import kantex
 import pyrogram
-import pyromod
 from kantex.html import Bold, Code, KanTeXDocument, KeyValueItem, Section, SubSection
 from meval import meval
 from pyrogram import filters
@@ -134,7 +134,7 @@ async def on_upgrade_cq(c: AndroidRepo, cq: CallbackQuery):
 @AndroidRepo.on_message(filters.sudo & filters.cmd("shutdown"))
 async def on_shutdown_m(c: AndroidRepo, m: Message):
     await m.reply_text("Goodbye...")
-    sys.exit()
+    os.kill(os.getpid(), signal.SIGINT)
 
 
 @AndroidRepo.on_message(filters.cmd("(sh(eel)?|term(inal)?) ") & filters.user(OWNER_ID))
@@ -231,7 +231,6 @@ async def on_info_m(c: AndroidRepo, m: Message):
                 KeyValueItem(Bold("KanTeX"), kantex.__version__),
                 KeyValueItem(Bold("Python"), platform.python_version()),
                 KeyValueItem(Bold("Pyrogram"), pyrogram.__version__),
-                KeyValueItem(Bold("Pyromod"), pyromod.__version__),
                 KeyValueItem(Bold("Source"), source_url),
                 KeyValueItem(Bold("System"), c.system_version),
             ),

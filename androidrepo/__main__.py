@@ -16,16 +16,13 @@
 
 import logging
 
-from pyrogram import idle
 from pyrogram.session import Session
 from rich import box
 from rich import print as rprint
 from rich.logging import RichHandler
 from rich.panel import Panel
-from tortoise import run_async
 
 from androidrepo.androidrepo import AndroidRepo
-from androidrepo.database import connect_database
 
 # Logging colorized by rich
 FORMAT = "%(message)s"
@@ -63,15 +60,8 @@ rprint(Panel.fit(header, border_style="white", box=box.ASCII))
 Session.notice_displayed = True
 
 
-async def main() -> None:
-    await connect_database()
-
-    await AndroidRepo().start()
-    await idle()
-
-
 if __name__ == "__main__":
     try:
-        run_async(main())
+        AndroidRepo().run()
     except KeyboardInterrupt:
         log.warning("Forced stop... Bye!")

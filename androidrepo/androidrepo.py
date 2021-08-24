@@ -14,20 +14,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import asyncio
 import logging
 import platform
 from typing import BinaryIO, List, Union
 
 import aiocron
 import pyrogram
-import pyromod
 from pyrogram import Client
 from pyrogram.errors import BadRequest, MessageDeleteForbidden
+from pyrogram.helpers import ikb
 from pyrogram.raw.all import layer
 from pyrogram.types import User
-from pyromod import listen
-from pyromod.helpers import ikb
+from tortoise import Tortoise
 
 import androidrepo
 from androidrepo.config import (
@@ -38,6 +36,7 @@ from androidrepo.config import (
     STAFF_ID,
     SUDO_USERS,
 )
+from androidrepo.database.database import connect_database
 from androidrepo.handlers.utils.magisk import check_magisk, check_modules
 from androidrepo.utils import filters, modules
 
@@ -61,6 +60,7 @@ class AndroidRepo(Client):
 
     async def start(self):
         await super().start()
+        await connect_database()
 
         # Misc monkeypatch
         self.me = await self.get_me()
@@ -79,7 +79,6 @@ class AndroidRepo(Client):
         start_message = (
             f"<b>AndroidRepo <code>v{androidrepo.__version__}</code> started...</b>\n"
             f"- <b>Pyrogram:</b> <code>v{pyrogram.__version__}</code>\n"
-            f"- <b>Pyromod:</b> <code>v{pyromod.__version__}</code>\n"
             f"- <b>Python:</b> <code>v{platform.python_version()}</code>\n"
             f"- <b>System:</b> <code>{self.system_version}</code>"
         )
@@ -98,6 +97,7 @@ class AndroidRepo(Client):
             await check_magisk(self, "canary")
 
     async def stop(self, *args):
+        await Tortoise.close_connections()
         await super().stop()
         log.info("AndroidRepo stopped... Bye.")
 
