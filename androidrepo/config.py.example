@@ -7,7 +7,7 @@ BOT_TOKEN: str = ""
 PREFIXES: List[str] = ["/", "!"]
 
 OWNER_ID: int = 918317361
-SUDO_USERS List[int] = []
+SUDO_USERS: List[int] = []
 SUDO_USERS.append(OWNER)
 
 CHANNEL_ID: int = 0

@@ -45,6 +45,15 @@ logging.getLogger("aiodown").setLevel(logging.WARNING)
 log = logging.getLogger("rich")
 
 
+# Use uvloop to improve speed if available
+try:
+    import uvloop
+
+    uvloop.install()
+except ImportError:
+    log.warning("uvloop is not installed and therefore will be disabled.")
+
+
 # Beautiful init with rich
 header = ":rocket: [bold green]AndroidRepo Running...[/bold green] :rocket:"
 rprint(Panel.fit(header, border_style="white", box=box.ASCII))
