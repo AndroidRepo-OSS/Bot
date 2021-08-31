@@ -33,7 +33,7 @@ python-rapidjson = "1.4"
 meval = "2.5"
 rich = "10.9.0"
 TgCrypto = "1.2.2"
-tortoise-orm = "0.17.6"
+tortoise-orm = "0.17.7"
 aiocron = "1.6"
 pyrogram = {git = "https://github.com/AmanoTeam/pyrogram"}
 
