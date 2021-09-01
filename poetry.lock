@@ -1,6 +1,6 @@
 [[package]]
 name = "aiocron"
-version = "1.6"
+version = "1.7"
 description = "Crontabs for asyncio"
 category = "main"
 optional = false
@@ -532,14 +532,6 @@ accel = ["ciso8601 (>=2.1.2,<3.0.0)", "python-rapidjson", "uvloop (>=0.14.0,<0.1
 
 [[package]]
 name = "typing-extensions"
-version = "3.10.0.0"
-description = "Backported and Experimental Type Hints for Python 3.5+"
-category = "main"
-optional = false
-python-versions = "*"
-
-[[package]]
-name = "typing-extensions"
 version = "3.10.0.2"
 description = "Backported and Experimental Type Hints for Python 3.5+"
 category = "main"
@@ -571,12 +563,12 @@ test = ["pytest-mock (>=3.3)", "pytest (>=4.3)"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
-content-hash = "9734cfa4fb8992ce68e53735e943d5fe559165aa7f6e67d4c2076d173201a33c"
+content-hash = "dc2e1842871ac12409e1020917ddf10d278cb218e29929ad98b29cb9189acd92"
 
 [metadata.files]
 aiocron = [
-    {file = "aiocron-1.6-py3-none-any.whl", hash = "sha256:ab451380199ef09757f95085220cd34bf6970239bdb77863e3413ee08297fcc5"},
-    {file = "aiocron-1.6.tar.gz", hash = "sha256:21f00288e9993f4e44ae2e51d4301b7822512962fc900b59317d11299c125a6a"},
+    {file = "aiocron-1.7-py3-none-any.whl", hash = "sha256:f06d7b84b86d6cb7156c01e640b4122da86afaa4873c6bcf79e57c4762e48789"},
+    {file = "aiocron-1.7.tar.gz", hash = "sha256:ad7d3b9bd88897934ffd18937ff235ab9fb01358280fd40e01461fd5f76348bd"},
 ]
 aiodown = [
     {file = "aiodown-1.0.5-py3-none-any.whl", hash = "sha256:6142e1951e7fe5c9eee0cacd1f92ccf19115242ab024172690cd1280ae0a6b81"},
@@ -868,9 +860,6 @@ tortoise-orm = [
     {file = "tortoise_orm-0.17.7-py3-none-any.whl", hash = "sha256:36bb0d1f9bd800d3b91d5490cfc13a598c0e0f570a638b185bc4976abfabd135"},
 ]
 typing-extensions = [
-    {file = "typing_extensions-3.10.0.0-py2-none-any.whl", hash = "sha256:0ac0f89795dd19de6b97debb0c6af1c70987fd80a2d62d1958f7e56fcc31b497"},
-    {file = "typing_extensions-3.10.0.0-py3-none-any.whl", hash = "sha256:779383f6086d90c99ae41cf0ff39aac8a7937a9283ce0a414e5dd782f4c94a84"},
-    {file = "typing_extensions-3.10.0.0.tar.gz", hash = "sha256:50b6f157849174217d0656f99dc82fe932884fb250826c18350e159ec6cdf342"},
     {file = "typing_extensions-3.10.0.2-py2-none-any.whl", hash = "sha256:d8226d10bc02a29bcc81df19a26e56a9647f8b0a6d4a83924139f4a8b01f17b7"},
     {file = "typing_extensions-3.10.0.2-py3-none-any.whl", hash = "sha256:f1d25edafde516b146ecd0613dabcc61409817af4766fbbcfb8d1ad4ec441a34"},
     {file = "typing_extensions-3.10.0.2.tar.gz", hash = "sha256:49f75d16ff11f1cd258e1b988ccff82a3ca5570217d7ad8c5f48205dd99a677e"},
