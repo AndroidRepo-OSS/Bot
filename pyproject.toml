@@ -34,7 +34,7 @@ meval = "2.5"
 rich = "10.9.0"
 TgCrypto = "1.2.2"
 tortoise-orm = "0.17.7"
-aiocron = "1.6"
+aiocron = "1.7"
 pyrogram = {git = "https://github.com/AmanoTeam/pyrogram"}
 
 [tool.poetry.dev-dependencies]
