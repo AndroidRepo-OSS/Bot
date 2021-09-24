@@ -31,7 +31,7 @@ httpx = {version = "0.19.0", extras = ["http2"]}
 kantex = "0.2.0"
 python-rapidjson = "1.4"
 meval = "2.5"
-rich = "10.10.0"
+rich = "10.11.0"
 TgCrypto = "1.2.2"
 tortoise-orm = "0.17.7"
 aiocron = "1.7"
