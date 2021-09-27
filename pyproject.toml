@@ -24,7 +24,7 @@ exclude = ["androidrepo/config.py", "androidrepo/bot.session", "androidrepo/bot.
 "Community" = "https://t.me/AndroidRepo_chat"
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.8"
 aiodown = "1.0.5"
 beautifulsoup4 = "4.10.0"
 httpx = {version = "0.19.0", extras = ["http2"]}
@@ -40,6 +40,26 @@ pyrogram = {git = "https://github.com/AmanoTeam/pyrogram"}
 [tool.poetry.dev-dependencies]
 black = "^21.9b0"
 flake8 = "^3.9.2"
+
+[tool.black]
+exclude = '''
+/(
+    \.git
+  | \.pytest_cache
+  | \.vscode
+  | \.mypy_cache
+  | \.tox
+  | venv
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

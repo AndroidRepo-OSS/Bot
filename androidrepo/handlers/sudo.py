@@ -66,21 +66,18 @@ async def on_upgrade_m(c: AndroidRepo, m: Message):
     )
     stdout = (await proc.communicate())[0].decode()
     if proc.returncode == 0:
-        if len(stdout) > 0:
-            changelog = "<b>Changelog</b>:\n"
-            commits = parse_commits(stdout)
-            for hash, commit in commits.items():
-                changelog += f"  - [<code>{hash[:7]}</code>] {commit['title']}\n"
-            changelog += f"\n<b>New commits count</b>: <code>{len(commits)}</code>."
-            keyboard = [[("🆕 Upgrade", "upgrade")]]
-            await sm.edit_text(changelog, reply_markup=c.ikb(keyboard))
-        else:
+        if len(stdout) <= 0:
             return await sm.edit_text("There is nothing to update.")
+        changelog = "<b>Changelog</b>:\n"
+        commits = parse_commits(stdout)
+        for hash, commit in commits.items():
+            changelog += f"  - [<code>{hash[:7]}</code>] {commit['title']}\n"
+        changelog += f"\n<b>New commits count</b>: <code>{len(commits)}</code>."
+        keyboard = [[("🆕 Upgrade", "upgrade")]]
+        await sm.edit_text(changelog, reply_markup=c.ikb(keyboard))
     else:
-        error = ""
         lines = stdout.split("\n")
-        for line in lines:
-            error += f"<code>{line}</code>\n"
+        error = "".join(f"<code>{line}</code>\n" for line in lines)
         await sm.edit_text(
             f"Update failed (process exited with {proc.returncode}):\n{error}"
         )
@@ -100,10 +97,9 @@ def parse_commits(log: str) -> Dict:
                     commits[last_commit]["message"] = line[4:]
                 else:
                     commits[last_commit]["title"] = line[4:]
-            else:
-                if ":" in line:
-                    key, value = line.split(": ")
-                    commits[last_commit][key] = value
+            elif ":" in line:
+                key, value = line.split(": ")
+                commits[last_commit][key] = value
     return commits
 
 
@@ -122,10 +118,8 @@ async def on_upgrade_cq(c: AndroidRepo, cq: CallbackQuery):
         args = [sys.executable, "-m", "androidrepo"]
         os.execv(sys.executable, args)
     else:
-        error = ""
         lines = stdout.split("\n")
-        for line in lines:
-            error += f"<code>{line}</code>\n"
+        error = "".join(f"<code>{line}</code>\n" for line in lines)
         await sent.edit_text(
             f"Update failed (process exited with {proc.returncode}):\n{error}"
         )
@@ -148,10 +142,8 @@ async def on_terminal_m(c: AndroidRepo, m: Message):
         stderr=asyncio.subprocess.STDOUT,
     )
     stdout = (await proc.communicate())[0]
-    output = ""
     lines = stdout.decode().split("\n")
-    for line in lines:
-        output += f"<code>{line}</code>\n"
+    output = "".join(f"<code>{line}</code>\n" for line in lines)
     output_message = f"<b>Input\n&gt;</b> <code>{code}</code>\n\n"
     if len(output) > 0:
         if len(output) > (4096 - len(output_message)):
@@ -159,7 +151,9 @@ async def on_terminal_m(c: AndroidRepo, m: Message):
                 (output.replace("<code>", "").replace("</code>", "")).encode()
             )
             document.name = "output.txt"
-            await c.send_document(chat_id=m.chat.id, document=document)
+            await c.send_document(
+                chat_id=m.chat.id, document=document, reply_to_message_id=m.message_id
+            )
         else:
             output_message += f"<b>Output\n&gt;</b> {output}"
     await sm.edit_text(output_message)
@@ -178,10 +172,8 @@ async def on_eval_m(c: AndroidRepo, m: Message):
             f"An error occurred while running the code:\n<code>{error}</code>"
         )
         return
-    output = ""
     lines = str(stdout).split("\n")
-    for line in lines:
-        output += f"<code>{line}</code>\n"
+    output = "".join(f"<code>{line}</code>\n" for line in lines)
     output_message = f"<b>Input\n&gt;</b> <code>{eval_code}</code>\n\n"
     if len(output) > 0:
         if len(output) > (4096 - len(output_message)):
@@ -189,7 +181,9 @@ async def on_eval_m(c: AndroidRepo, m: Message):
                 (output.replace("<code>", "").replace("</code>", "")).encode()
             )
             document.name = "output.txt"
-            await c.send_document(chat_id=m.chat.id, document=document)
+            await c.send_document(
+                chat_id=m.chat.id, document=document, reply_to_message_id=m.message_id
+            )
         else:
             output_message += f"<b>Output\n&gt;</b> {output}"
     await sm.edit_text(output_message)

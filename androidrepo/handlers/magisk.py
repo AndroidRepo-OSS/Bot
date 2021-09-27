@@ -22,6 +22,7 @@ from pyrogram import filters
 from pyrogram.types import Message
 
 from androidrepo.handlers.utils.magisk import get_changelog, get_magisk, get_modules
+from androidrepo.utils import httpx_timeout
 
 from ..androidrepo import AndroidRepo
 
@@ -35,11 +36,7 @@ async def on_magisk_m(c: AndroidRepo, m: Message):
 
     sm = await m.reply("Checking...")
 
-    if len(m_type) < 1:
-        m_type = "stable"
-    else:
-        m_type = m_type[1:]
-
+    m_type = "stable" if len(m_type) < 1 else m_type[1:]
     m_type = m_type.lower()
 
     if m_type not in TYPES:
@@ -47,7 +44,7 @@ async def on_magisk_m(c: AndroidRepo, m: Message):
         return
 
     RAW_URL = "https://github.com/topjohnwu/magisk-files/raw/master"
-    async with httpx.AsyncClient(http2=True, timeout=10.0) as client:
+    async with httpx.AsyncClient(http2=True, timeout=httpx_timeout) as client:
         response = await client.get(f"{RAW_URL}/{m_type}.json")
         data = json.loads(response.read())
 

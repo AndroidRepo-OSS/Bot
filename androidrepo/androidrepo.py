@@ -21,7 +21,7 @@ from typing import BinaryIO, List, Union
 import aiocron
 import pyrogram
 from pyrogram import Client
-from pyrogram.errors import BadRequest, MessageDeleteForbidden
+from pyrogram.errors import BadRequest, ChatWriteForbidden, MessageDeleteForbidden
 from pyrogram.helpers import ikb
 from pyrogram.raw.all import layer
 from pyrogram.types import User
@@ -38,7 +38,7 @@ from androidrepo.config import (
 )
 from androidrepo.database.database import connect_database
 from androidrepo.handlers.utils.magisk import check_magisk, check_modules
-from androidrepo.utils import filters, modules
+from androidrepo.utils import modules
 
 log = logging.getLogger(__name__)
 
@@ -71,8 +71,8 @@ class AndroidRepo(Client):
             f"AndroidRepo for Pyrogram v{pyrogram.__version__} (Layer {layer}) started on @{self.me.username}. Hi."
         )
 
-        # Built-in modules and filters system
-        filters.load(self)
+        # Built-in modules load system
+        log.info("Loading modules.")
         modules.load(self)
 
         # Startup message
@@ -85,7 +85,7 @@ class AndroidRepo(Client):
         try:
             for user in self.is_sudo:
                 await self.send_message(chat_id=user, text=start_message)
-        except BadRequest:
+        except (BadRequest, ChatWriteForbidden):
             log.warning("Unable to send the startup message to the SUDO_USERS")
 
         # Sync Magisk every 1h

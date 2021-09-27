@@ -1,3 +1,4 @@
+"""Android Repository Telegram Bot utilities."""
 # This file is part of AndroidRepo (Telegram Bot)
 # Copyright (C) 2021 AmanoTeam
 
@@ -14,12 +15,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from pyrogram import filters
-from pyrogram.types import Message
+from typing import List
 
-from ..androidrepo import AndroidRepo
+import httpx
 
+from . import filters
 
-@AndroidRepo.on_message(filters.edited)
-async def on_reject_m(c: AndroidRepo, m: Message):
-    m.stop_propagation()
+__all__: List[str] = ["filters"]
+httpx_timeout = httpx.Timeout(40, pool=None)

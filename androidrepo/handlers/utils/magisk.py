@@ -30,12 +30,13 @@ from pyrogram.types import Message
 
 from androidrepo import config
 from androidrepo.database import Magisk, Modules
+from androidrepo.utils import httpx_timeout
 
-DOWNLOAD_DIR: str = "./downloads/"
-MODULES_URL: str = (
+DOWNLOAD_DIR = "./downloads/"
+MODULES_URL = (
     "https://github.com/Magisk-Modules-Repo/submission/raw/modules/modules.json"
 )
-MAGISK_URL: str = "https://github.com/topjohnwu/magisk-files/raw/master/{}.json"
+MAGISK_URL = "https://github.com/topjohnwu/magisk-files/raw/master/{}.json"
 
 
 async def check_modules(c: Client):
@@ -47,39 +48,38 @@ async def check_modules(c: Client):
     updated_modules = []
     excluded_modules = []
     try:
-        async with httpx.AsyncClient(http2=True, timeout=10.0) as client:
+        async with httpx.AsyncClient(http2=True, timeout=httpx_timeout) as client:
             response = await client.get(MODULES_URL)
             data = response.json()
             last_update = data["last_update"]
-            if not config.LAST_UPDATE == last_update:
-                config.LAST_UPDATE = last_update
-                modules = data["modules"]
-                for module in modules:
-                    module = await parse_module(module)
-                    _module = await Modules.filter(id=module["id"])
-                    if len(_module) < 1:
-                        await Modules.create(
-                            id=module["id"],
-                            url=module["url"],
-                            name=module["name"],
-                            version=module["version"],
-                            version_code=module["versionCode"],
-                            last_update=module["last_update"],
-                        )
-                        continue
-                    _module = _module[0]
-                    if not _module.version == module["version"] or not int(
-                        _module.version_code
-                    ) == int(module["versionCode"]):
-                        updated_modules.append(module)
-                        await asyncio.sleep(2)
-                        await update_module(c, module)
-            else:
+            if config.LAST_UPDATE == last_update:
                 return await sent.edit_text(
                     f"<b>No updates were detected.</b>\n\n"
                     f"<b>Date</b>: <code>{date}</code>\n"
                     "#Sync #Magisk #Modules"
                 )
+            config.LAST_UPDATE = last_update
+            modules = data["modules"]
+            for module in modules:
+                module = await parse_module(module)
+                _module = await Modules.filter(id=module["id"])
+                if len(_module) < 1:
+                    await Modules.create(
+                        id=module["id"],
+                        url=module["url"],
+                        name=module["name"],
+                        version=module["version"],
+                        version_code=module["versionCode"],
+                        last_update=module["last_update"],
+                    )
+                    continue
+                _module = _module[0]
+                if _module.version != module["version"] or int(
+                    _module.version_code
+                ) != int(module["versionCode"]):
+                    updated_modules.append(module)
+                    await asyncio.sleep(2)
+                    await update_module(c, module)
     except httpx.ReadTimeout:
         return await sent.edit_text(
             "<b>Check timeout...</b>\n"
@@ -166,7 +166,7 @@ async def parse_module(to_parse: Dict) -> Dict:
         "url": to_parse["zip_url"],
         "last_update": to_parse["last_update"],
     }
-    async with httpx.AsyncClient(http2=True, timeout=10.0) as client:
+    async with httpx.AsyncClient(http2=True, timeout=httpx_timeout) as client:
         response = await client.get(to_parse["prop_url"])
         data = response.read().decode()
         lines = data.split("\n")
@@ -256,7 +256,7 @@ async def update_module(c: Client, module: Dict):
 
 async def get_changelog(url: str) -> str:
     changelog = ""
-    async with httpx.AsyncClient(http2=True, timeout=10.0) as client:
+    async with httpx.AsyncClient(http2=True, timeout=httpx_timeout) as client:
         response = await client.get(url)
         data = response.read()
         lines = data.decode().split("\n")
@@ -285,7 +285,7 @@ async def check_magisk(c: Client, m_type: str = "stable"):
         return
 
     URL = MAGISK_URL.format(m_type)
-    async with httpx.AsyncClient(http2=True, timeout=10.0) as client:
+    async with httpx.AsyncClient(http2=True, timeout=httpx_timeout) as client:
         response = await client.get(URL)
         data = response.json()
         magisk = data["magisk"]
