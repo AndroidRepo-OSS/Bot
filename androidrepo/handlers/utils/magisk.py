@@ -274,16 +274,17 @@ async def get_changelog(url: str) -> str:
     return changelog
 
 
-async def check_magisk(c: Client, m_type: str = "stable"):
+async def check_magisk(c: Client):
+    TYPES: List[str] = ["stable", "canary"]
+    for magisk in TYPES:
+        await update_magisk(c, magisk)
+
+
+async def update_magisk(c: Client, m_type: str):
     date = datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
     sent = await c.send_log_message(
         config.LOGS_ID, "<b>Magisk Releases check started...</b>"
     )
-
-    TYPES: List[str] = ["beta", "stable", "canary"]
-    if m_type not in TYPES:
-        return
-
     URL = MAGISK_URL.format(m_type)
     async with httpx.AsyncClient(http2=True, timeout=httpx_timeout) as client:
         response = await client.get(URL)
@@ -325,7 +326,9 @@ async def check_magisk(c: Client, m_type: str = "stable"):
         text = f"<b>Magisk {'v' if magisk['version'][0].isdecimal() else ''}{magisk['version']} ({magisk['versionCode']})</b>\n\n"
         text += f"⚡<i>Magisk {m_type.capitalize()}</i>\n"
         text += "⚡<i>Magisk is a suite of open source software for customizing Android, supporting devices higher than Android 5.0.</i>\n"
-        text += "⚡️<a href='https://github.com/topjohnwu/Magisk'>GitHub Repository</a>\n"
+        text += (
+            "⚡️<a href='https://github.com/topjohnwu/Magisk'>GitHub Repository</a>\n"
+        )
         if m_type == "canary":
             changelog = await get_changelog(magisk["note"])
             text += "\n⚙️<b>Changelog</b>"

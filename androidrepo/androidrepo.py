@@ -90,11 +90,9 @@ class AndroidRepo(Client):
 
         # Sync Magisk every 1h
         @aiocron.crontab("0 * * * *")
-        async def magisk_sync():
+        async def magisk_sync() -> None:
             await check_modules(self)
-            await check_magisk(self, "stable")
-            # await check_magisk(self, "beta")
-            await check_magisk(self, "canary")
+            await check_magisk(self)
 
     async def stop(self, *args):
         await Tortoise.close_connections()
