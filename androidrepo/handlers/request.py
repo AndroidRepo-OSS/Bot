@@ -134,7 +134,7 @@ async def on_ignore_m(c: AndroidRepo, m: Message):
         text_splited = m.text.split()
         if len(text_splited) > 1:
             user = text_splited[1]
-        elif not len(text_splited):
+        elif not text_splited:
             return await m.reply_text("Specify someone.")
 
     if not isinstance(user, User):
@@ -173,7 +173,7 @@ async def on_unignore_m(c: AndroidRepo, m: Message):
         text_splited = m.text.split()
         if len(text_splited) > 1:
             user = text_splited[1]
-        elif not len(text_splited):
+        elif not text_splited:
             return await m.reply_text("Specify someone.")
 
     if not isinstance(user, User):
