@@ -523,7 +523,7 @@ python-versions = ">=3.6"
 
 [[package]]
 name = "tortoise-orm"
-version = "0.17.7"
+version = "0.17.8"
 description = "Easy async ORM for python, built with relations in mind"
 category = "main"
 optional = false
@@ -575,7 +575,7 @@ test = ["pytest-mock (>=3.3)", "pytest (>=4.3)"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "5ce5887cb97ef8d11e71b0f882bb326b8c9cf23c6e1bde0000744fdd4054d697"
+content-hash = "c4f669be315ba22fdc43704e716c68e9fcf7471cb02d1f5362786c8be9f47e22"
 
 [metadata.files]
 aiocron = [
@@ -885,8 +885,8 @@ tomli = [
     {file = "tomli-1.2.1.tar.gz", hash = "sha256:a5b75cb6f3968abb47af1b40c1819dc519ea82bcc065776a866e8d74c5ca9442"},
 ]
 tortoise-orm = [
-    {file = "tortoise-orm-0.17.7.tar.gz", hash = "sha256:74d5c6341fc0e2d4ef7a321f460107715da2679a2b3e2a48e32e276ed7bd3fc0"},
-    {file = "tortoise_orm-0.17.7-py3-none-any.whl", hash = "sha256:36bb0d1f9bd800d3b91d5490cfc13a598c0e0f570a638b185bc4976abfabd135"},
+    {file = "tortoise-orm-0.17.8.tar.gz", hash = "sha256:1f5020e9964d32a4d6ed685d466b5d7285de328a63ee92ee988c1e4baf8fefbf"},
+    {file = "tortoise_orm-0.17.8-py3-none-any.whl", hash = "sha256:f18c41bb83be4748a6ca259ed7309ca954b35f5790971824bbc79a11d2b1ef3b"},
 ]
 typing-extensions = [
     {file = "typing_extensions-3.10.0.2-py2-none-any.whl", hash = "sha256:d8226d10bc02a29bcc81df19a26e56a9647f8b0a6d4a83924139f4a8b01f17b7"},
