@@ -34,7 +34,6 @@ from pyrogram.types import CallbackQuery, Message
 import androidrepo
 from androidrepo.config import OWNER_ID
 from androidrepo.database import Modules
-from androidrepo.utils import modules
 
 from ..androidrepo import AndroidRepo
 
@@ -240,7 +239,7 @@ async def on_info_m(c: AndroidRepo, m: Message):
 async def modules_reload(c: AndroidRepo, m: Message):
     sent = await m.reply_text("<b>Reloading modules...</b>")
     first = datetime.now()
-    modules.reload(c)
+    c.reload_plugins()
     second = datetime.now()
     time = (second - first).microseconds / 1000
     await sent.edit_text(f"<b>Modules reloaded in</b> <code>{time}ms</code>!")

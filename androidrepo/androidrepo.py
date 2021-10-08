@@ -38,7 +38,6 @@ from androidrepo.config import (
 )
 from androidrepo.database.database import connect_database
 from androidrepo.handlers.utils.magisk import check_magisk, check_modules
-from androidrepo.utils import modules
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +54,8 @@ class AndroidRepo(Client):
             bot_token=BOT_TOKEN,
             parse_mode="html",
             workers=24,
+            workdir="androidrepo",
+            plugins={"root": "androidrepo.handlers"},
             sleep_threshold=180,
         )
 
@@ -70,10 +71,6 @@ class AndroidRepo(Client):
         log.info(
             f"AndroidRepo for Pyrogram v{pyrogram.__version__} (Layer {layer}) started on @{self.me.username}. Hi."
         )
-
-        # Built-in modules load system
-        log.info("Loading modules.")
-        modules.load(self)
 
         # Startup message
         start_message = (
