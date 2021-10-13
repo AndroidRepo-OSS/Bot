@@ -48,7 +48,9 @@ async def check_modules(c: Client):
     updated_modules = []
     excluded_modules = []
     try:
-        async with httpx.AsyncClient(http2=True, timeout=httpx_timeout) as client:
+        async with httpx.AsyncClient(
+            http2=True, timeout=httpx_timeout, follow_redirects=True
+        ) as client:
             response = await client.get(MODULES_URL)
             data = response.json()
             last_update = data["last_update"]
@@ -166,7 +168,9 @@ async def parse_module(to_parse: Dict) -> Dict:
         "url": to_parse["zip_url"],
         "last_update": to_parse["last_update"],
     }
-    async with httpx.AsyncClient(http2=True, timeout=httpx_timeout) as client:
+    async with httpx.AsyncClient(
+        http2=True, timeout=httpx_timeout, follow_redirects=True
+    ) as client:
         response = await client.get(to_parse["prop_url"])
         data = response.read().decode()
         lines = data.split("\n")
@@ -286,7 +290,9 @@ async def update_magisk(c: Client, m_type: str):
         config.LOGS_ID, "<b>Magisk Releases check started...</b>"
     )
     URL = MAGISK_URL.format(m_type)
-    async with httpx.AsyncClient(http2=True, timeout=httpx_timeout) as client:
+    async with httpx.AsyncClient(
+        http2=True, timeout=httpx_timeout, follow_redirects=True
+    ) as client:
         response = await client.get(URL)
         data = response.json()
         magisk = data["magisk"]

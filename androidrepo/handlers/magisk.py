@@ -44,7 +44,9 @@ async def on_magisk_m(c: AndroidRepo, m: Message):
         return
 
     RAW_URL = "https://github.com/topjohnwu/magisk-files/raw/master"
-    async with httpx.AsyncClient(http2=True, timeout=httpx_timeout) as client:
+    async with httpx.AsyncClient(
+        http2=True, timeout=httpx_timeout, follow_redirects=True
+    ) as client:
         response = await client.get(f"{RAW_URL}/{m_type}.json")
         data = json.loads(response.read())
 
