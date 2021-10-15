@@ -10,6 +10,8 @@ OWNER_ID: int = 918317361
 SUDO_USERS: List[int] = []
 SUDO_USERS.append(OWNER)
 
+SENTRY_KEY: str = ""
+
 CHANNEL_ID: int = 0
 CHAT_ID: int = 0
 STAFF_ID: int = 0

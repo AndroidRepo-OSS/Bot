@@ -20,6 +20,7 @@ from typing import BinaryIO, List, Union
 
 import aiocron
 import pyrogram
+import sentry_sdk
 from pyrogram import Client
 from pyrogram.errors import BadRequest, ChatWriteForbidden, MessageDeleteForbidden
 from pyrogram.helpers import ikb
@@ -33,6 +34,7 @@ from androidrepo.config import (
     API_ID,
     BOT_TOKEN,
     CHANNEL_ID,
+    SENTRY_KEY,
     STAFF_ID,
     SUDO_USERS,
 )
@@ -45,6 +47,7 @@ log = logging.getLogger(__name__)
 class AndroidRepo(Client):
     def __init__(self):
         name = self.__class__.__name__.lower()
+        self.is_sudo = SUDO_USERS
 
         super().__init__(
             session_name=name,
@@ -65,8 +68,13 @@ class AndroidRepo(Client):
 
         # Misc monkeypatch
         self.me = await self.get_me()
-        self.is_sudo = SUDO_USERS
         self.ikb = ikb
+
+        if not SENTRY_KEY or SENTRY_KEY == "":
+            log.warning("No sentry.io key found! Service not initialized.")
+        else:
+            log.info("Starting sentry.io service.")
+            sentry_sdk.init(SENTRY_KEY, traces_sample_rate=1.0)
 
         log.info(
             f"AndroidRepo for Pyrogram v{pyrogram.__version__} (Layer {layer}) started on @{self.me.username}. Hi."

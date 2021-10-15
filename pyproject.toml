@@ -36,6 +36,7 @@ TgCrypto = "1.2.2"
 tortoise-orm = "0.17.8"
 aiocron = "1.7"
 pyrogram = {git = "https://github.com/AmanoTeam/pyrogram"}
+sentry-sdk = "1.4.3"
 
 [tool.poetry.dev-dependencies]
 black = "^21.9b0"
