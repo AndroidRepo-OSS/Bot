@@ -25,7 +25,6 @@ exclude = ["androidrepo/config.py", "androidrepo/bot.session", "androidrepo/bot.
 
 [tool.poetry.dependencies]
 python = "^3.8"
-aiodown = "1.0.5"
 beautifulsoup4 = "4.10.0"
 httpx = {version = "0.20.0", extras = ["http2"]}
 kantex = "0.2.0"
@@ -37,6 +36,7 @@ tortoise-orm = "0.17.8"
 aiocron = "1.7"
 pyrogram = {git = "https://github.com/AmanoTeam/pyrogram"}
 sentry-sdk = "1.4.3"
+aiodown = {git = "https://github.com/AmanoTeam/aiodown", rev = "main"}
 
 [tool.poetry.dev-dependencies]
 black = "^21.9b0"
