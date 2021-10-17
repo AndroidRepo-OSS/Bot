@@ -233,13 +233,3 @@ async def on_info_m(c: AndroidRepo, m: Message):
         )
     )
     await m.reply_text(doc, disable_web_page_preview=True)
-
-
-@AndroidRepo.on_message(filters.sudo & filters.cmd("reload"))
-async def modules_reload(c: AndroidRepo, m: Message):
-    sent = await m.reply_text("<b>Reloading modules...</b>")
-    first = datetime.now()
-    c.reload_plugins()
-    second = datetime.now()
-    time = (second - first).microseconds / 1000
-    await sent.edit_text(f"<b>Modules reloaded in</b> <code>{time}ms</code>!")
