@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import html
 from typing import Union
 
 from pyrogram import filters
@@ -26,7 +27,7 @@ from ..androidrepo import AndroidRepo
 @AndroidRepo.on_callback_query(filters.regex("^start_back$"))
 async def start(c: AndroidRepo, m: Union[Message, CallbackQuery]):
     keyboard = []
-    text = "Hi, I'm the <b>official Android Repository Bot</b>."
+    text = f"Hi <b>{html.escape(m.from_user.first_name)}</b>, I am the <b>official bot of the Android Repository channel</b>."
     keyboard.append(
         [
             ("💬 Group", "https://t.me/AndroidRepo_chat", "url"),
@@ -60,14 +61,27 @@ async def start(c: AndroidRepo, m: Union[Message, CallbackQuery]):
         )
 
 
-@AndroidRepo.on_message(filters.cmd("help") & filters.private)
+@AndroidRepo.on_message(filters.cmd("help"))
 @AndroidRepo.on_callback_query(filters.regex("^help$"))
 async def on_help(c: AndroidRepo, m: Union[Message, CallbackQuery]):
-    keyboard = [
-        [("🔧 Utilities", "help_commands"), ("💭 Requests", "help_requests")],
-        [("🔙 Back", "start_back")],
-    ]
-    text = "Choose a category for help!"
+    chat_type = m.chat.type if isinstance(m, Message) else m.message.chat.type
+    if chat_type == "private":
+        keyboard = [
+            [("🔧 Utilities", "help_commands"), ("💭 Requests", "help_requests")],
+            [("🔙 Back", "start_back")],
+        ]
+        text = "Choose a category for help!"
+    else:
+        keyboard = [
+            [
+                (
+                    "Click here for help!",
+                    f"http://t.me/{c.me.username}?start",
+                    "url",
+                )
+            ]
+        ]
+        text = "I am the <b>official bot of the Android Repository channel</b>, click the button below to find out what I can do for you."
     if isinstance(m, Message):
         await m.reply_text(
             text,
