@@ -41,7 +41,7 @@ async def start(c: AndroidRepo, m: Union[Message, CallbackQuery]):
                 [
                     (
                         "Click here for help!",
-                        f"http://t.me/{(await c.get_me()).username}?start",
+                        f"http://t.me/{c.me.username}?start",
                         "url",
                     )
                 ]
@@ -86,10 +86,11 @@ async def on_help(c: AndroidRepo, m: Union[Message, CallbackQuery]):
 async def help_requests(c: AndroidRepo, m: CallbackQuery):
     keyboard = [[("🔙 Back", "help")]]
     text = (
-        "<b>Here is what I can do for you:</b>\n\n"
-        "You can also place requests for the @AndroidRepo staff using the #request in the bot's PM.\n\n"
-        "<b>i.e:</b> <code>#request Update the EdXposed module</code>\n\n"
-        "You can request modules, apps, and other files, if you are a developer also feel free to send us your projects."
+        "<b>Here is what I can do for you:</b>\n"
+        " - <code>/request (link)</code>: Make requests for files that could be sent on the channel.\n"
+        " - <code>/myrequests</code>: See all the requests you have already made.\n"
+        " - <code>/cancelrequest (ID)</code>: Cancel the request for the specified ID.\n\n"
+        "<b>NOTE:</b>\nYou can request apps, Magisk modules, recovery files and other Android related files (don't ask for piracy)."
     )
     await m.message.edit_text(
         text,
@@ -102,9 +103,9 @@ async def help_requests(c: AndroidRepo, m: CallbackQuery):
 async def help_commands(c: AndroidRepo, m: CallbackQuery):
     keyboard = [[("🔙 Back", "help")]]
     text = (
-        "<b>Here is what I can do for you:</b>\n\n"
-        " - <code>/magisk (type)</code>: Returns the latest version of Magisk.\n"
-        "<b>Available Magisk types:</b> <code>stable</code>, <code>beta</code>, <code>canary</code>."
+        "<b>Here is what I can do for you:</b>\n"
+        " - <code>/magisk (branch)</code>: Returns the latest version of Magsik in the specified branch.\n"
+        "<b>Available Magisk branches:</b> <code>stable</code>, <code>beta</code>, <code>canary</code>."
     )
     await m.message.edit_text(
         text,
