@@ -67,10 +67,14 @@ async def on_help(c: AndroidRepo, m: Union[Message, CallbackQuery]):
     chat_type = m.chat.type if isinstance(m, Message) else m.message.chat.type
     if chat_type == "private":
         keyboard = [
-            [("🔧 Utilities", "help_commands"), ("💭 Requests", "help_requests")],
+            [
+                ("🔧 Utilities", "help_commands"),
+                ("💭 Contact", "help_contact"),
+                ("📝 Requests", "help_requests"),
+            ],
             [("🔙 Back", "start_back")],
         ]
-        text = "Choose a category for help!"
+        text = "Choose a category to get help!"
     else:
         keyboard = [
             [
@@ -105,6 +109,22 @@ async def help_requests(c: AndroidRepo, m: CallbackQuery):
         " - <code>/myrequests</code>: See all the requests you have already made.\n"
         " - <code>/cancelrequest (ID)</code>: Cancel the request for the specified ID.\n\n"
         "<b>NOTE:</b>\nYou can request apps, Magisk modules, recovery files and other Android related files (don't ask for piracy)."
+    )
+    await m.message.edit_text(
+        text,
+        reply_markup=c.ikb(keyboard),
+        disable_web_page_preview=True,
+    )
+
+
+@AndroidRepo.on_callback_query(filters.regex("^help_contact$"))
+async def help_contact(c: AndroidRepo, m: CallbackQuery):
+    keyboard = [[("🔙 Back", "help")]]
+    text = (
+        "<b>Here is what I can do for you:</b>\n"
+        " - <code>/contact</code>: Enters contact mode.\n"
+        " - <code>/quit</code>: Get out of contact mode.\n\n"
+        "<b>NOTE:</b>\nWhen entering contact mode all your messages (except commands) will be sent to @AndroidRepo staff, with this mode you will be able to chat with staff easily."
     )
     await m.message.edit_text(
         text,
