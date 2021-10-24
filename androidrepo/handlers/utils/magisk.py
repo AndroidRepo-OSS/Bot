@@ -282,6 +282,7 @@ async def check_magisk(c: Client):
     TYPES: List[str] = ["stable", "canary"]
     for magisk in TYPES:
         await update_magisk(c, magisk)
+        await asyncio.sleep(0.5)
 
 
 async def update_magisk(c: Client, m_type: str):
@@ -337,13 +338,8 @@ async def update_magisk(c: Client, m_type: str):
         text += (
             "⚡️<a href='https://github.com/topjohnwu/Magisk'>GitHub Repository</a>\n"
         )
-        if m_type == "canary":
-            changelog = await get_changelog(magisk["note"])
-            text += "\n⚙️<b>Changelog</b>"
-            text += f"{changelog}\n\n"
-        else:
-            changelog = magisk["note"]
-            text += f"⚡<a href='{changelog}'>Changelog</a>\n\n"
+        changelog = magisk["note"]
+        text += f"⚡<a href='{changelog}'>Changelog</a>\n\n"
         text += "<b>By:</b> <a href='https://github.com/topjohnwu'>John Wu</a>\n"
         text += "<b>Follow:</b> @AndroidRepo"
 

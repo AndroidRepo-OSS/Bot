@@ -52,8 +52,8 @@ async def on_magisk_m(c: AndroidRepo, m: Message):
 
     magisk = data["magisk"]
 
-    text = f"<b>Type</b>: <code>{m_type}</code>"
-    text += f"\n\n<b>Magisk</b>: <a href='{magisk['link']}'>{magisk['versionCode']}</a> ({'v' if magisk['version'][0].isdecimal() else ''}{magisk['version']})"
+    text = f"<b>Magisk Branch</b>: <code>{m_type}</code>"
+    text += f"\n\n<b>Version</b>: <a href='{magisk['link']}'>{'v' if magisk['version'][0].isdecimal() else ''}{magisk['version']}</a> ({magisk['versionCode']})"
     text += f"\n<b>Changelog</b>: {await get_changelog(magisk['note'])}"
 
     keyboard = [[("Full Changelog", magisk["note"], "url")]]
