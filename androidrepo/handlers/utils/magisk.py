@@ -312,7 +312,9 @@ async def update_magisk(c: Client, m_type: str):
                 f"<b>Date</b>: <code>{date}</code>\n"
                 "#Sync #Magisk #Releases"
             )
-        if int(_magisk.version_code) == int(magisk["versionCode"]):
+        if _magisk.version == magisk["version"] or int(_magisk.version_code) == int(
+            magisk["versionCode"]
+        ):
             return await sent.edit_text(
                 "<b>No updates were detected.</b>\n"
                 f"    <b>Magisk</b>: <code>{m_type}</code>\n\n"
@@ -355,19 +357,16 @@ async def update_magisk(c: Client, m_type: str):
         _magisk.update_from_dict(
             {
                 "version": magisk["version"],
-                "versionCode": magisk["versionCode"],
+                "version_code": int(magisk["versionCode"]),
                 "link": magisk["link"],
                 "note": magisk["note"],
             }
         )
         await _magisk.save()
         return await sent.edit_text(
-            f"""
-        <b>Magisk Releases check finished</b>
-            <b>Updated</b>: <code>{m_type}</code>
-            <b>Version</b>: <code>{magisk['version']} ({magisk['versionCode']})</code>
-
-        <b>Date</b>: <code>{date}</code>
-        #Sync #Magisk #Releases
-            """
+            "<b>Magisk Releases check finished</b>\n"
+            f"    <b>Updated</b>: <code>{m_type}</code>\n"
+            f"    <b>Version</b>: <code>{magisk['version']} ({magisk['versionCode']})</code>\n"
+            f"<b>Date</b>: <code>{date}</code>\n"
+            "#Sync #Magisk #Releases"
         )
