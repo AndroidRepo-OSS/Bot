@@ -33,7 +33,7 @@ meval = "2.5"
 rich = "10.14.0"
 TgCrypto = "1.2.2"
 tortoise-orm = "0.17.8"
-aiocron = "1.7"
+aiocron = "1.8"
 pyrogram = {git = "https://github.com/AmanoTeam/pyrogram"}
 sentry-sdk = "1.5.0"
 aiodown = {git = "https://github.com/AmanoTeam/aiodown", rev = "main"}

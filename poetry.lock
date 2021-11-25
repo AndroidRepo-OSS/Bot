@@ -1,6 +1,6 @@
 [[package]]
 name = "aiocron"
-version = "1.7"
+version = "1.8"
 description = "Crontabs for asyncio"
 category = "main"
 optional = false
@@ -617,12 +617,12 @@ socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "1a54db8150620878d061476fa7c183fc9fec801f75d6d46afdd84addbeb5f91c"
+content-hash = "c44a9e38fa7ab0327f0cdb4b81e3f25a7325dbd8fd7f4548e895539a713ecbdd"
 
 [metadata.files]
 aiocron = [
-    {file = "aiocron-1.7-py3-none-any.whl", hash = "sha256:f06d7b84b86d6cb7156c01e640b4122da86afaa4873c6bcf79e57c4762e48789"},
-    {file = "aiocron-1.7.tar.gz", hash = "sha256:ad7d3b9bd88897934ffd18937ff235ab9fb01358280fd40e01461fd5f76348bd"},
+    {file = "aiocron-1.8-py3-none-any.whl", hash = "sha256:b6313214c311b62aa2220e872b94139b648631b3103d062ef29e5d3230ddce6d"},
+    {file = "aiocron-1.8.tar.gz", hash = "sha256:48546513faf2eb7901e65a64eba7b653c80106ed00ed9ca3419c3d10b6555a01"},
 ]
 aiodown = []
 aiosqlite = [
