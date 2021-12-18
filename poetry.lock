@@ -458,7 +458,7 @@ idna2008 = ["idna"]
 
 [[package]]
 name = "rich"
-version = "10.16.0"
+version = "10.16.1"
 description = "Render rich text, tables, progress bars, syntax highlighting, markdown and more to the terminal"
 category = "main"
 optional = false
@@ -608,7 +608,7 @@ socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "f3568873d0571abc92507a4df1f1be007cc1eee6fa05de531a70f37c80e8d103"
+content-hash = "224c15ebc0a3f0cbc8ac032201a4599adf0a506b231b8853cec693ddadb1b1f6"
 
 [metadata.files]
 aiocron = [
@@ -812,8 +812,8 @@ rfc3986 = [
     {file = "rfc3986-1.5.0.tar.gz", hash = "sha256:270aaf10d87d0d4e095063c65bf3ddbc6ee3d0b226328ce21e036f946e421835"},
 ]
 rich = [
-    {file = "rich-10.16.0-py3-none-any.whl", hash = "sha256:24de23bd86b539d02c1570d93ace9bc8a07f2d5db87f97640226e9f6f8ff0253"},
-    {file = "rich-10.16.0.tar.gz", hash = "sha256:06a1355131feda5eba4511dd749e9187ac0fb42209e189845d81e94505fc268e"},
+    {file = "rich-10.16.1-py3-none-any.whl", hash = "sha256:bbe04dd6ac09e4b00d22cb1051aa127beaf6e16c3d8687b026e96d3fca6aad52"},
+    {file = "rich-10.16.1.tar.gz", hash = "sha256:4949e73de321784ef6664ebbc854ac82b20ff60b2865097b93f3b9b41e30da27"},
 ]
 sentry-sdk = [
     {file = "sentry-sdk-1.5.1.tar.gz", hash = "sha256:2a1757d6611e4bec7d672c2b7ef45afef79fed201d064f53994753303944f5a8"},
