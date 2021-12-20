@@ -381,7 +381,7 @@ python-versions = ">=3.5"
 
 [[package]]
 name = "pypika-tortoise"
-version = "0.1.1"
+version = "0.1.2"
 description = "Forked from pypika and streamline just for tortoise-orm"
 category = "main"
 optional = false
@@ -543,7 +543,7 @@ python-versions = ">=3.6"
 
 [[package]]
 name = "tortoise-orm"
-version = "0.17.8"
+version = "0.18.0"
 description = "Easy async ORM for python, built with relations in mind"
 category = "main"
 optional = false
@@ -552,14 +552,14 @@ python-versions = ">=3.7,<4.0"
 [package.dependencies]
 aiosqlite = ">=0.16.0,<0.18.0"
 iso8601 = ">=0.1.13,<0.2.0"
-pypika-tortoise = ">=0.1.1,<0.2.0"
+pypika-tortoise = ">=0.1.2,<0.2.0"
 pytz = "*"
 
 [package.extras]
 aiomysql = ["aiomysql"]
 asyncmy = ["asyncmy"]
 asyncpg = ["asyncpg"]
-accel = ["ciso8601 (>=2.1.2,<3.0.0)", "python-rapidjson", "uvloop (>=0.14.0,<0.15.0)"]
+accel = ["ciso8601 (>=2.1.2,<3.0.0)", "orjson", "uvloop (>=0.16.0,<0.17.0)"]
 
 [[package]]
 name = "typing-extensions"
@@ -608,7 +608,7 @@ socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "224c15ebc0a3f0cbc8ac032201a4599adf0a506b231b8853cec693ddadb1b1f6"
+content-hash = "52c13b636aaf8a2e70d3f5d1205b73dacb1f03ae68eaff3a1ef6c96757f33f2d"
 
 [metadata.files]
 aiocron = [
@@ -757,8 +757,8 @@ pygments = [
     {file = "Pygments-2.10.0.tar.gz", hash = "sha256:f398865f7eb6874156579fdf36bc840a03cab64d1cde9e93d68f46a425ec52c6"},
 ]
 pypika-tortoise = [
-    {file = "pypika-tortoise-0.1.1.tar.gz", hash = "sha256:6831d0a56e5e0ecefac3307dd9bdb3e5073fdac5d617401601d3a6713e059f3c"},
-    {file = "pypika_tortoise-0.1.1-py3-none-any.whl", hash = "sha256:860020094e01058ea80602c90d4a843d0a42cffefcf4f3cb1a7f2c18b880c638"},
+    {file = "pypika-tortoise-0.1.2.tar.gz", hash = "sha256:76d1bb45d9cd92ec18037be312d3ee8a26945f787ce981367cfed1ac6e1a11c9"},
+    {file = "pypika_tortoise-0.1.2-py3-none-any.whl", hash = "sha256:90a61d3d8b9c19cecd1bdd3ca3515114cb7c3a657a6cad9e9e48cfe6db8cc1e0"},
 ]
 Pyrogram = []
 pysocks = [
@@ -871,8 +871,8 @@ tomli = [
     {file = "tomli-1.2.1.tar.gz", hash = "sha256:a5b75cb6f3968abb47af1b40c1819dc519ea82bcc065776a866e8d74c5ca9442"},
 ]
 tortoise-orm = [
-    {file = "tortoise-orm-0.17.8.tar.gz", hash = "sha256:1f5020e9964d32a4d6ed685d466b5d7285de328a63ee92ee988c1e4baf8fefbf"},
-    {file = "tortoise_orm-0.17.8-py3-none-any.whl", hash = "sha256:f18c41bb83be4748a6ca259ed7309ca954b35f5790971824bbc79a11d2b1ef3b"},
+    {file = "tortoise-orm-0.18.0.tar.gz", hash = "sha256:52c33b712279ba8b04f5a1bed3010ade4961f0200480df5362cf674486a9016a"},
+    {file = "tortoise_orm-0.18.0-py3-none-any.whl", hash = "sha256:1f5422a94b2d58f61b91bf8993b678533554abdebdadf783ba0c484122fb63c1"},
 ]
 typing-extensions = [
     {file = "typing_extensions-3.10.0.2-py2-none-any.whl", hash = "sha256:d8226d10bc02a29bcc81df19a26e56a9647f8b0a6d4a83924139f4a8b01f17b7"},
