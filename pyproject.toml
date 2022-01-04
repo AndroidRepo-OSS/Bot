@@ -37,10 +37,14 @@ aiocron = "1.8"
 pyrogram = {git = "https://github.com/AmanoTeam/pyrogram"}
 sentry-sdk = "1.5.1"
 aiodown = {git = "https://github.com/AmanoTeam/aiodown", rev = "main"}
+uvloop = {version = "^0.16", optional = true}
 
 [tool.poetry.dev-dependencies]
 black = "^21.12b0"
 flake8 = "^4.0.1"
+
+[tool.poetry.extras]
+fast = ["uvloop"]
 
 [tool.black]
 exclude = '''
