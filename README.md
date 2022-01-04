@@ -7,3 +7,7 @@
 Android Repository Bot is a bot made for [@AndroidRepo](https://t.me/AndroidRepo) (Telegram channel), it was initially thought only to update the Magisk modules in the channel, but we will improve it over time.
 
 Developed in Python using the MTProto library [Pyrogram](https://github.com/pyrogram/pyrogram).
+
+## License
+
+[GPLv3](https://github.com/AmanoTeam/AndroidRepo/blob/main/LICENSE) © 2022 [AmanoTeam](https//github.com/AmanoTeam)

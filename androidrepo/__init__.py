@@ -1,6 +1,6 @@
 """Android Repository Official Telegram Bot."""
 # This file is part of AndroidRepo (Telegram Bot)
-# Copyright (C) 2021 AmanoTeam
+# Copyright (C) 2022 AmanoTeam
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as
