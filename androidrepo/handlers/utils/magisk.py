@@ -33,9 +33,6 @@ from androidrepo.database import Magisk, Modules
 from androidrepo.utils import httpx_timeout
 
 DOWNLOAD_DIR = "./downloads/"
-MODULES_URL = (
-    "https://github.com/Magisk-Modules-Repo/submission/raw/modules/modules.json"
-)
 MAGISK_URL = "https://github.com/topjohnwu/magisk-files/raw/master/{}.json"
 
 
@@ -51,7 +48,7 @@ async def check_modules(c: Client):
         async with httpx.AsyncClient(
             http2=True, timeout=httpx_timeout, follow_redirects=True
         ) as client:
-            response = await client.get(MODULES_URL)
+            response = await client.get(config.MODULES_URL)
             data = response.json()
             last_update = data["last_update"]
             if config.LAST_UPDATE == last_update:

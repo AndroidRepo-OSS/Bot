@@ -15,6 +15,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import os
+import platform
+import sys
 from typing import List
 
 import httpx
@@ -23,3 +26,11 @@ from . import filters
 
 __all__: List[str] = ["filters"]
 httpx_timeout = httpx.Timeout(40, pool=None)
+
+
+def is_windows() -> bool:
+    return bool(
+        platform.system().lower() == "windows"
+        or os.name == "nt"
+        or sys.platform.startswith("win")
+    )

@@ -23,6 +23,7 @@ from rich.logging import RichHandler
 from rich.panel import Panel
 
 from androidrepo.androidrepo import AndroidRepo
+from androidrepo.utils import is_windows
 
 # Logging colorized by rich
 FORMAT = "%(message)s"
@@ -48,7 +49,8 @@ try:
 
     uvloop.install()
 except ImportError:
-    log.warning("uvloop is not installed and therefore will be disabled.")
+    if not is_windows():
+        log.warning("uvloop is not installed and therefore will be disabled.")
 
 
 # Beautiful init with rich
