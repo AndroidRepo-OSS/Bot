@@ -31,7 +31,7 @@ kantex = "0.2.0"
 python-rapidjson = "1.5"
 meval = "2.5"
 rich = "11.0.0"
-TgCrypto = "1.2.2"
+TgCrypto = "1.2.3"
 tortoise-orm = "0.18.0"
 aiocron = "1.8"
 pyrogram = {git = "https://github.com/AmanoTeam/pyrogram"}
