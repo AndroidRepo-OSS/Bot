@@ -48,7 +48,9 @@ async def check_modules(c: Client):
         async with httpx.AsyncClient(
             http2=True, timeout=httpx_timeout, follow_redirects=True
         ) as client:
-            response = await client.get(config.MODULES_URL)
+            response = await client.get(
+                config.MODULES_URL, headers={"Cache-Control": "no-cache"}
+            )
             data = response.json()
             last_update = data["last_update"]
             if config.LAST_UPDATE == last_update:
@@ -168,7 +170,9 @@ async def parse_module(to_parse: Dict) -> Dict:
     async with httpx.AsyncClient(
         http2=True, timeout=httpx_timeout, follow_redirects=True
     ) as client:
-        response = await client.get(to_parse["prop_url"])
+        response = await client.get(
+            to_parse["prop_url"], headers={"Cache-Control": "no-cache"}
+        )
         data = response.read().decode()
         lines = data.split("\n")
         for line in lines:
@@ -291,7 +295,7 @@ async def update_magisk(c: Client, m_type: str):
     async with httpx.AsyncClient(
         http2=True, timeout=httpx_timeout, follow_redirects=True
     ) as client:
-        response = await client.get(URL)
+        response = await client.get(URL, headers={"Cache-Control": "no-cache"})
         data = response.json()
         magisk = data["magisk"]
         _magisk = await Magisk.get_or_none(branch=m_type)
