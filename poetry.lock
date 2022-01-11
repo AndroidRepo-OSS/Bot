@@ -381,7 +381,7 @@ python-versions = ">=3.5"
 
 [[package]]
 name = "pypika-tortoise"
-version = "0.1.2"
+version = "0.1.3"
 description = "Forked from pypika and streamline just for tortoise-orm"
 category = "main"
 optional = false
@@ -389,7 +389,7 @@ python-versions = ">=3.7,<4.0"
 
 [[package]]
 name = "Pyrogram"
-version = "1.3.1.amn"
+version = "1.3.2.amn"
 description = "Elegant, modern and asynchronous Telegram MTProto API framework in Python for users and bots - Amano's experimental fork"
 category = "main"
 optional = false
@@ -405,7 +405,7 @@ pysocks = "1.7.1"
 type = "git"
 url = "https://github.com/AmanoTeam/pyrogram"
 reference = "master"
-resolved_reference = "1880ccc94d81e20895a17d52cebf9c96a57ee858"
+resolved_reference = "589f9feab373148ee5ffc58cf9b9261b0e726e8a"
 
 [[package]]
 name = "pysocks"
@@ -555,7 +555,7 @@ python-versions = ">=3.6"
 
 [[package]]
 name = "tortoise-orm"
-version = "0.18.0"
+version = "0.18.1"
 description = "Easy async ORM for python, built with relations in mind"
 category = "main"
 optional = false
@@ -564,14 +564,14 @@ python-versions = ">=3.7,<4.0"
 [package.dependencies]
 aiosqlite = ">=0.16.0,<0.18.0"
 iso8601 = ">=0.1.13,<0.2.0"
-pypika-tortoise = ">=0.1.2,<0.2.0"
+pypika-tortoise = ">=0.1.3,<0.2.0"
 pytz = "*"
 
 [package.extras]
 aiomysql = ["aiomysql"]
 asyncmy = ["asyncmy"]
 asyncpg = ["asyncpg"]
-accel = ["ciso8601 (>=2.1.2,<3.0.0)", "orjson", "uvloop (>=0.16.0,<0.17.0)"]
+accel = ["ciso8601", "orjson", "uvloop"]
 
 [[package]]
 name = "typing-extensions"
@@ -638,7 +638,7 @@ fast = ["uvloop"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "382972c7612b19c78ae04b1e5f21afabfe3e2e090a417fd5e0293c7ce9ce9586"
+content-hash = "341d0329f9662c9a3c5f812c6761ff0b17865711ce952c31aaf7638d65c5d98a"
 
 [metadata.files]
 aiocron = [
@@ -787,8 +787,8 @@ pygments = [
     {file = "Pygments-2.11.1.tar.gz", hash = "sha256:59b895e326f0fb0d733fd28c6839bd18ad0687ba20efc26d4277fd1d30b971f4"},
 ]
 pypika-tortoise = [
-    {file = "pypika-tortoise-0.1.2.tar.gz", hash = "sha256:76d1bb45d9cd92ec18037be312d3ee8a26945f787ce981367cfed1ac6e1a11c9"},
-    {file = "pypika_tortoise-0.1.2-py3-none-any.whl", hash = "sha256:90a61d3d8b9c19cecd1bdd3ca3515114cb7c3a657a6cad9e9e48cfe6db8cc1e0"},
+    {file = "pypika-tortoise-0.1.3.tar.gz", hash = "sha256:ecdf2d6e0aeb0e15880d9e2ead41362ec7320f37fb25a3a71664c2e1105ad218"},
+    {file = "pypika_tortoise-0.1.3-py3-none-any.whl", hash = "sha256:28fb2715a94ff2f3bc1c4ef6cc46c385c244c27d100aac760231bf612361d5ba"},
 ]
 Pyrogram = []
 pysocks = [
@@ -922,8 +922,8 @@ tomli = [
     {file = "tomli-1.2.3.tar.gz", hash = "sha256:05b6166bff487dc068d322585c7ea4ef78deed501cc124060e0f238e89a9231f"},
 ]
 tortoise-orm = [
-    {file = "tortoise-orm-0.18.0.tar.gz", hash = "sha256:52c33b712279ba8b04f5a1bed3010ade4961f0200480df5362cf674486a9016a"},
-    {file = "tortoise_orm-0.18.0-py3-none-any.whl", hash = "sha256:1f5422a94b2d58f61b91bf8993b678533554abdebdadf783ba0c484122fb63c1"},
+    {file = "tortoise-orm-0.18.1.tar.gz", hash = "sha256:537361ce2d0829741afd43afd9bc9413a314a176cb58747d88047c20ccc01db1"},
+    {file = "tortoise_orm-0.18.1-py3-none-any.whl", hash = "sha256:edc9f3b49635b1dd74f73de38f54e031377e4f02b3698322502047f2e031af8b"},
 ]
 typing-extensions = [
     {file = "typing_extensions-4.0.1-py3-none-any.whl", hash = "sha256:7f001e5ac290a0c0401508864c7ec868be4e701886d5b573a9528ed3973d9d3b"},
