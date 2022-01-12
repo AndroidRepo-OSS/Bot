@@ -14,12 +14,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import asyncio
 import datetime
 import time
+from contextlib import suppress
 from typing import List
 
 from pyrogram import filters
-from pyrogram.errors import UserIsBlocked
+from pyrogram.errors import BadRequest, UserIsBlocked
 from pyrogram.types import Message, User
 
 from androidrepo.config import STAFF_ID, SUDO_USERS
@@ -28,10 +30,27 @@ from androidrepo.database import Requests
 from ..androidrepo import AndroidRepo
 
 
-@AndroidRepo.on_message(
-    filters.private & (filters.cmd("request ") | filters.regex("^#request "))
-)
+@AndroidRepo.on_message((filters.cmd("request ") | filters.regex("^#request ")))
 async def on_request_m(c: AndroidRepo, m: Message):
+    if m.chat.type in ["supergroup", "group"]:
+        keyboard = [
+            [
+                (
+                    "Go to PM!",
+                    f"http://t.me/{c.me.username}?start",
+                    "url",
+                )
+            ]
+        ]
+        sent = await m.reply_text(
+            "Please use this command in private.",
+            reply_markup=c.ikb(keyboard),
+        )
+        await asyncio.sleep(5)
+        with suppress(BadRequest):
+            await sent.delete()
+            await m.delete()
+        return
     user = m.from_user
     requests = await Requests.filter(user=user.id)
     last_request = None

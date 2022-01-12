@@ -283,7 +283,7 @@ async def check_magisk(c: Client):
     TYPES: List[str] = ["stable", "canary"]
     for magisk in TYPES:
         await update_magisk(c, magisk)
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(5)
 
 
 async def update_magisk(c: Client, m_type: str):
