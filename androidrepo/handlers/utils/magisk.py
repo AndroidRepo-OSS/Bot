@@ -51,6 +51,12 @@ async def check_modules(c: Client):
             response = await client.get(
                 config.MODULES_URL, headers={"Cache-Control": "no-cache"}
             )
+            if response.status_code in [500, 503, 504, 505]:
+                return await sent.edit_text(
+                    f"<b>GitHub is in serious trouble, I couldn't complete the verification..</b>\n\n"
+                    f"<b>Date</b>: <code>{date}</code>\n"
+                    "#Sync #Magisk #Modules"
+                )
             data = response.json()
             last_update = data["last_update"]
             if config.LAST_UPDATE == last_update:
