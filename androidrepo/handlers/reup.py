@@ -27,10 +27,8 @@ async def reupload(c: AndroidRepo, m: Message):
         return
 
     try:
-        file_desc = await c.ask(
-            m.chat.id,
+        file_desc = await m.ask(
             "Send me the file description as markdown...",
-            reply_to_message_id=m.message_id,
             filters=filters.sudo,
             timeout=120,
         )
