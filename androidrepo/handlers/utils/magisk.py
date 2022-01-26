@@ -286,7 +286,7 @@ async def get_changelog(url: str) -> str:
 
 
 async def check_magisk(c: Client):
-    TYPES: List[str] = ["stable", "canary"]
+    TYPES: List[str] = ["stable", "beta", "canary"]
     for magisk in TYPES:
         await update_magisk(c, magisk)
         await asyncio.sleep(5)
