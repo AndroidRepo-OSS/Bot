@@ -336,9 +336,7 @@ async def update_magisk(c: Client, m_type: str):
         )
         magiskb = r.json()
         _magisks = await Magisk.get_or_none(branch="stable")
-        if not magiskb["magisk"]["version"] == _magisks.version or not int(
-            magiskb["magisk"]["versionCode"]
-        ) == int(_magisks.version_code):
+        if not m_type == "beta" or not magiskb["magisk"]["version"] == _magisks.version:
             file_name = f"Magisk-{magisk['version']}_({magisk['versionCode']}).apk"
             file_path = DOWNLOAD_DIR + file_name
             async with aiodown.Client() as client:
