@@ -58,7 +58,6 @@ async def check_modules(c: Client):
                     "#Sync #Magisk #Modules"
                 )
             data = response.json()
-            await client.aclose()
             last_update = data["last_update"]
             if config.LAST_UPDATE == last_update:
                 return await sent.edit_text(
@@ -181,7 +180,6 @@ async def parse_module(to_parse: Dict) -> Dict:
             to_parse["prop_url"], headers={"Cache-Control": "no-cache"}
         )
         data = response.read().decode()
-        await client.aclose()
         lines = data.split("\n")
         for line in lines:
             try:
@@ -272,7 +270,6 @@ async def get_changelog(url: str) -> str:
     async with httpx.AsyncClient(http2=True, timeout=httpx_timeout) as client:
         response = await client.get(url)
         data = response.read()
-        await client.aclose()
         lines = data.decode().split("\n")
         latest_version = False
         for line in lines:
@@ -306,7 +303,6 @@ async def update_magisk(c: Client, m_type: str):
     ) as client:
         response = await client.get(URL, headers={"Cache-Control": "no-cache"})
         data = response.json()
-        await client.aclose()
         magisk = data["magisk"]
         _magisk = await Magisk.get_or_none(branch=m_type)
         if _magisk is None:
