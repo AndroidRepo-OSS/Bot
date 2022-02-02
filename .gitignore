@@ -4,6 +4,7 @@ dist/
 
 # Personal files
 downloads/
+tmp/
 androidrepo/config.py
 androidrepo/*.session*
 androidrepo/database/*.sqlite*
