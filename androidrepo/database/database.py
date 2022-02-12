@@ -27,10 +27,11 @@ class Contact(Model):
 
 class Modules(Model):
     id = fields.CharField(pk=True, max_length=255)
+    url = fields.TextField()
+    name = fields.TextField()
     version = fields.TextField()
     version_code = fields.IntField()
-    zip_url = fields.TextField()
-    changelog = fields.TextField()
+    last_update = fields.IntField()
 
 
 class Magisk(Model):

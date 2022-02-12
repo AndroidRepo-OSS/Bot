@@ -21,12 +21,7 @@ import rapidjson as json
 from pyrogram import filters
 from pyrogram.types import Message
 
-from androidrepo.handlers.utils.magisk import (
-    gen_modulesjson,
-    get_changelog,
-    get_magisk,
-    get_modules,
-)
+from androidrepo.handlers.utils.magisk import get_changelog, get_magisk, get_modules
 from androidrepo.utils import httpx_timeout
 
 from ..androidrepo import AndroidRepo
@@ -79,11 +74,3 @@ async def on_modules_m(c: AndroidRepo, m: Message):
 @AndroidRepo.on_message(filters.sudo & filters.cmd("magisks"))
 async def on_magisks_m(c: AndroidRepo, m: Message):
     return await get_magisk(m)
-
-
-@AndroidRepo.on_message(filters.sudo & filters.cmd("generate_modules"))
-async def gen_modules_json(c: AndroidRepo, m: Message):
-    await gen_modulesjson()
-    await m.reply_document(
-        caption="Magisk Modules regenetated!", document="./tmp/modules.json"
-    )

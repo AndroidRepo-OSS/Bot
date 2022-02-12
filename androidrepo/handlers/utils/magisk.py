@@ -36,87 +36,63 @@ DOWNLOAD_DIR = "./downloads/"
 MAGISK_URL = "https://github.com/topjohnwu/magisk-files/raw/master/{}.json"
 
 
-async def gen_modulesjson():
-    merge = []
-    now = datetime.now()
-    last_update = int(datetime.timestamp(now) * 1000)
-    async with httpx.AsyncClient(
-        http2=True, timeout=httpx_timeout, follow_redirects=True
-    ) as client:
-        for url in config.MODULES_URL:
-            response = await client.get(url, headers={"Cache-Control": "no-cache"})
-            data = response.json()
-            prop_url = url.replace("update.json", "module.prop")
-            module_id = url.split("/")[-4]
-            repo_url = url.split("/raw/master/update.json")[0]
-            module_id = {"id": module_id, "propUrl": prop_url, "repoUrl": repo_url}
-            data = {**module_id, **data}
-            merge.append(data)
-
-    if not os.path.exists("./tmp"):
-        os.mkdir("./tmp")
-
-    output = open("./tmp/modules.json", "w")
-
-    return json.dump(
-        {
-            "last_update": last_update,
-            "modules": merge,
-            "name": "AndroidRepo-Magisk-Modules",
-        },
-        output,
-        indent=4,
-    )
-
-
 async def check_modules(c: Client):
     date = datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
     sent = await c.send_log_message(
         config.LOGS_ID, "<b>Magisk Modules check started...</b>"
     )
-    try:
-        await gen_modulesjson()
-    except BaseException as e:
-        return await sent.edit_text(
-            f"<b>OH NO, A ERROR!!!</b>\n"
-            f"<b>Error:</b> <code>{e}</code>\n\n"
-            f"<b>Date</b>: <code>{date}</code>\n"
-            "#Sync #Magisk #Modules"
-        )
-
     modules = []
     updated_modules = []
     excluded_modules = []
-    data = json.load(open("./tmp/modules.json"))
-    last_update = data["last_update"]
-    if config.LAST_UPDATE == last_update:
-        return await sent.edit_text(
-            f"<b>No updates were detected.</b>\n\n"
-            f"<b>Date</b>: <code>{date}</code>\n"
-            "#Sync #Magisk #Modules"
-        )
-    config.LAST_UPDATE = last_update
-    modules = data["modules"]
-    for module in modules:
-        module = await parse_module(module)
-        _module = await Modules.filter(id=module["id"])
-        if len(_module) < 1:
-            await Modules.create(
-                id=module["id"],
-                version=module["version"],
-                version_code=module["versionCode"],
-                zip_url=module["zipUrl"],
-                changelog=module["changelog"],
-                repo_url=module["repoUrl"],
+    try:
+        async with httpx.AsyncClient(
+            http2=True, timeout=httpx_timeout, follow_redirects=True
+        ) as client:
+            response = await client.get(
+                config.MODULES_URL, headers={"Cache-Control": "no-cache"}
             )
-            continue
-        _module = _module[0]
-        if _module.version != module["version"] or int(_module.version_code) != int(
-            module["versionCode"]
-        ):
-            updated_modules.append(module)
-            await asyncio.sleep(2)
-            await update_module(c, module)
+            if response.status_code in [500, 503, 504, 505]:
+                return await sent.edit_text(
+                    f"<b>GitHub is in serious trouble, I couldn't complete the verification..</b>\n\n"
+                    f"<b>Date</b>: <code>{date}</code>\n"
+                    "#Sync #Magisk #Modules"
+                )
+            data = response.json()
+            last_update = data["last_update"]
+            if config.LAST_UPDATE == last_update:
+                return await sent.edit_text(
+                    f"<b>No updates were detected.</b>\n\n"
+                    f"<b>Date</b>: <code>{date}</code>\n"
+                    "#Sync #Magisk #Modules"
+                )
+            config.LAST_UPDATE = last_update
+            modules = data["modules"]
+            for module in modules:
+                module = await parse_module(module)
+                _module = await Modules.filter(id=module["id"])
+                if len(_module) < 1:
+                    await Modules.create(
+                        id=module["id"],
+                        url=module["url"],
+                        name=module["name"],
+                        version=module["version"],
+                        version_code=module["versionCode"],
+                        last_update=module["last_update"],
+                    )
+                    continue
+                _module = _module[0]
+                if _module.version != module["version"] or int(
+                    _module.version_code
+                ) != int(module["versionCode"]):
+                    updated_modules.append(module)
+                    await asyncio.sleep(2)
+                    await update_module(c, module)
+    except httpx.ReadTimeout:
+        return await sent.edit_text(
+            "<b>Check timeout...</b>\n"
+            f"<b>Date</b>: <code>{date}</code>\n"
+            "#Sync #Timeout #Magisk #Modules"
+        )
     module_ids = list(map(lambda module: module["id"], modules))
     for _module in await Modules.all():
         if _module.id not in module_ids:
@@ -147,10 +123,11 @@ async def get_modules(m: Message):
             modules_list.append(
                 dict(
                     id=module.id,
+                    url=module.url,
+                    name=module.name,
                     version=module.version,
                     version_code=module.version_code,
-                    zip_url=module.zip_url,
-                    changelog=module.changelog,
+                    last_update=module.last_update,
                 )
             )
         document = io.BytesIO(str(json.dumps(modules_list, indent=4)).encode())
@@ -193,15 +170,14 @@ async def get_magisk(m: Message):
 async def parse_module(to_parse: Dict) -> Dict:
     module = {
         "id": to_parse["id"],
-        "zipUrl": to_parse["zipUrl"],
-        "changelog": to_parse["changelog"],
-        "repoUrl": to_parse["repoUrl"],
+        "url": to_parse["zip_url"],
+        "last_update": to_parse["last_update"],
     }
     async with httpx.AsyncClient(
         http2=True, timeout=httpx_timeout, follow_redirects=True
     ) as client:
         response = await client.get(
-            to_parse["propUrl"], headers={"Cache-Control": "no-cache"}
+            to_parse["prop_url"], headers={"Cache-Control": "no-cache"}
         )
         data = response.read().decode()
         lines = data.split("\n")
@@ -235,7 +211,7 @@ async def update_module(c: Client, module: Dict):
     )
     file_path = DOWNLOAD_DIR + file_name
     async with aiodown.Client() as client:
-        download = client.add(module["zipUrl"], file_path)
+        download = client.add(module["url"], file_path)
         await client.start()
         while not download.is_finished():
             await asyncio.sleep(0.5)
@@ -267,8 +243,7 @@ async def update_module(c: Client, module: Dict):
 
 ⚡<i>Magisk Module</i>
 ⚡<i>{module["description"]}</i>
-⚡️<a href="{module["repoUrl"]}">GitHub Repository</a>
-⚡️<a href="{module["changelog"]}">Changelog</a>
+⚡️<a href="https://github.com/Magisk-Modules-Repo/{module["id"]}">GitHub Repository</a>
 
 <b>By</b>: {module["author"]}
 <b>Follow</b>: @AndroidRepo
@@ -284,8 +259,7 @@ async def update_module(c: Client, module: Dict):
             "name": module["name"],
             "version_code": module["versionCode"],
             "version": module["version"],
-            "zip_url": module["zipUrl"],
-            "changelog": module["changelog"],
+            "last_update": module["last_update"],
         }
     )
     await mod.save()
