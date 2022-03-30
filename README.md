@@ -23,7 +23,7 @@ their time and `AndroidRepo` is no different.
    - `python3 -m venv .venv` (You don't need to run it again)
    - `. .venv/bin/activate` (You must run this every time you open the project in a new shell)
 3. Install dependencies: `python3 -m pip install .`
-   - Use `python3 -m pip install. [fast]` to install optional dependencies.
+   - Use `python3 -m pip install .[fast]` to install optional dependencies.
 4. Create `config.py` from `config.py.example`: `cp config.py.example config.py`
 5. Follow the instructions in the `config.py` file.
 6. Start the bot: `python3 -m androidrepo`.
