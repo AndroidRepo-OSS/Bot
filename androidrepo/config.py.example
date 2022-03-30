@@ -1,23 +1,34 @@
 from typing import List
 
-API_ID: int = 0
-API_HASH: str = ""
+# Bot token from Bot Father
 BOT_TOKEN: str = ""
 
-PREFIXES: List[str] = ["/", "!"]
+# Your API ID and API HASH
+# Get it from https://my.telegram.org/apps
+API_ID: int = 0
+API_HASH: str = ""
 
+# Sudoers IDs (to use some special commands)
 OWNER_ID: int = 918317361
 SUDO_USERS: List[int] = []
 SUDO_USERS.append(OWNER_ID)
 
+# Prefixes for commands, e.g: /start and !start
+PREFIXES: List[str] = ["/", "!"]
+
+# Used for sentry.io (errors telemetry)
+# Leaves blank to disable
 SENTRY_KEY: str = ""
 
+# Place group and channel IDs respectively
 CHANNEL_ID: int = 0
 CHAT_ID: int = 0
 STAFF_ID: int = 0
 LOGS_ID: int = 0
 
+# The json (compatible) with the list of modules of Magisk
+# We use the original Magisk repository
+MODULES_URL: str = "https://github.com/Magisk-Modules-Repo/submission/raw/modules/modules.json"
+
 # Don't change if you don't know what it's for
 LAST_UPDATE: int = 0
-
-MODULES_URL: str = "https://github.com/Magisk-Modules-Repo/submission/raw/modules/modules.json"
