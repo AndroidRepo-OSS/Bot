@@ -112,7 +112,7 @@ async def update_lsposed(c: Client, branch: str):
         caption += (
             "⚡️<a href='https://github.com/LSPosed/LSPosed'>GitHub Repository</a>\n"
         )
-        caption += "⚡️<a href='{data['changelog']}'>Changelog</a>\n"
+        caption += f"⚡️<a href='{data['changelog']}'>Changelog</a>\n"
         caption += "\n<b>By:</b> LSPosed Developers\n"
         caption += "<b>Follow:</b> @AndroidRepo"
 
