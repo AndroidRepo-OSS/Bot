@@ -108,7 +108,7 @@ async def update_lsposed(c: Client, branch: str):
         if branch == "zygisk":
             caption += "⚡<i>Another enhanced implementation of Xposed Framework. Requires Magisk 24.0+ and Zygisk enabled.</i>\n"
         if branch == "riru":
-            caption += "⚡<i>Another enhanced implementation of Xposed Framework. Requires Magisk 24.0+ and Zygisk enabled. Requires Riru 25.0.1 or above installed.</i>\n"
+            caption += "⚡<i>Another enhanced implementation of Xposed Framework. Requires Riru 25.0.1 or above installed.</i>\n"
         caption += (
             "⚡️<a href='https://github.com/LSPosed/LSPosed'>GitHub Repository</a>\n"
         )
