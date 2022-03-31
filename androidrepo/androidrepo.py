@@ -27,6 +27,7 @@ from androidrepo.config import (
 )
 from androidrepo.database.database import connect_database
 from androidrepo.handlers.utils.magisk import check_magisk, check_modules
+from androidrepo.handlers.utils.xposed import check_lsposed
 
 log = logging.getLogger(__name__)
 
@@ -84,6 +85,7 @@ class AndroidRepo(Client):
         @aiocron.crontab("0 * * * *")
         async def magisk_sync() -> None:
             await check_modules(self)
+            await check_lsposed(self)
             await check_magisk(self)
 
     async def stop(self, *args):
