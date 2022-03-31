@@ -41,6 +41,14 @@ class Requests(Model):
     message_id = fields.IntField()
 
 
+class LSPosed(Model):
+    branch = fields.TextField(pk=True)
+    version = fields.TextField()
+    version_code = fields.IntField()
+    link = fields.TextField()
+    changelog = fields.TextField()
+
+
 async def connect_database():
     await Tortoise.init(
         {

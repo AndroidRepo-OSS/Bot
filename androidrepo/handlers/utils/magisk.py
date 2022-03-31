@@ -6,7 +6,7 @@ import io
 import os
 import shutil
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Union
 from zipfile import ZipFile
 
 import aiodown
@@ -19,8 +19,8 @@ from androidrepo import config
 from androidrepo.database import Magisk, Modules
 from androidrepo.utils import httpx_timeout
 
-DOWNLOAD_DIR = "./downloads/"
-MAGISK_URL = "https://github.com/topjohnwu/magisk-files/raw/master/{}.json"
+DOWNLOAD_DIR: str = "./downloads/"
+MAGISK_URL: str = "https://github.com/topjohnwu/magisk-files/raw/master/{}.json"
 
 
 async def check_modules(c: Client):
@@ -153,16 +153,22 @@ async def get_magisk(m: Message):
     return await m.reply_text("No Magisks found.")
 
 
-async def parse_module(to_parse: Dict) -> Dict:
-    module = {
-        "id": to_parse["id"],
-        "url": to_parse["zip_url"],
-        "last_update": to_parse["last_update"],
-    }
+async def parse_module(to_parse: Union[Dict, str]) -> Dict:
+    if isinstance(to_parse, Dict):
+        module = {
+            "id": to_parse["id"],
+            "url": to_parse["zip_url"],
+            "last_update": to_parse["last_update"],
+        }
+        prop_url = to_parse["prop_url"]
+
+    if isinstance(to_parse, str):
+        prop_url = to_parse
+
     async with httpx.AsyncClient(
         http2=True, timeout=httpx_timeout, follow_redirects=True
     ) as client:
-        response = await client.get(to_parse["prop_url"])
+        response = await client.get(prop_url)
         data = response.read().decode()
         lines = data.split("\n")
         for line in lines:
@@ -229,8 +235,8 @@ async def update_module(c: Client, module: Dict):
 ⚡<i>{module["description"]}</i>
 ⚡️<a href="https://github.com/Magisk-Modules-Repo/{module["id"]}">GitHub Repository</a>
 
-<b>By</b>: {module["author"]}
-<b>Follow</b>: @AndroidRepo
+<b>By:</b> {module["author"]}
+<b>Follow:</b> @AndroidRepo
     """
     await c.send_channel_document(
         caption=caption, document=file_path, force_document=True
