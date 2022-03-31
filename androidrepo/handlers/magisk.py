@@ -3,13 +3,11 @@
 
 from typing import List
 
-import httpx
-import rapidjson as json
 from pyrogram import filters
 from pyrogram.types import Message
 
+from androidrepo.database import Magisk
 from androidrepo.handlers.utils.magisk import get_changelog, get_magisk, get_modules
-from androidrepo.utils import httpx_timeout
 
 from ..androidrepo import AndroidRepo
 
@@ -30,20 +28,13 @@ async def on_magisk_m(c: AndroidRepo, m: Message):
         await sm.edit(f"The version type '<b>{m_type}</b>' was not found.")
         return
 
-    RAW_URL = "https://github.com/topjohnwu/magisk-files/raw/master"
-    async with httpx.AsyncClient(
-        http2=True, timeout=httpx_timeout, follow_redirects=True
-    ) as client:
-        response = await client.get(f"{RAW_URL}/{m_type}.json")
-        data = json.loads(response.read())
-
-    magisk = data["magisk"]
+    _magisk = await Magisk.get(branch=m_type)
 
     text = f"<b>Magisk Branch</b>: <code>{m_type}</code>"
-    text += f"\n\n<b>Version</b>: <a href='{magisk['link']}'>{'v' if magisk['version'][0].isdecimal() else ''}{magisk['version']}</a> ({magisk['versionCode']})"
-    text += f"\n<b>Changelog</b>: {await get_changelog(magisk['note'])}"
+    text += f"\n\n<b>Version</b>: <a href='{_magisk.link}'>{'v' if _magisk.version.isdecimal() else ''}{_magisk.version}</a> ({_magisk.version_code})"
+    text += f"\n<b>Changelog</b>: {await get_changelog(_magisk.note)}"
 
-    keyboard = [[("Full Changelog", magisk["note"], "url")]]
+    keyboard = [[("Full Changelog", _magisk.note, "url")]]
 
     await sm.edit_text(
         text,
