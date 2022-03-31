@@ -35,9 +35,7 @@ async def check_modules(c: Client):
         async with httpx.AsyncClient(
             http2=True, timeout=httpx_timeout, follow_redirects=True
         ) as client:
-            response = await client.get(
-                config.MODULES_URL, headers={"Cache-Control": "no-cache"}
-            )
+            response = await client.get(config.MODULES_URL)
             if response.status_code in [500, 503, 504, 505]:
                 return await sent.edit_text(
                     f"<b>GitHub is in serious trouble, I couldn't complete the verification..</b>\n\n"
@@ -164,9 +162,7 @@ async def parse_module(to_parse: Dict) -> Dict:
     async with httpx.AsyncClient(
         http2=True, timeout=httpx_timeout, follow_redirects=True
     ) as client:
-        response = await client.get(
-            to_parse["prop_url"], headers={"Cache-Control": "no-cache"}
-        )
+        response = await client.get(to_parse["prop_url"])
         data = response.read().decode()
         lines = data.split("\n")
         for line in lines:
@@ -289,7 +285,7 @@ async def update_magisk(c: Client, m_type: str):
     async with httpx.AsyncClient(
         http2=True, timeout=httpx_timeout, follow_redirects=True
     ) as client:
-        response = await client.get(URL, headers={"Cache-Control": "no-cache"})
+        response = await client.get(URL)
         data = response.json()
         magisk = data["magisk"]
         _magisk = await Magisk.get_or_none(branch=m_type)
@@ -321,9 +317,7 @@ async def update_magisk(c: Client, m_type: str):
             )
 
         # do not send the Magisk Beta if it is the same version of Magisk Stable
-        r = await client.get(
-            MAGISK_URL.format("beta"), headers={"Cache-Control": "no-cache"}
-        )
+        r = await client.get(MAGISK_URL.format("beta"))
         magiskb = r.json()
         _magisks = await Magisk.get_or_none(branch="stable")
         if not m_type == "beta" or not magiskb["magisk"]["version"] == _magisks.version:
