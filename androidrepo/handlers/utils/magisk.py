@@ -143,6 +143,7 @@ async def get_magisk(m: Message):
                     versionCode=magisk.version_code,
                     link=magisk.link,
                     note=magisk.note,
+                    changelog=magisk.changelog,
                 )
             )
         document = io.BytesIO(str(json.dumps(magisks_list, indent=4)).encode())
@@ -293,12 +294,14 @@ async def update_magisk(c: Client, m_type: str):
         magisk = data["magisk"]
         _magisk = await Magisk.get_or_none(branch=m_type)
         if _magisk is None:
+            chg = await get_changelog(magisk["note"])
             await Magisk.create(
                 branch=m_type,
                 version=magisk["version"],
                 version_code=magisk["versionCode"],
                 link=magisk["link"],
                 note=magisk["note"],
+                changelog=chg,
             )
             return await sent.edit_text(
                 "<b>No data in the database.</b>\n"
@@ -338,8 +341,7 @@ async def update_magisk(c: Client, m_type: str):
             text += f"⚡<i>Magisk {m_type.capitalize()}</i>\n"
             text += "⚡<i>Magisk is a suite of open source software for customizing Android, supporting devices higher than Android 5.0.</i>\n"
             text += "⚡️<a href='https://github.com/topjohnwu/Magisk'>GitHub Repository</a>\n"
-            changelog = magisk["note"]
-            text += f"⚡<a href='{changelog}'>Changelog</a>\n\n"
+            text += f"⚡<a href='{magisk['note']}'>Changelog</a>\n\n"
             text += "<b>By:</b> <a href='https://github.com/topjohnwu'>John Wu</a>\n"
             text += "<b>Follow:</b> @AndroidRepo"
 
@@ -351,12 +353,14 @@ async def update_magisk(c: Client, m_type: str):
             )
             os.remove(file_path)
 
+        chg = await get_changelog(magisk["note"])
         _magisk.update_from_dict(
             {
                 "version": magisk["version"],
                 "version_code": int(magisk["versionCode"]),
                 "link": magisk["link"],
                 "note": magisk["note"],
+                "changelog": chg,
             }
         )
         await _magisk.save()

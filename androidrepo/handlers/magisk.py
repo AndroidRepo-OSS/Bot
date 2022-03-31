@@ -7,7 +7,7 @@ from pyrogram import filters
 from pyrogram.types import Message
 
 from androidrepo.database import Magisk
-from androidrepo.handlers.utils.magisk import get_changelog, get_magisk, get_modules
+from androidrepo.handlers.utils.magisk import get_magisk, get_modules
 
 from ..androidrepo import AndroidRepo
 
@@ -32,7 +32,7 @@ async def on_magisk_m(c: AndroidRepo, m: Message):
 
     text = f"<b>Magisk Branch</b>: <code>{m_type}</code>"
     text += f"\n\n<b>Version</b>: <a href='{_magisk.link}'>{'v' if _magisk.version.isdecimal() else ''}{_magisk.version}</a> ({_magisk.version_code})"
-    text += f"\n<b>Changelog</b>: {await get_changelog(_magisk.note)}"
+    text += f"\n<b>Changelog</b>: {_magisk.changelog}"
 
     keyboard = [[("Full Changelog", _magisk.note, "url")]]
 

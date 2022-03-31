@@ -27,6 +27,7 @@ class Magisk(Model):
     version_code = fields.IntField()
     link = fields.TextField()
     note = fields.TextField()
+    changelog = fields.TextField()
 
 
 class Requests(Model):
