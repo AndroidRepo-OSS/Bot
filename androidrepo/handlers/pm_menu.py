@@ -125,7 +125,8 @@ async def help_commands(c: AndroidRepo, m: CallbackQuery):
     keyboard = [[("🔙 Back", "help")]]
     text = (
         "<b>Here is what I can do for you:</b>\n"
-        " - <code>/magisk (branch)</code>: Returns the latest version of Magsik in the specified branch.\n"
+        " - <code>/magisk (branch)</code>: Returns the latest version of Magisk in the specified branch.\n"
+        " - <code>/lsposed (zygisk or riru)</code>: Returns the latest version of LSPosed.\n"
         "<b>Available Magisk branches:</b> <code>stable</code>, <code>beta</code>, <code>canary</code>."
     )
     await m.message.edit_text(
