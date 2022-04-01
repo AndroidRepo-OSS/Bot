@@ -7,6 +7,7 @@ import time
 from contextlib import suppress
 from typing import List
 
+from kantex.html import Bold, Code, Italic, KanTeXDocument, KeyValueItem, Section
 from pyrogram import filters
 from pyrogram.errors import BadRequest, UserIsBlocked
 from pyrogram.types import Message, User
@@ -79,14 +80,14 @@ async def on_request_m(c: AndroidRepo, m: Message):
         return await m.reply_text("You have reached the requests limit.")
 
     request = m.text[len(m.text.split()[0]) + 1 :]
-    sent = await c.send_log_message(
-        STAFF_ID,
-        f"""
-<b>New request</b>:
-    <b>From</b>: {user.mention}
-    <b>Request</b>: {request}
-    """,
+    doc = KanTeXDocument(
+        Section(
+            "New request",
+            KeyValueItem(Bold("From"), (user.mention)),
+            KeyValueItem(Bold("Request"), Code(request)),
+        )
     )
+    sent = await c.send_log_message(STAFF_ID, doc)
     if sent:
         await Requests.create(
             user=user.id,
@@ -214,17 +215,23 @@ async def on_done_m(c: AndroidRepo, m: Message):
         request = request[0]
         user_id = request.user
         request_id = request.request_id
+        staff_msg = (
+            f"<code>{m.text[len(command)+1:]}</code>" if len(query) > 1 else "None"
+        )
+        doc = KanTeXDocument(
+            Section(
+                "Request done",
+                KeyValueItem(Bold("ID"), Code(request_id)),
+                KeyValueItem(Bold("Staff message"), Code(staff_msg)),
+                KeyValueItem(Bold("Request"), Code(request.request)),
+            ),
+            Section(
+                "Note",
+                Italic("Don't be surprised, it will disappear from your request list."),
+            ),
+        )
         try:
-            await c.send_message(
-                chat_id=user_id,
-                text=f"""
-<b>Request done</b>:
-    <b>ID</b>: <code>{request_id}</code>
-    <b>Don't be surprised, it will disappear from your request list.</b>
-    {("<b>Staff message</b>: <code>" + m.text[len(command)+1:] + "</code>") if len(query) > 1 else ""}
-    <b>Request</b>: <code>{request.request}</code>
-        """,
-            )
+            await c.send_message(chat_id=user_id, text=doc)
         except UserIsBlocked:
             pass
         await request.delete()
@@ -242,15 +249,15 @@ async def on_reply_m(c: AndroidRepo, m: Message):
         request = request[0]
         user_id = request.user
         request_id = request.request_id
-        try:
-            await c.send_message(
-                chat_id=user_id,
-                text=f"""
-<b>Answer to your request</b>:
-    <b>ID</b>: <code>{request_id}</code>
-    <b>Answer</b>: <code>{answer}</code>
-        """,
+        doc = KanTeXDocument(
+            Section(
+                "Answer to your request",
+                KeyValueItem(Bold("ID"), Code(request_id)),
+                KeyValueItem(Bold("Answer"), Code(answer)),
             )
+        )
+        try:
+            await c.send_message(chat_id=user_id, text=doc)
         except UserIsBlocked:
             await m.reply_text("The user has blocked the bot!")
             return
@@ -266,12 +273,12 @@ async def on_deleted_m(c: AndroidRepo, messages: List[Message]):
             request = request[0]
             user_id = request.user
             request_id = request.request_id
-            await c.send_message(
-                chat_id=user_id,
-                text=f"""
-<b>Request canceled</b>:
-    <b>ID</b>: <code>{request_id}</code>
-    <b>Request</b>: <code>{request.request}</code>
-            """,
+            doc = KanTeXDocument(
+                Section(
+                    "Request canceled",
+                    KeyValueItem(Bold("ID"), Code(request_id)),
+                    KeyValueItem(Bold("Request"), Code(request.request)),
+                )
             )
+            await c.send_message(chat_id=user_id, text=doc)
             await request.delete()
