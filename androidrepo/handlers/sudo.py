@@ -56,8 +56,8 @@ async def on_upgrade_m(c: AndroidRepo, m: Message):
             return await sm.edit_text("There is nothing to update.")
         changelog = "<b>Changelog</b>:\n"
         commits = parse_commits(stdout)
-        for hash, commit in commits.items():
-            changelog += f"  - [<code>{hash[:7]}</code>] {commit['title']}\n"
+        for chash, commit in commits.items():
+            changelog += f"  - [<code>{chash[:7]}</code>] {commit['title']}\n"
         changelog += f"\n<b>New commits count</b>: <code>{len(commits)}</code>."
         keyboard = [[("🆕 Upgrade", "upgrade")]]
         await sm.edit_text(changelog, reply_markup=c.ikb(keyboard))

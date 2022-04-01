@@ -119,9 +119,9 @@ async def on_myrequests_m(c: AndroidRepo, m: Message):
 
 @AndroidRepo.on_message(filters.private & filters.cmd(r"cancelrequest (?P<id>\d+)"))
 async def on_cancelrequest_m(c: AndroidRepo, m: Message):
-    id = m.matches[0]["id"]
+    rid = m.matches[0]["id"]
     user = m.from_user
-    request = await Requests.filter(user=user.id, request_id=id).first()
+    request = await Requests.filter(user=user.id, request_id=rid).first()
 
     await c.delete_log_messages(message_ids=request.message_id)
 
