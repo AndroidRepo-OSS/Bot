@@ -257,7 +257,9 @@ async def update_module(c: Client, module: Dict):
 
 async def get_changelog(url: str) -> str:
     changelog = ""
-    async with httpx.AsyncClient(http2=True, timeout=httpx_timeout) as client:
+    async with httpx.AsyncClient(
+        http2=True, timeout=httpx_timeout, follow_redirects=True
+    ) as client:
         response = await client.get(url)
         data = response.read()
         lines = data.decode().split("\n")
