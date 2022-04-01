@@ -53,18 +53,16 @@ async def check_lsposed(c: Client):
 
 async def update_lsposed(c: Client, branch: str):
     date = datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
-    sent = await c.send_log_message(
-        config.LOGS_ID, "<b>LSPosed Releases check started...</b>"
-    )
     async with httpx.AsyncClient(
         http2=True, timeout=httpx_timeout, follow_redirects=True
     ) as client:
         response = await client.get(LSPOSED_URL.format(branch))
         if response.status_code in [500, 503, 504, 505]:
-            return await sent.edit_text(
+            return await c.send_log_message(
+                config.LOGS_ID,
                 f"<b>GitHub is in serious trouble, I couldn't complete the verification..</b>\n\n"
                 f"<b>Date</b>: <code>{date}</code>\n"
-                "#Sync #LSPosed #Releases"
+                "#Sync #LSPosed #Releases",
             )
         data = response.json()
         _lsposed = await LSPosed.get_or_none(branch=branch)
@@ -76,22 +74,18 @@ async def update_lsposed(c: Client, branch: str):
                 link=data["zipUrl"],
                 changelog=data["changelog"],
             )
-            return await sent.edit_text(
+            return await c.send_log_message(
+                config.LOGS_ID,
                 "<b>No data in the database.</b>\n"
                 "<b>Saving LSPosed data for the next sync...</b>\n"
                 f"    <b>LSPosed</b>: <code>{branch}</code>\n\n"
                 f"<b>Date</b>: <code>{date}</code>\n"
-                "#Sync #LSPosed #Releases"
+                "#Sync #LSPosed #Releases",
             )
         if _lsposed.version == data["version"] or int(_lsposed.version_code) == int(
             data["versionCode"]
         ):
-            return await sent.edit_text(
-                "<b>No updates were detected.</b>\n"
-                f"    <b>LSPosed</b>: <code>{branch}</code>\n\n"
-                f"<b>Date</b>: <code>{date}</code>\n"
-                "#Sync #LSPosed #Releases"
-            )
+            return
 
         async with aiodown.Client() as client:
             file_name = os.path.basename(data["zipUrl"])
@@ -133,10 +127,11 @@ async def update_lsposed(c: Client, branch: str):
             }
         )
         await _lsposed.save()
-        return await sent.edit_text(
+        return await c.send_log_message(
+            config.LOGS_ID,
             "<b>LSPosed Releases check finished</b>\n"
             f"    <b>Updated</b>: <code>{branch}</code>\n"
             f"    <b>Version</b>: <code>{data['version']} ({data['versionCode']})</code>\n\n"
             f"<b>Date</b>: <code>{date}</code>\n"
-            "#Sync #LSPosed #Releases"
+            "#Sync #LSPosed #Releases",
         )

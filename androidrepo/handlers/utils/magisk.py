@@ -25,9 +25,6 @@ MAGISK_URL: str = "https://github.com/topjohnwu/magisk-files/raw/master/{}.json"
 
 async def check_modules(c: Client):
     date = datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
-    sent = await c.send_log_message(
-        config.LOGS_ID, "<b>Magisk Modules check started...</b>"
-    )
     modules = []
     updated_modules = []
     excluded_modules = []
@@ -37,19 +34,16 @@ async def check_modules(c: Client):
         ) as client:
             response = await client.get(config.MODULES_URL)
             if response.status_code in [500, 503, 504, 505]:
-                return await sent.edit_text(
+                return await c.send_log_message(
+                    config.LOGS_ID,
                     f"<b>GitHub is in serious trouble, I couldn't complete the verification..</b>\n\n"
                     f"<b>Date</b>: <code>{date}</code>\n"
-                    "#Sync #Magisk #Modules"
+                    "#Sync #Magisk #Modules",
                 )
             data = response.json()
             last_update = data["last_update"]
             if config.LAST_UPDATE == last_update:
-                return await sent.edit_text(
-                    f"<b>No updates were detected.</b>\n\n"
-                    f"<b>Date</b>: <code>{date}</code>\n"
-                    "#Sync #Magisk #Modules"
-                )
+                return
             config.LAST_UPDATE = last_update
             modules = data["modules"]
             for module in modules:
@@ -73,10 +67,11 @@ async def check_modules(c: Client):
                     await asyncio.sleep(2)
                     await update_module(c, module)
     except httpx.ReadTimeout:
-        return await sent.edit_text(
+        return await c.send_log_message(
+            config.LOGS_ID,
             "<b>Check timeout...</b>\n"
             f"<b>Date</b>: <code>{date}</code>\n"
-            "#Sync #Timeout #Magisk #Modules"
+            "#Sync #Timeout #Magisk #Modules",
         )
     module_ids = list(map(lambda module: module["id"], modules))
     for _module in await Modules.all():
@@ -86,7 +81,8 @@ async def check_modules(c: Client):
                 if _module.id == module["id"]:
                     del modules[index]
             await _module.delete()
-    return await sent.edit_text(
+    return await c.send_log_message(
+        config.LOGS_ID,
         f"""
 <b>Magisk Modules check finished</b>
     <b>Found</b>: <code>{len(modules)}</code>
@@ -95,7 +91,7 @@ async def check_modules(c: Client):
 
 <b>Date</b>: <code>{date}</code>
 #Sync #Magisk #Modules
-    """
+    """,
     )
 
 
@@ -307,22 +303,18 @@ async def update_magisk(c: Client, m_type: str):
                 note=magisk["note"],
                 changelog=chg,
             )
-            return await sent.edit_text(
+            return await c.send_log_message(
+                config.LOGS_ID,
                 "<b>No data in the database.</b>\n"
                 "<b>Saving Magisk data for the next sync...</b>\n"
                 f"    <b>Magisk</b>: <code>{m_type}</code>\n\n"
                 f"<b>Date</b>: <code>{date}</code>\n"
-                "#Sync #Magisk #Releases"
+                "#Sync #Magisk #Releases",
             )
         if _magisk.version == magisk["version"] or int(_magisk.version_code) == int(
             magisk["versionCode"]
         ):
-            return await sent.edit_text(
-                "<b>No updates were detected.</b>\n"
-                f"    <b>Magisk</b>: <code>{m_type}</code>\n\n"
-                f"<b>Date</b>: <code>{date}</code>\n"
-                "#Sync #Magisk #Releases"
-            )
+            return
 
         # do not send the Magisk Beta if it is the same version of Magisk Stable
         r = await client.get(MAGISK_URL.format("beta"))
@@ -366,10 +358,11 @@ async def update_magisk(c: Client, m_type: str):
             }
         )
         await _magisk.save()
-        return await sent.edit_text(
+        return await c.send_log_message(
+            config.LOGS_ID,
             "<b>Magisk Releases check finished</b>\n"
             f"    <b>Updated</b>: <code>{m_type}</code>\n"
             f"    <b>Version</b>: <code>{magisk['version']} ({magisk['versionCode']})</code>\n\n"
             f"<b>Date</b>: <code>{date}</code>\n"
-            "#Sync #Magisk #Releases"
+            "#Sync #Magisk #Releases",
         )
