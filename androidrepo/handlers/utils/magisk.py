@@ -17,6 +17,7 @@ from pyrogram.types import Message
 
 from androidrepo import config
 from androidrepo.database import Magisk, Modules
+from androidrepo.handlers.utils import get_changelog
 from androidrepo.utils import httpx_timeout
 
 DOWNLOAD_DIR: str = "./downloads/"
@@ -249,28 +250,6 @@ async def update_module(c: Client, module: Dict):
         }
     )
     await mod.save()
-
-
-async def get_changelog(url: str) -> str:
-    changelog = ""
-    async with httpx.AsyncClient(
-        http2=True, timeout=httpx_timeout, follow_redirects=True
-    ) as client:
-        response = await client.get(url)
-        data = response.read()
-        lines = data.decode().split("\n")
-        latest_version = False
-        for line in lines:
-            if len(line) < 1:
-                continue
-            if line.startswith("##"):
-                if not latest_version:
-                    latest_version = True
-                else:
-                    break
-            else:
-                changelog += f"\n{line}"
-    return changelog
 
 
 async def check_magisk(c: Client):

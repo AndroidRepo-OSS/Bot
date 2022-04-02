@@ -14,6 +14,7 @@ from pyrogram.types import Message
 
 from androidrepo import config
 from androidrepo.database import LSPosed
+from androidrepo.handlers.utils import get_changelog
 from androidrepo.utils import httpx_timeout
 
 DOWNLOAD_DIR: str = "./downloads/LSPosed/"
@@ -66,12 +67,13 @@ async def update_lsposed(c: Client, branch: str):
         data = response.json()
         _lsposed = await LSPosed.get_or_none(branch=branch)
         if _lsposed is None:
+            chg = await get_changelog(data["changelog"])
             await LSPosed.create(
                 branch=branch,
                 version=data["version"],
                 version_code=data["versionCode"],
                 link=data["zipUrl"],
-                changelog=data["changelog"],
+                changelog=chg,
             )
             return await c.send_log_message(
                 config.LOGS_ID,
@@ -117,12 +119,13 @@ async def update_lsposed(c: Client, branch: str):
         )
         os.remove(file_path)
 
+        chg = await get_changelog(data["changelog"])
         _lsposed.update_from_dict(
             {
                 "version": data["version"],
                 "version_code": int(data["versionCode"]),
                 "link": data["zipUrl"],
-                "changelog": data["changelog"],
+                "changelog": chg,
             }
         )
         await _lsposed.save()
