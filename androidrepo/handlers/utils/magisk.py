@@ -42,10 +42,10 @@ async def check_modules(c: Client):
                     "#Sync #Magisk #Modules",
                 )
             data = response.json()
-            last_update = data["last_update"]
-            if config.LAST_UPDATE == last_update:
-                return
-            config.LAST_UPDATE = last_update
+            # last_update = data["last_update"]
+            # if config.LAST_UPDATE == last_update:
+            #     return
+            # config.LAST_UPDATE = last_update
             modules = data["modules"]
             for module in modules:
                 module = await parse_module(module)
@@ -82,9 +82,10 @@ async def check_modules(c: Client):
                 if _module.id == module["id"]:
                     del modules[index]
             await _module.delete()
-    return await c.send_log_message(
-        config.LOGS_ID,
-        f"""
+    if len(updated_modules) > 0 or len(excluded_modules) > 0:
+        await c.send_log_message(
+            config.LOGS_ID,
+            f"""
 <b>Magisk Modules check finished</b>
     <b>Found</b>: <code>{len(modules)}</code>
     <b>Updated</b>: <code>{len(updated_modules)}</code>
@@ -93,7 +94,8 @@ async def check_modules(c: Client):
 <b>Date</b>: <code>{date}</code>
 #Sync #Magisk #Modules
     """,
-    )
+        )
+    return
 
 
 async def get_modules(m: Message):
