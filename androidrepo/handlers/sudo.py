@@ -198,7 +198,7 @@ async def _aexec_(c: AndroidRepo, m: Message):
     await sm.edit_text(output_message)
 
 
-@AndroidRepo.on_message(filters.sudo & filters.cmd("(info|py)$"))
+@AndroidRepo.on_message(filters.sudo & filters.cmd("py"))
 async def on_info_m(c: AndroidRepo, m: Message):
     magisk_modules = await Modules.all()
     source_url = "git.io/JtVsY"

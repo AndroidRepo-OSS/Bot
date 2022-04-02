@@ -35,7 +35,7 @@ async def lsposed(c: AndroidRepo, m: Message):
     text += f"\n\n<b>Version</b>: <code>{_lsposed.version}</code> (<code>{_lsposed.version_code}</code>)"
     text += f"\n<b>Changelog</b>: {await get_changelog(_lsposed.changelog)}"
 
-    keyboard = [[("Download", _lsposed.link, "url")]]
+    keyboard = [[("⬇️ Download", _lsposed.link, "url")]]
 
     await sm.edit_text(
         text,

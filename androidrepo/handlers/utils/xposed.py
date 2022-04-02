@@ -48,7 +48,6 @@ async def check_lsposed(c: Client):
     TYPES: List[str] = ["riru", "zygisk"]
     for lsposed in TYPES:
         await update_lsposed(c, lsposed)
-        await asyncio.sleep(5)
 
 
 async def update_lsposed(c: Client, branch: str):

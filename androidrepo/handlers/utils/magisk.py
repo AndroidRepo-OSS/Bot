@@ -277,14 +277,10 @@ async def check_magisk(c: Client):
     TYPES: List[str] = ["stable", "beta", "canary"]
     for magisk in TYPES:
         await update_magisk(c, magisk)
-        await asyncio.sleep(5)
 
 
 async def update_magisk(c: Client, m_type: str):
     date = datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
-    sent = await c.send_log_message(
-        config.LOGS_ID, "<b>Magisk Releases check started...</b>"
-    )
     URL = MAGISK_URL.format(m_type)
     async with httpx.AsyncClient(
         http2=True, timeout=httpx_timeout, follow_redirects=True
