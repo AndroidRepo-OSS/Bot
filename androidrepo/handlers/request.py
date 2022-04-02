@@ -7,7 +7,7 @@ import time
 from contextlib import suppress
 from typing import List
 
-from kantex.html import Bold, Code, Italic, KanTeXDocument, KeyValueItem, Section
+from kantex.html import Bold, Code, Italic, Item, KanTeXDocument, KeyValueItem, Section
 from pyrogram import filters
 from pyrogram.errors import BadRequest, UserIsBlocked
 from pyrogram.types import Message, User
@@ -109,12 +109,17 @@ async def on_myrequests_m(c: AndroidRepo, m: Message):
     requests = await Requests.filter(user=user.id)
 
     if len(requests) > 0:
-        text = f"<b>Ignored</b>: <code>{bool(requests[-1].ignore)}</code>\n\n"
-        text += "<b>Requests</b>:\n"
+        doc = KanTeXDocument(
+            KeyValueItem(Bold("Ignored"), Code(bool(requests[-1].ignore))),
+        )
+        sec = Section("Requests")
         for request in requests:
-            text += f"    {request.request_id}: <code>{request.request}</code>\n"
-        text += "\nUse <code>/cancelrequest &lt;id&gt;</code> to cancel a request."
-        return await m.reply_text(text)
+            sec.append(KeyValueItem(Bold(request.request_id), Code(request.request)))
+        doc.append(sec)
+        doc.append(
+            Item("Use <code>/cancelrequest &lt;id&gt;</code> to cancel a request.")
+        )
+        return await m.reply_text(doc)
     return await m.reply_text("You haven't sent any request yet.")
 
 
