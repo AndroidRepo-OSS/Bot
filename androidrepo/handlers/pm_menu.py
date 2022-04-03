@@ -10,7 +10,7 @@ from pyrogram.types import CallbackQuery, Message
 from ..androidrepo import AndroidRepo
 
 
-@AndroidRepo.on_message(filters.cmd("start"))
+@AndroidRepo.on_message(filters.cmd("start$"))
 @AndroidRepo.on_callback_query(filters.regex("^start_back$"))
 async def start(c: AndroidRepo, m: Union[Message, CallbackQuery]):
     keyboard = []
@@ -29,7 +29,7 @@ async def start(c: AndroidRepo, m: Union[Message, CallbackQuery]):
                 [
                     (
                         "Click here for help!",
-                        f"http://t.me/{c.me.username}?start",
+                        f"http://t.me/{c.me.username}?start=help",
                         "url",
                     )
                 ]
@@ -48,7 +48,8 @@ async def start(c: AndroidRepo, m: Union[Message, CallbackQuery]):
         )
 
 
-@AndroidRepo.on_message(filters.cmd("help"))
+@AndroidRepo.on_message(filters.cmd("start help") & filters.private)
+@AndroidRepo.on_message(filters.cmd("help$"))
 @AndroidRepo.on_callback_query(filters.regex("^help$"))
 async def on_help(c: AndroidRepo, m: Union[Message, CallbackQuery]):
     chat_type = m.chat.type if isinstance(m, Message) else m.message.chat.type
@@ -67,7 +68,7 @@ async def on_help(c: AndroidRepo, m: Union[Message, CallbackQuery]):
             [
                 (
                     "Click here for help!",
-                    f"http://t.me/{c.me.username}?start",
+                    f"http://t.me/{c.me.username}?start=help",
                     "url",
                 )
             ]
