@@ -127,7 +127,10 @@ async def help_commands(c: AndroidRepo, m: CallbackQuery):
         "<b>Here is what I can do for you:</b>\n"
         " - <code>/magisk (branch)</code>: Returns the latest version of Magisk in the specified branch.\n"
         " - <code>/lsposed (zygisk or riru)</code>: Returns the latest version of LSPosed.\n"
-        "<b>Available Magisk branches:</b> <code>stable</code>, <code>beta</code>, <code>canary</code>."
+        " - <code>/twrp (codename)</code>: Gets latest TWRP for the android device using the codename.\n"
+        " - <code>/ofox (codename)</code>: Gets latest OFRP for the android device using the codename.\n"
+        " - <code>/ofox or /ofox beta</code>: Sends the list of devices with stable or beta releases supported by OFRP.\n"
+        "\n<b>Available Magisk branches:</b> <code>stable</code>, <code>beta</code>, <code>canary</code>."
     )
     await m.message.edit_text(
         text,
