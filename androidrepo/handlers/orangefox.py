@@ -18,47 +18,67 @@ API_HOST = "https://api.orangefox.download/v3"
 TYPES: List[str] = ["stable", "beta"]
 
 
-@AndroidRepo.on_message(filters.cmd("ofox"))
-async def orangefox(c: AndroidRepo, m: Message):
-    args = m.text.split(" ")
-    if len(args) == 1:
-        codename = None
-    else:
-        codename = args[1]
+@AndroidRepo.on_message(filters.cmd("start ofox_(?P<args>.+)") & filters.private)
+async def orangefox_pm(c: AndroidRepo, m: Message):
+    args = m.matches[0]["args"]
+    await orangefox_list(c, m, args)
 
-    if len(args) == 1 or len(args) == 2:
-        build_type = "stable"
-    else:
-        build_type = args[2]
 
-    if codename == "beta":
-        build_type = "beta"
+@AndroidRepo.on_message(filters.cmd("ofox$"))
+@AndroidRepo.on_message(filters.cmd("ofox beta$"))
+async def orangefox_list(c: AndroidRepo, m: Message, build_type: str = None):
+    if build_type is None:
+        args = m.text.split(" ")
+        if len(args) == 1:
+            build_type = "stable"
+        else:
+            build_type = args[1]
 
-    async with httpx.AsyncClient(
-        http2=True, timeout=httpx_timeout, follow_redirects=True
-    ) as client:
-        if codename is None or codename == "beta":
+    if m.chat.type == "private":
+        async with httpx.AsyncClient(
+            http2=True, timeout=httpx_timeout, follow_redirects=True
+        ) as client:
             text = f"<b>OrangeFox Recovery <i>{build_type}</i> is currently avaible for:</b>"
             data = await client.get(
                 f"{API_HOST}/devices/?release_type={build_type}&sort=device_name_asc"
             )
             devices = json.loads(data.text)
-            try:
-                for device in devices["data"]:
-                    text += f"\n - {device['full_name']} (<code>{device['codename']}</code>)"
-            except BaseException:
-                await m.reply_text(
-                    f"'<b>{build_type}</b>' is not a type of build available, the types are just '<b>beta</b>' or '<b>stable</b>'."
+            for device in devices["data"]:
+                text += (
+                    f"\n - {device['full_name']} (<code>{device['codename']}</code>)"
                 )
-                return
 
-            if build_type == "stable":
-                text += "\n\nTo get the latest Stable release use <code>/ofox (codename)</code>, for example: <code>/ofox raphael</code>"
-            if build_type == "beta":
-                text += "\n\nTo get the latest Beta release use <code>/ofox (codename) beta</code>, for example: <code>/ofox raphael beta</code>"
             await m.reply_text(text)
-            return
+    else:
+        text = "Click the button below to receive the list of devices supported by OrangeFox."
+        text += "\nUse <code>/ofox (device)</code> or <code>/ofox (device) beta</code>."
 
+        keyboard = [
+            [
+                (
+                    "Got to PM!",
+                    f"https://t.me/{c.me.username}?start=ofox_{build_type}",
+                    "url",
+                )
+            ]
+        ]
+
+        await m.reply_text(text, reply_markup=c.ikb(keyboard))
+
+
+@AndroidRepo.on_message(filters.cmd(r"ofox (?P<args>.+)"))
+async def orangefox(c: AndroidRepo, m: Message):
+    args = m.matches[0]["args"].split(" ")
+    if len(args) == 1 or len(args) == 2:
+        codename = args[0]
+        build_type = "stable"
+
+    if len(args) == 2:
+        build_type = args[1]
+
+    async with httpx.AsyncClient(
+        http2=True, timeout=httpx_timeout, follow_redirects=True
+    ) as client:
         try:
             data = await client.get(f"{API_HOST}/devices/get?codename={codename}")
         except TimeoutException:
