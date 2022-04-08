@@ -50,8 +50,8 @@ async def orangefox_list(c: AndroidRepo, m: Message, build_type: str = None):
 
             await m.reply_text(text)
     else:
-        text = "Click the button below to receive the list of devices supported by OrangeFox."
-        text += "\nUse <code>/ofox (device)</code> or <code>/ofox (device) beta</code>."
+        text = f"Click the button below to receive the list of devices with <code>{build_type}</code> releases of OrangeFox."
+        text += "\nUse <code>/ofox (device)</code> or <code>/ofox (device) beta</code> to get the last release for the specified device."
 
         keyboard = [
             [
