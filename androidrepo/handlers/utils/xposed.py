@@ -14,7 +14,12 @@ from pyrogram import Client, enums
 from pyrogram.types import Message
 
 from androidrepo import config
-from androidrepo.database import LSPosed
+from androidrepo.database.xposed import (
+    create_lsposed,
+    get_all_lsposed,
+    get_lsposed_by_branch,
+    update_lsposed_from_dict,
+)
 from androidrepo.handlers.utils import get_changelog
 from androidrepo.utils import httpx_timeout
 
@@ -24,17 +29,17 @@ LSPOSED_URL: str = "https://lsposed.github.io/LSPosed/release/{}.json"
 
 async def get_lsposed(m: Message):
     date = datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
-    lsposeds = await LSPosed.all()
+    lsposeds = await get_all_lsposed()
     lsposed_list = []
     if len(lsposeds) > 0:
         for lsposed in lsposeds:
             lsposed_list.append(
                 dict(
-                    branch=lsposed.branch,
-                    version=lsposed.version,
-                    versionCode=lsposed.version_code,
-                    link=lsposed.link,
-                    changelog=lsposed.changelog,
+                    branch=lsposed["branch"],
+                    version=lsposed["version"],
+                    versionCode=lsposed["version_code"],
+                    link=lsposed["link"],
+                    changelog=lsposed["changelog"],
                 )
             )
         document = io.BytesIO(str(json.dumps(lsposed_list, indent=4)).encode())
@@ -66,10 +71,10 @@ async def update_lsposed(c: Client, branch: str):
                 "#Sync #LSPosed #Releases",
             )
         data = response.json()
-        _lsposed = await LSPosed.get_or_none(branch=branch)
+        _lsposed = await get_lsposed_by_branch(branch=branch)
         if _lsposed is None:
             chg = await get_changelog(data["changelog"])
-            await LSPosed.create(
+            await create_lsposed(
                 branch=branch,
                 version=data["version"],
                 version_code=data["versionCode"],
@@ -84,9 +89,9 @@ async def update_lsposed(c: Client, branch: str):
                 f"<b>Date</b>: <code>{date}</code>\n"
                 "#Sync #LSPosed #Releases",
             )
-        if _lsposed.version == data["version"] or int(_lsposed.version_code) == int(
-            data["versionCode"]
-        ):
+        if _lsposed["version"] == data["version"] or int(
+            _lsposed["version_code"]
+        ) == int(data["versionCode"]):
             return
 
         async with aiodown.Client() as client:
@@ -121,15 +126,15 @@ async def update_lsposed(c: Client, branch: str):
         os.remove(file_path)
 
         chg = await get_changelog(data["changelog"])
-        _lsposed.update_from_dict(
-            {
+        await update_lsposed_from_dict(
+            branch=branch,
+            data={
                 "version": data["version"],
                 "version_code": int(data["versionCode"]),
                 "link": data["zipUrl"],
                 "changelog": chg,
-            }
+            },
         )
-        await _lsposed.save()
         return await c.send_log_message(
             config.LOGS_ID,
             "<b>LSPosed Releases check finished</b>\n"

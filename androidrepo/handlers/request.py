@@ -5,6 +5,7 @@ import asyncio
 import datetime
 import time
 from contextlib import suppress
+from tokenize import Ignore
 from typing import List
 
 from kantex.html import Bold, Code, Italic, Item, KanTeXDocument, KeyValueItem, Section
@@ -13,7 +14,14 @@ from pyrogram.errors import BadRequest, UserIsBlocked
 from pyrogram.types import Message, User
 
 from androidrepo.config import STAFF_ID, SUDO_USERS
-from androidrepo.database import Requests
+from androidrepo.database.requests import (
+    create_request,
+    delete_request,
+    get_request_by_message_id,
+    get_request_by_request_id,
+    get_request_by_user_id,
+    update_request,
+)
 
 from ..androidrepo import AndroidRepo
 
@@ -40,13 +48,13 @@ async def on_request_m(c: AndroidRepo, m: Message):
             await m.delete()
         return
     user = m.from_user
-    requests = await Requests.filter(user=user.id)
+    requests = await get_request_by_user_id(user_id=user.id)
     last_request = None
 
     last_request_time = 0
     if requests:
         last_request = requests[-1]
-        last_request_time = last_request.time
+        last_request_time = last_request["time"]
 
     now_time = time.time()
 
@@ -54,11 +62,10 @@ async def on_request_m(c: AndroidRepo, m: Message):
         now = datetime.datetime.fromtimestamp(now_time)
         if last_request_time > 0:
             last = datetime.datetime.fromtimestamp(last_request_time)
-            if last_request.attempts > 3:
-                if bool(last_request.ignore):
+            if last_request["attempts"] > 3:
+                if bool(last_request["ignore"]):
                     return
-                last_request.update_from_dict({"ignore": 1})
-                await last_request.save()
+                await update_request(Ignore=1)
                 await c.send_log_message(
                     STAFF_ID,
                     f"{user.mention} was spamming requests and has been ignored.",
@@ -76,7 +83,7 @@ async def on_request_m(c: AndroidRepo, m: Message):
                     "You cannot send multiple requests one after the other, wait 3 minutes."
                 )
 
-    if len(requests) > 15:
+    if requests is not None and len(requests) > 15:
         return await m.reply_text("You have reached the requests limit.")
 
     request = m.text[len(m.text.split()[0]) + 1 :]
@@ -89,14 +96,14 @@ async def on_request_m(c: AndroidRepo, m: Message):
     )
     sent = await c.send_log_message(STAFF_ID, doc)
     if sent:
-        await Requests.create(
-            user=user.id,
+        await create_request(
+            user_id=user.id,
             time=now_time,
             ignore=0,
             request=request,
             attempts=0,
-            request_id=(last_request.request_id if last_request else 0) + 1,
-            message_id=sent.message_id,
+            request_id=(last_request["request_id"] if last_request else 0) + 1,
+            message_id=sent.id,
         )
         await m.reply_text("Your request was successfully sent!")
     else:
@@ -106,15 +113,17 @@ async def on_request_m(c: AndroidRepo, m: Message):
 @AndroidRepo.on_message(filters.private & filters.cmd("myrequests"))
 async def on_myrequests_m(c: AndroidRepo, m: Message):
     user = m.from_user
-    requests = await Requests.filter(user=user.id)
+    requests = await get_request_by_user_id(user_id=user.id)
 
-    if len(requests) > 0:
+    if requests:
         doc = KanTeXDocument(
-            KeyValueItem(Bold("Ignored"), Code(bool(requests[-1].ignore))),
+            KeyValueItem(Bold("Ignored"), Code(bool(requests[0]["ignore"]))),
         )
         sec = Section("Requests")
         for request in requests:
-            sec.append(KeyValueItem(Bold(request.request_id), Code(request.request)))
+            sec.append(
+                KeyValueItem(Bold(request["request_id"]), Code(request["request"]))
+            )
         doc.append(sec)
         doc.append(
             Item("Use <code>/cancelrequest &lt;id&gt;</code> to cancel a request.")
@@ -127,12 +136,11 @@ async def on_myrequests_m(c: AndroidRepo, m: Message):
 async def on_cancelrequest_m(c: AndroidRepo, m: Message):
     rid = m.matches[0]["id"]
     user = m.from_user
-    request = await Requests.filter(user=user.id, request_id=rid).first()
-
-    await c.delete_log_messages(message_ids=request.message_id)
+    request = await get_request_by_request_id(request_id=rid)
 
     if request:
-        await request.delete()
+        await c.delete_log_messages(message_ids=request[0]["message_id"])
+        await delete_request(user_id=user.id, request_id=rid)
         return await m.reply_text("Request canceled successfully!")
     return await m.reply_text("Request not found.")
 
@@ -158,12 +166,12 @@ async def on_ignore_m(c: AndroidRepo, m: Message):
     if user.id in SUDO_USERS:
         return
 
-    requests = await Requests.filter(user=user.id)
+    requests = await get_request_by_user_id(user_id=user.id)
     if requests:
         last_request = requests[-1]
     else:
-        await Requests.create(
-            user=user.id, time=time.time(), ignore=1, request="", attempts=0
+        await create_request(
+            user_id=user.id, time=time.time(), ignore=1, request="", attempts=0
         )
         return await m.reply_text(f"{user.mention} can't send requests.")
 
@@ -197,7 +205,7 @@ async def on_unignore_m(c: AndroidRepo, m: Message):
     if user.id in SUDO_USERS:
         return
 
-    requests = await Requests.filter(user=user.id)
+    requests = await get_request_by_user_id(user_id=user.id)
     if requests:
         last_request = requests[-1]
     else:
@@ -215,7 +223,7 @@ async def on_done_m(c: AndroidRepo, m: Message):
     query = m.text.split()
     command = query[0]
     reply = m.reply_to_message
-    request = await Requests.filter(message_id=reply.message_id)
+    request = await get_request_by_user_id(message_id=reply.id)
     if len(request) > 0:
         request = request[0]
         user_id = request.user
@@ -249,11 +257,10 @@ async def on_done_m(c: AndroidRepo, m: Message):
 async def on_reply_m(c: AndroidRepo, m: Message):
     answer = m.matches[0]["answer"]
     reply = m.reply_to_message
-    request = await Requests.filter(message_id=reply.message_id)
-    if len(request) > 0:
-        request = request[0]
-        user_id = request.user
-        request_id = request.request_id
+    request = await get_request_by_message_id(message_id=reply.id)
+    if request:
+        user_id = request[0]["user"]
+        request_id = request[0]["request_id"]
         doc = KanTeXDocument(
             Section(
                 "Answer to your request",
@@ -273,17 +280,16 @@ async def on_reply_m(c: AndroidRepo, m: Message):
 @AndroidRepo.on_deleted_messages(filters.chat(STAFF_ID))
 async def on_deleted_m(c: AndroidRepo, messages: List[Message]):
     for m in messages:
-        request = await Requests.filter(message_id=m.message_id)
-        if len(request) > 0:
-            request = request[0]
-            user_id = request.user
-            request_id = request.request_id
+        request = await get_request_by_message_id(message_id=m.id)
+        if request:
+            user_id = request[0]["user"]
+            request_id = request[0]["request_id"]
             doc = KanTeXDocument(
                 Section(
                     "Request canceled",
                     KeyValueItem(Bold("ID"), Code(request_id)),
-                    KeyValueItem(Bold("Request"), Code(request.request)),
+                    KeyValueItem(Bold("Request"), Code(request[0]["request"])),
                 )
             )
             await c.send_message(chat_id=user_id, text=doc)
-            await request.delete()
+            await delete_request(user_id=user_id, request_id=request_id)

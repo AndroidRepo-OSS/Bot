@@ -16,7 +16,17 @@ from pyrogram import Client, enums
 from pyrogram.types import Message
 
 from androidrepo import config
-from androidrepo.database import Magisk, Modules
+from androidrepo.database.magisk import (
+    create_magisk,
+    create_module,
+    delete_module,
+    get_all_magisk,
+    get_all_modules,
+    get_magisk_by_branch,
+    get_module_by_id,
+    update_magisk_from_dict,
+    update_module_by_dict,
+)
 from androidrepo.handlers.utils import get_changelog
 from androidrepo.utils import httpx_timeout
 
@@ -49,9 +59,9 @@ async def check_modules(c: Client):
             modules = data["modules"]
             for module in modules:
                 module = await parse_module(module)
-                _module = await Modules.filter(id=module["id"])
+                _module = await get_module_by_id(id=module["id"])
                 if len(_module) < 1:
-                    await Modules.create(
+                    await create_module(
                         id=module["id"],
                         url=module["url"],
                         name=module["name"],
@@ -60,9 +70,8 @@ async def check_modules(c: Client):
                         last_update=module["last_update"],
                     )
                     continue
-                _module = _module[0]
-                if _module.version != module["version"] or int(
-                    _module.version_code
+                if _module["version"] != module["version"] or int(
+                    _module["version_code"]
                 ) != int(module["versionCode"]):
                     updated_modules.append(module)
                     await asyncio.sleep(2)
@@ -75,13 +84,13 @@ async def check_modules(c: Client):
             "#Sync #Timeout #Magisk #Modules",
         )
     module_ids = list(map(lambda module: module["id"], modules))
-    for _module in await Modules.all():
-        if _module.id not in module_ids:
+    for _module in await get_all_modules():
+        if _module["id"] not in module_ids:
             excluded_modules.append(_module)
             for index, module in enumerate(modules):
-                if _module.id == module["id"]:
+                if _module["id"] == module["id"]:
                     del modules[index]
-            await _module.delete()
+            await delete_module(id=_module["id"])
     if len(updated_modules) > 0 or len(excluded_modules) > 0:
         await c.send_log_message(
             config.LOGS_ID,
@@ -100,7 +109,7 @@ async def check_modules(c: Client):
 
 async def get_modules(m: Message):
     date = datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
-    modules = await Modules.all()
+    modules = await get_all_modules()
     modules_list = []
     if len(modules) > 0:
         for module in modules:
@@ -129,18 +138,18 @@ async def get_modules(m: Message):
 
 async def get_magisk(m: Message):
     date = datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
-    magisks = await Magisk.all()
+    magisks = await get_all_magisk()
     magisks_list = []
     if len(magisks) > 0:
         for magisk in magisks:
             magisks_list.append(
                 dict(
-                    branch=magisk.branch,
-                    version=magisk.version,
-                    versionCode=magisk.version_code,
-                    link=magisk.link,
-                    note=magisk.note,
-                    changelog=magisk.changelog,
+                    branch=magisk["branch"],
+                    version=magisk["version"],
+                    versionCode=magisk["version_code"],
+                    link=magisk["link"],
+                    note=magisk["note"],
+                    changelog=magisk["changelog"],
                 )
             )
         document = io.BytesIO(str(json.dumps(magisks_list, indent=4)).encode())
@@ -241,17 +250,16 @@ async def update_module(c: Client, module: Dict):
         caption=caption, document=file_path, force_document=True
     )
     os.remove(file_path)
-    mod = (await Modules.filter(id=module["id"]))[0]
-    mod.update_from_dict(
-        {
+    await update_module_by_dict(
+        id=module["id"],
+        data={
             "description": module["description"],
             "name": module["name"],
             "version_code": module["versionCode"],
             "version": module["version"],
             "last_update": module["last_update"],
-        }
+        },
     )
-    await mod.save()
 
 
 async def check_magisk(c: Client):
@@ -269,10 +277,10 @@ async def update_magisk(c: Client, m_type: str):
         response = await client.get(URL)
         data = response.json()
         magisk = data["magisk"]
-        _magisk = await Magisk.get_or_none(branch=m_type)
+        _magisk = await get_magisk_by_branch(branch=m_type)
         if _magisk is None:
             chg = await get_changelog(magisk["note"])
-            await Magisk.create(
+            await create_magisk(
                 branch=m_type,
                 version=magisk["version"],
                 version_code=magisk["versionCode"],
@@ -288,16 +296,19 @@ async def update_magisk(c: Client, m_type: str):
                 f"<b>Date</b>: <code>{date}</code>\n"
                 "#Sync #Magisk #Releases",
             )
-        if _magisk.version == magisk["version"] or int(_magisk.version_code) == int(
-            magisk["versionCode"]
-        ):
+        if _magisk["version"] == magisk["version"] or int(
+            _magisk["version_code"]
+        ) == int(magisk["versionCode"]):
             return
 
         # do not send the Magisk Beta if it is the same version of Magisk Stable
         r = await client.get(MAGISK_URL.format("beta"))
         magiskb = r.json()
-        _magisks = await Magisk.get_or_none(branch="stable")
-        if not m_type == "beta" or not magiskb["magisk"]["version"] == _magisks.version:
+        _magisks = await get_magisk_by_branch(branch="stable")
+        if (
+            not m_type == "beta"
+            or not magiskb["magisk"]["version"] == _magisks["version"]
+        ):
             file_name = f"Magisk-{magisk['version']}_({magisk['versionCode']}).apk"
             file_path = DOWNLOAD_DIR + file_name
             async with aiodown.Client() as client:
@@ -325,16 +336,16 @@ async def update_magisk(c: Client, m_type: str):
             os.remove(file_path)
 
         chg = await get_changelog(magisk["note"])
-        _magisk.update_from_dict(
-            {
+        await update_magisk_from_dict(
+            branch=m_type,
+            data={
                 "version": magisk["version"],
                 "version_code": int(magisk["versionCode"]),
                 "link": magisk["link"],
                 "note": magisk["note"],
                 "changelog": chg,
-            }
+            },
         )
-        await _magisk.save()
         return await c.send_log_message(
             config.LOGS_ID,
             "<b>Magisk Releases check finished</b>\n"

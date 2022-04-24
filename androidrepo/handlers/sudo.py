@@ -20,7 +20,7 @@ from pyrogram.types import CallbackQuery, Message
 
 import androidrepo
 from androidrepo.config import OWNER_ID
-from androidrepo.database import Modules
+from androidrepo.database.magisk import get_all_modules
 
 from ..androidrepo import AndroidRepo
 
@@ -200,7 +200,7 @@ async def _aexec_(c: AndroidRepo, m: Message):
 
 @AndroidRepo.on_message(filters.sudo & filters.cmd("py"))
 async def on_info_m(c: AndroidRepo, m: Message):
-    magisk_modules = await Modules.all()
+    magisk_modules = await get_all_modules()
     source_url = "git.io/JtVsY"
     doc = KanTeXDocument(
         Section(

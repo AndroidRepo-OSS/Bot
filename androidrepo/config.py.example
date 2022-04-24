@@ -32,3 +32,5 @@ MODULES_URL: str = "https://github.com/Magisk-Modules-Repo/submission/raw/module
 
 # Don't change if you don't know what it's for
 LAST_UPDATE: int = 0
+
+DATABASE_PATH: str = "./androidrepo/database/database.sqlite"

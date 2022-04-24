@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0
 # Copyright (c) 2021-2022 Amano Team
 
+import asyncio
 import logging
 
 from pyrogram.session import Session
@@ -10,6 +11,7 @@ from rich.logging import RichHandler
 from rich.panel import Panel
 
 from androidrepo.androidrepo import AndroidRepo
+from androidrepo.database import database
 from androidrepo.utils import is_windows
 
 # Logging colorized by rich
@@ -50,7 +52,19 @@ Session.notice_displayed = True
 
 
 if __name__ == "__main__":
+    # open new asyncio event loop
+    event_policy = asyncio.get_event_loop_policy()
+    event_loop = event_policy.new_event_loop()
     try:
+        # start the bot
+        event_loop.run_until_complete(database.connect())
         AndroidRepo().run()
     except KeyboardInterrupt:
+        # exit gracefully
         log.warning("Forced stop... Bye!")
+    finally:
+        # close Database if open
+        if database.is_connected:
+            event_loop.run_until_complete(database.close())
+        # close asyncio event loop
+        event_loop.close()

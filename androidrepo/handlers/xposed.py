@@ -6,7 +6,7 @@ from typing import List
 from pyrogram import enums, filters
 from pyrogram.types import Message
 
-from androidrepo.database import LSPosed
+from androidrepo.database.xposed import get_lsposed_by_branch
 from androidrepo.handlers.utils.xposed import get_lsposed
 
 from ..androidrepo import AndroidRepo
@@ -28,13 +28,13 @@ async def lsposed(c: AndroidRepo, m: Message):
         await sm.edit(f"The version type '<b>{branch}</b>' was not found.")
         return
 
-    _lsposed = await LSPosed.get(branch=branch)
+    _lsposed = await get_lsposed_by_branch(branch=branch)
 
     text = f"<b>{branch.capitalize()} - LSPosed</b>"
-    text += f"\n\n<b>Version</b>: <code>{_lsposed.version}</code> (<code>{_lsposed.version_code}</code>)"
-    text += f"\n<b>Changelog</b>: {_lsposed.changelog}"
+    text += f"\n\n<b>Version</b>: <code>{_lsposed['version']}</code> (<code>{_lsposed['version_code']}</code>)"
+    text += f"\n<b>Changelog</b>: {_lsposed['changelog']}"
 
-    keyboard = [[("⬇️ Download", _lsposed.link, "url")]]
+    keyboard = [[("⬇️ Download", _lsposed["link"], "url")]]
 
     await sm.edit_text(
         text,

@@ -13,7 +13,6 @@ from pyrogram.errors import BadRequest, ChatWriteForbidden, MessageDeleteForbidd
 from pyrogram.helpers import ikb
 from pyrogram.raw.all import layer
 from pyrogram.types import User
-from tortoise import Tortoise
 
 import androidrepo
 from androidrepo.config import (
@@ -25,9 +24,6 @@ from androidrepo.config import (
     STAFF_ID,
     SUDO_USERS,
 )
-from androidrepo.database.database import connect_database
-from androidrepo.handlers.utils.magisk import check_magisk, check_modules
-from androidrepo.handlers.utils.xposed import check_lsposed
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +48,6 @@ class AndroidRepo(Client):
 
     async def start(self):
         await super().start()
-        await connect_database()
 
         # Misc monkeypatch
         self.me = await self.get_me()
@@ -84,12 +79,14 @@ class AndroidRepo(Client):
         # Sync Magisk every 1h
         @aiocron.crontab("0 * * * *")
         async def magisk_sync() -> None:
+            from androidrepo.handlers.utils.magisk import check_magisk, check_modules
+            from androidrepo.handlers.utils.xposed import check_lsposed
+
             await check_modules(self)
             await check_lsposed(self)
             await check_magisk(self)
 
     async def stop(self, *args):
-        await Tortoise.close_connections()
         await super().stop()
         log.info("AndroidRepo stopped... Bye.")
 
