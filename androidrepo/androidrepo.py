@@ -38,7 +38,7 @@ class AndroidRepo(Client):
         self.is_sudo = SUDO_USERS
 
         super().__init__(
-            session_name=name,
+            name=name,
             app_version=f"AndroidRepo v{androidrepo.__version__}",
             api_id=API_ID,
             api_hash=API_HASH,

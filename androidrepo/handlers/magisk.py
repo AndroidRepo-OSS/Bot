@@ -40,7 +40,6 @@ async def on_magisk_m(c: AndroidRepo, m: Message):
         text,
         reply_markup=c.ikb(keyboard),
         disable_web_page_preview=True,
-        parse_mode="combined",
     )
 
 

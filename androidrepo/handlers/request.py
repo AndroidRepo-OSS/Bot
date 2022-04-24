@@ -8,7 +8,7 @@ from contextlib import suppress
 from typing import List
 
 from kantex.html import Bold, Code, Italic, Item, KanTeXDocument, KeyValueItem, Section
-from pyrogram import filters
+from pyrogram import enums, filters
 from pyrogram.errors import BadRequest, UserIsBlocked
 from pyrogram.types import Message, User
 
@@ -20,7 +20,7 @@ from ..androidrepo import AndroidRepo
 
 @AndroidRepo.on_message((filters.cmd("request ") | filters.regex("^#request ")))
 async def on_request_m(c: AndroidRepo, m: Message):
-    if m.chat.type in ["supergroup", "group"]:
+    if m.chat.type in (enums.ChatType.GROUP, enums.ChatType.SUPERGROUP):
         keyboard = [
             [
                 (

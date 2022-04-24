@@ -7,7 +7,6 @@ from pyrogram import filters
 from pyrogram.types import Message
 
 from androidrepo.database import LSPosed
-from androidrepo.handlers.utils.magisk import get_changelog
 from androidrepo.handlers.utils.xposed import get_lsposed
 
 from ..androidrepo import AndroidRepo
@@ -41,7 +40,6 @@ async def lsposed(c: AndroidRepo, m: Message):
         text,
         reply_markup=c.ikb(keyboard),
         disable_web_page_preview=True,
-        parse_mode="combined",
     )
 
 

@@ -5,11 +5,12 @@ import asyncio
 import io
 import os
 from datetime import datetime
+from typing import List
 
 import aiodown
 import httpx
 import rapidjson as json
-from pyrogram import Client
+from pyrogram import Client, enums
 from pyrogram.types import Message
 
 from androidrepo import config
@@ -114,7 +115,7 @@ async def update_lsposed(c: Client, branch: str):
         await c.send_channel_document(
             caption=caption,
             document=file_path,
-            parse_mode="combined",
+            parse_mode=enums.ParseMode.DEFAULT,
             force_document=True,
         )
         os.remove(file_path)
