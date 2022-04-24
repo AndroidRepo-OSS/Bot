@@ -8,7 +8,7 @@ from typing import BinaryIO, List, Union
 import aiocron
 import pyrogram
 import sentry_sdk
-from pyrogram import Client
+from pyrogram import Client, enums
 from pyrogram.errors import BadRequest, ChatWriteForbidden, MessageDeleteForbidden
 from pyrogram.helpers import ikb
 from pyrogram.raw.all import layer
@@ -43,7 +43,7 @@ class AndroidRepo(Client):
             api_id=API_ID,
             api_hash=API_HASH,
             bot_token=BOT_TOKEN,
-            parse_mode="html",
+            parse_mode=enums.ParseMode.HTML,
             workers=24,
             workdir="androidrepo",
             plugins={"root": "androidrepo.handlers"},

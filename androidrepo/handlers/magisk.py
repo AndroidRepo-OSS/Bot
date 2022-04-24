@@ -3,7 +3,7 @@
 
 from typing import List
 
-from pyrogram import filters
+from pyrogram import enums, filters
 from pyrogram.types import Message
 
 from androidrepo.database import Magisk
@@ -39,6 +39,7 @@ async def on_magisk_m(c: AndroidRepo, m: Message):
     await sm.edit_text(
         text,
         reply_markup=c.ikb(keyboard),
+        parse_mode=enums.ParseMode.DEFAULT,
         disable_web_page_preview=True,
     )
 
