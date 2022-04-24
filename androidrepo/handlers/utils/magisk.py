@@ -115,12 +115,12 @@ async def get_modules(m: Message):
         for module in modules:
             modules_list.append(
                 dict(
-                    id=module.id,
-                    url=module.url,
-                    name=module.name,
-                    version=module.version,
-                    version_code=module.version_code,
-                    last_update=module.last_update,
+                    id=module["id"],
+                    url=module["url"],
+                    name=module["name"],
+                    version=module["version"],
+                    version_code=module["version_code"],
+                    last_update=module["last_update"],
                 )
             )
         document = io.BytesIO(str(json.dumps(modules_list, indent=4)).encode())
