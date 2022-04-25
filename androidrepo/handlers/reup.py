@@ -11,6 +11,7 @@ from datetime import datetime
 import aiodown
 import humanize
 from pyrogram import filters
+from pyrogram.enums import ParseMode
 from pyrogram.errors import FloodWait, MessageIdInvalid, MessageNotModified
 from pyrogram.types import Message
 
@@ -33,6 +34,7 @@ async def reupload(c: AndroidRepo, m: Message):
         file_desc = await m.ask(
             "Send me the file description as markdown...",
             filters=filters.sudo,
+            parse_mode=ParseMode.MARKDOWN,
             timeout=120,
         )
     except asyncio.exceptions.TimeoutError:
@@ -107,7 +109,7 @@ async def reupload(c: AndroidRepo, m: Message):
         file_name=file_name,
         force_document=True,
         progress=progress,
-        parse_mode="MD",
+        parse_mode=ParseMode.MARKDOWN,
     )
 
     end = datetime.now()
