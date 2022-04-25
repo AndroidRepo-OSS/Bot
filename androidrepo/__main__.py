@@ -7,7 +7,7 @@ import logging
 from pyrogram import idle
 from pyrogram.session import Session
 
-from androidrepo.androidrepo import AndroidRepo
+from androidrepo.androidrepo import AndroidRepo, log
 from androidrepo.database import database
 from androidrepo.utils import is_windows
 
@@ -23,8 +23,6 @@ logging.basicConfig(
 logging.getLogger("pyrogram.syncer").setLevel(logging.WARNING)
 logging.getLogger("pyrogram.client").setLevel(logging.WARNING)
 logging.getLogger("aiodown").setLevel(logging.WARNING)
-
-log = logging.getLogger(__name__)
 
 
 # Use uvloop to improve speed if available
@@ -62,7 +60,7 @@ if __name__ == "__main__":
         event_loop.run_until_complete(main())
     except KeyboardInterrupt:
         # exit gracefully
-        logger.warning("Forced stop... Bye!")
+        log.warning("Forced stop... Bye!")
     finally:
         # close asyncio event loop
         event_loop.close()
