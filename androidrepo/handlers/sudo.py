@@ -138,7 +138,7 @@ async def on_terminal_m(c: AndroidRepo, m: Message):
             )
             document.name = "output.txt"
             await c.send_document(
-                chat_id=m.chat.id, document=document, reply_to_message_id=m.message_id
+                chat_id=m.chat.id, document=document, reply_to_message_id=m.id
             )
         else:
             output_message += f"<b>Output\n&gt;</b> {output}"
@@ -168,7 +168,7 @@ async def on_eval_m(c: AndroidRepo, m: Message):
             )
             document.name = "output.txt"
             await c.send_document(
-                chat_id=m.chat.id, document=document, reply_to_message_id=m.message_id
+                chat_id=m.chat.id, document=document, reply_to_message_id=m.id
             )
         else:
             output_message += f"<b>Output\n&gt;</b> {output}"
