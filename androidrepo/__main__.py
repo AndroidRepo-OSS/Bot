@@ -5,22 +5,16 @@ import asyncio
 import logging
 
 from pyrogram.session import Session
-from rich import box
-from rich import print as rprint
-from rich.logging import RichHandler
-from rich.panel import Panel
 
 from androidrepo.androidrepo import AndroidRepo
 from androidrepo.database import database
 from androidrepo.utils import is_windows
 
-# Logging colorized by rich
-FORMAT = "%(message)s"
+# Custom logging format
 logging.basicConfig(
-    level="INFO",
-    format=FORMAT,
+    level=logging.INFO,
+    format="%(name)s.%(funcName)s | %(levelname)s | %(message)s",
     datefmt="[%X]",
-    handlers=[RichHandler(rich_tracebacks=True)],
 )
 
 
@@ -29,7 +23,7 @@ logging.getLogger("pyrogram.syncer").setLevel(logging.WARNING)
 logging.getLogger("pyrogram.client").setLevel(logging.WARNING)
 logging.getLogger("aiodown").setLevel(logging.WARNING)
 
-log = logging.getLogger("rich")
+log = logging.getLogger(__name__)
 
 
 # Use uvloop to improve speed if available
@@ -40,11 +34,6 @@ try:
 except ImportError:
     if not is_windows():
         log.warning("uvloop is not installed and therefore will be disabled.")
-
-
-# Beautiful init with rich
-header = ":rocket: [bold green]AndroidRepo Running...[/bold green] :rocket:"
-rprint(Panel.fit(header, border_style="white", box=box.ASCII))
 
 
 # Disable ugly pyrogram notice print
