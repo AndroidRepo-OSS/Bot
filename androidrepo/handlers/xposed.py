@@ -3,10 +3,12 @@
 
 from typing import List
 
+import httpx
 from pyrogram import enums, filters
 from pyrogram.types import Message
 
-from androidrepo.database.xposed import get_lsposed_by_branch
+from androidrepo.database.xposed import create_lsposed, get_lsposed_by_branch
+from androidrepo.handlers.utils import get_changelog
 from androidrepo.handlers.utils.xposed import get_lsposed
 
 from ..androidrepo import AndroidRepo
@@ -29,6 +31,22 @@ async def lsposed(c: AndroidRepo, m: Message):
         return
 
     _lsposed = await get_lsposed_by_branch(branch=branch)
+    if _lsposed is None:
+        async with httpx.AsyncClient(http2=True, follow_redirects=True) as client:
+            r = await client.get(
+                f"https://lsposed.github.io/LSPosed/release/{branch}.json"
+            )
+            lsposed = r.json()
+            await client.aclose()
+        changelog = await get_changelog(lsposed["changelog"])
+        await create_lsposed(
+            branch=branch,
+            version=lsposed["version"],
+            version_code=lsposed["versionCode"],
+            link=lsposed["zipUrl"],
+            changelog=changelog,
+        )
+        _lsposed = await get_lsposed_by_branch(branch=branch)
 
     text = f"<b>{branch.capitalize()} - LSPosed</b>"
     text += f"\n\n<b>Version</b>: <code>{_lsposed['version']}</code> (<code>{_lsposed['version_code']}</code>)"

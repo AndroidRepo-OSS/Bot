@@ -3,10 +3,12 @@
 
 from typing import List
 
+import httpx
 from pyrogram import enums, filters
 from pyrogram.types import Message
 
-from androidrepo.database.magisk import get_magisk_by_branch
+from androidrepo.database.magisk import create_magisk, get_magisk_by_branch
+from androidrepo.handlers.utils import get_changelog
 from androidrepo.handlers.utils.magisk import get_magisk, get_modules
 
 from ..androidrepo import AndroidRepo
@@ -29,6 +31,24 @@ async def on_magisk_m(c: AndroidRepo, m: Message):
         return
 
     _magisk = await get_magisk_by_branch(branch=m_type)
+    if _magisk is None:
+        async with httpx.AsyncClient(http2=True, follow_redirects=True) as client:
+            r = await client.get(
+                f"https://github.com/topjohnwu/magisk-files/raw/master/{m_type}.json"
+            )
+            data = r.json()
+            await client.aclose()
+        magisk = data["magisk"]
+        changelog = await get_changelog(magisk["note"])
+        await create_magisk(
+            branch=m_type,
+            version=magisk["version"],
+            version_code=magisk["versionCode"],
+            link=magisk["link"],
+            note=magisk["note"],
+            changelog=changelog,
+        )
+        _magisk = await get_magisk_by_branch(branch=m_type)
 
     text = f"<b>Magisk Branch</b>: <code>{m_type}</code>"
     text += f"\n\n<b>Version</b>: <a href='{_magisk['link']}'>{'v' if _magisk['version'].isdecimal() else ''}{_magisk['version']}</a> ({_magisk['version_code']})"
