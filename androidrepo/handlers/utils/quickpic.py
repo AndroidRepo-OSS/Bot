@@ -68,7 +68,7 @@ async def check_quickpic(c: Client, branch: str = "stable"):
             if download.get_status() == "failed":
                 return
 
-        caption = f"<b>QuickPic Mode {version}</b>\n\n"
+        caption = f"<b>QuickPic Mod v{version}</b>\n\n"
         caption += (
             "⚡<i>A simple, lightweight and materialized gallery for Android.</i>\n"
         )
