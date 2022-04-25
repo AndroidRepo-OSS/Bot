@@ -60,6 +60,12 @@ class Database(object):
                 link TEXT,
                 changelog TEXT
         );
+        CREATE TABLE IF NOT EXISTS quickpic (
+                branch TEXT PRIMARY KEY,
+                version INTENGER,
+                download_url TEXT,
+                changelog TEXT
+        );
         """
         )
 

@@ -12,7 +12,8 @@ from zipfile import ZipFile
 import aiodown
 import httpx
 import rapidjson as json
-from pyrogram import Client, enums
+from pyrogram import Client
+from pyrogram.enums import ParseMode
 from pyrogram.types import Message
 
 from androidrepo import config
@@ -330,7 +331,7 @@ async def update_magisk(c: Client, m_type: str):
             await c.send_channel_document(
                 caption=text,
                 document=file_path,
-                parse_mode=enums.ParseMode.DEFAULT,
+                parse_mode=ParseMode.DEFAULT,
                 force_document=True,
             )
             os.remove(file_path)
