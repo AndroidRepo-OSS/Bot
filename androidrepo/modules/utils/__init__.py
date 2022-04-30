@@ -4,13 +4,11 @@
 
 import httpx
 
-from androidrepo.utils import httpx_timeout
-
 
 async def get_changelog(url: str) -> str:
     changelog = ""
     async with httpx.AsyncClient(
-        http2=True, timeout=httpx_timeout, follow_redirects=True
+        http2=True, timeout=40, follow_redirects=True
     ) as client:
         response = await client.get(url)
         data = response.read()

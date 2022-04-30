@@ -77,7 +77,6 @@ class AndroidRepo(Client):
             log.warning("Unable to send the startup message to the SUDO_USERS")
 
         # Sync Magisk every 1h
-        @aiocron.crontab("0 * * * *")
         async def magisk_sync() -> None:
             from androidrepo.modules.utils.magisk import check_magisk, check_modules
             from androidrepo.modules.utils.quickpic import check_quickpic
@@ -88,7 +87,9 @@ class AndroidRepo(Client):
             await check_quickpic(self)
             await check_magisk(self)
 
-    async def stop(self, *args):
+        aiocron.crontab("0 * * * *", func=magisk_sync, args=(self,), start=True)
+
+    async def stop(self):
         await super().stop()
         log.info("AndroidRepo stopped... Bye.")
 
