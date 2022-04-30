@@ -7,7 +7,7 @@ from typing import Union
 from pyrogram import enums, filters
 from pyrogram.types import CallbackQuery, Message
 
-from ..androidrepo import AndroidRepo
+from androidrepo.bot import AndroidRepo
 
 
 @AndroidRepo.on_message(filters.cmd("start$"))

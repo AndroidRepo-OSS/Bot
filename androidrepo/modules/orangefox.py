@@ -10,9 +10,7 @@ from httpx import TimeoutException
 from pyrogram import enums, filters
 from pyrogram.types import Message
 
-from androidrepo.utils import httpx_timeout
-
-from ..androidrepo import AndroidRepo
+from androidrepo.bot import AndroidRepo
 
 API_HOST = "https://api.orangefox.download/v3"
 TYPES: List[str] = ["stable", "beta"]
@@ -36,7 +34,7 @@ async def orangefox_list(c: AndroidRepo, m: Message, build_type: str = None):
 
     if m.chat.type == enums.ChatType.PRIVATE:
         async with httpx.AsyncClient(
-            http2=True, timeout=httpx_timeout, follow_redirects=True
+            http2=True, timeout=40, follow_redirects=True
         ) as client:
             text = f"<b>OrangeFox Recovery <i>{build_type}</i> is currently avaible for:</b>"
             data = await client.get(
@@ -77,7 +75,7 @@ async def orangefox(c: AndroidRepo, m: Message):
         build_type = args[1]
 
     async with httpx.AsyncClient(
-        http2=True, timeout=httpx_timeout, follow_redirects=True
+        http2=True, timeout=40, follow_redirects=True
     ) as client:
         try:
             data = await client.get(f"{API_HOST}/devices/get?codename={codename}")

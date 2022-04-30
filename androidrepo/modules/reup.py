@@ -15,7 +15,7 @@ from pyrogram.enums import ParseMode
 from pyrogram.errors import FloodWait, MessageIdInvalid, MessageNotModified
 from pyrogram.types import Message
 
-from androidrepo.androidrepo import AndroidRepo
+from androidrepo.bot import AndroidRepo
 from androidrepo.config import LOGS_ID
 
 DOWNLOAD_DIR = "./downloads/"

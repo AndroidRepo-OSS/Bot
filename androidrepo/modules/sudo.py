@@ -19,10 +19,9 @@ from pyrogram import filters
 from pyrogram.types import CallbackQuery, Message
 
 import androidrepo
+from androidrepo.bot import AndroidRepo
 from androidrepo.config import OWNER_ID
 from androidrepo.database.magisk import get_all_modules
-
-from ..androidrepo import AndroidRepo
 
 
 @AndroidRepo.on_message(filters.sudo & filters.cmd("ping"))

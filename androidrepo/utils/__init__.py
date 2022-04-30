@@ -7,12 +7,9 @@ import platform
 import sys
 from typing import List
 
-import httpx
-
 from . import filters
 
 __all__: List[str] = ["filters"]
-httpx_timeout = httpx.Timeout(40, pool=None)
 
 
 def is_windows() -> bool:

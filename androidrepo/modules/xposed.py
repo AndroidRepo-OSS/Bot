@@ -7,11 +7,10 @@ import httpx
 from pyrogram import enums, filters
 from pyrogram.types import Message
 
+from androidrepo.bot import AndroidRepo
 from androidrepo.database.xposed import create_lsposed, get_lsposed_by_branch
 from androidrepo.modules.utils import get_changelog
 from androidrepo.modules.utils.xposed import get_lsposed
-
-from ..androidrepo import AndroidRepo
 
 TYPES: List[str] = ["riru", "zygisk"]
 
@@ -32,7 +31,9 @@ async def lsposed(c: AndroidRepo, m: Message):
 
     _lsposed = await get_lsposed_by_branch(branch=branch)
     if _lsposed is None:
-        async with httpx.AsyncClient(http2=True, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            http2=True, timeout=40, follow_redirects=True
+        ) as client:
             r = await client.get(
                 f"https://lsposed.github.io/LSPosed/release/{branch}.json"
             )

@@ -22,7 +22,6 @@ from androidrepo.database.xposed import (
     update_lsposed_from_dict,
 )
 from androidrepo.modules.utils import get_changelog
-from androidrepo.utils import httpx_timeout
 
 DOWNLOAD_DIR: str = "./downloads/LSPosed/"
 LSPOSED_URL: str = "https://lsposed.github.io/LSPosed/release/{}.json"
@@ -61,7 +60,7 @@ async def check_lsposed(c: Client):
 async def update_lsposed(c: Client, branch: str):
     date = datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
     async with httpx.AsyncClient(
-        http2=True, timeout=httpx_timeout, follow_redirects=True
+        http2=True, timeout=40, follow_redirects=True
     ) as client:
         response = await client.get(LSPOSED_URL.format(branch))
         if response.status_code in [500, 503, 504, 505]:

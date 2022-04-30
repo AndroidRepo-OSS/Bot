@@ -4,14 +4,13 @@
 from pyrogram import filters
 from pyrogram.types import Message
 
+from androidrepo.bot import AndroidRepo
 from androidrepo.config import PREFIXES, STAFF_ID
 from androidrepo.database.contact import (
     create_contact,
     delete_contact,
     get_contact_by_id,
 )
-
-from ..androidrepo import AndroidRepo
 
 
 @AndroidRepo.on_message(filters.private & filters.cmd("contact"))

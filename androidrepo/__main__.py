@@ -7,7 +7,7 @@ import logging
 from pyrogram import idle
 from pyrogram.session import Session
 
-from androidrepo.androidrepo import AndroidRepo, log
+from androidrepo.bot import AndroidRepo, log
 from androidrepo.database import database
 from androidrepo.utils import is_windows
 

@@ -23,7 +23,9 @@ QUICKPIC_URL: str = "https://github.com/WSTxda/QP-Gallery-Releases/raw/master/OT
 
 async def check_quickpic(c: Client, branch: str = "stable"):
     date = datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
-    async with httpx.AsyncClient(http2=True, follow_redirects=True) as client:
+    async with httpx.AsyncClient(
+        http2=True, timeout=40, follow_redirects=True
+    ) as client:
         response = await client.get(QUICKPIC_URL)
         if response.status_code in [500, 503, 504, 505]:
             return await c.send_log_message(

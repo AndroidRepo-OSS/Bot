@@ -29,7 +29,6 @@ from androidrepo.database.magisk import (
     update_module_by_dict,
 )
 from androidrepo.modules.utils import get_changelog
-from androidrepo.utils import httpx_timeout
 
 DOWNLOAD_DIR: str = "./downloads/"
 MAGISK_URL: str = "https://github.com/topjohnwu/magisk-files/raw/master/{}.json"
@@ -42,7 +41,7 @@ async def check_modules(c: Client):
     excluded_modules = []
     try:
         async with httpx.AsyncClient(
-            http2=True, timeout=httpx_timeout, follow_redirects=True
+            http2=True, timeout=40, follow_redirects=True
         ) as client:
             response = await client.get(config.MODULES_URL)
             if response.status_code in [500, 503, 504, 505]:
@@ -175,7 +174,7 @@ async def parse_module(to_parse: Union[Dict, str]) -> Dict:
         prop_url = to_parse
 
     async with httpx.AsyncClient(
-        http2=True, timeout=httpx_timeout, follow_redirects=True
+        http2=True, timeout=40, follow_redirects=True
     ) as client:
         response = await client.get(prop_url)
         data = response.read().decode()
@@ -273,7 +272,7 @@ async def update_magisk(c: Client, m_type: str):
     date = datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
     URL = MAGISK_URL.format(m_type)
     async with httpx.AsyncClient(
-        http2=True, timeout=httpx_timeout, follow_redirects=True
+        http2=True, timeout=40, follow_redirects=True
     ) as client:
         response = await client.get(URL)
         data = response.json()

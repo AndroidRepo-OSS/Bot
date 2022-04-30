@@ -13,6 +13,7 @@ from pyrogram import enums, filters
 from pyrogram.errors import BadRequest, UserIsBlocked
 from pyrogram.types import Message, User
 
+from androidrepo.bot import AndroidRepo
 from androidrepo.config import STAFF_ID, SUDO_USERS
 from androidrepo.database.requests import (
     create_request,
@@ -22,8 +23,6 @@ from androidrepo.database.requests import (
     get_request_by_user_id,
     update_request,
 )
-
-from ..androidrepo import AndroidRepo
 
 
 @AndroidRepo.on_message((filters.cmd("request ") | filters.regex("^#request ")))

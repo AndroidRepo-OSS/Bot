@@ -6,9 +6,7 @@ from bs4 import BeautifulSoup
 from pyrogram import filters
 from pyrogram.types import Message
 
-from androidrepo.utils import httpx_timeout
-
-from ..androidrepo import AndroidRepo
+from androidrepo.bot import AndroidRepo
 
 
 @AndroidRepo.on_message(filters.cmd("twrp"))
@@ -24,7 +22,7 @@ async def twrp(c: AndroidRepo, m: Message):
         device = device[1:]
 
     async with httpx.AsyncClient(
-        http2=True, timeout=httpx_timeout, follow_redirects=True
+        http2=True, timeout=40, follow_redirects=True
     ) as client:
         r = await client.get(f"https://eu.dl.twrp.me/{device}/")
         if r.status_code == 404:
