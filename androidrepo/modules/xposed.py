@@ -8,8 +8,8 @@ from pyrogram import enums, filters
 from pyrogram.types import Message
 
 from androidrepo.database.xposed import create_lsposed, get_lsposed_by_branch
-from androidrepo.handlers.utils import get_changelog
-from androidrepo.handlers.utils.xposed import get_lsposed
+from androidrepo.modules.utils import get_changelog
+from androidrepo.modules.utils.xposed import get_lsposed
 
 from ..androidrepo import AndroidRepo
 

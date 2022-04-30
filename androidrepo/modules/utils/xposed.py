@@ -21,7 +21,7 @@ from androidrepo.database.xposed import (
     get_lsposed_by_branch,
     update_lsposed_from_dict,
 )
-from androidrepo.handlers.utils import get_changelog
+from androidrepo.modules.utils import get_changelog
 from androidrepo.utils import httpx_timeout
 
 DOWNLOAD_DIR: str = "./downloads/LSPosed/"

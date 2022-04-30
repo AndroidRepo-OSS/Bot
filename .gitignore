@@ -10,9 +10,9 @@ androidrepo/database/*.sqlite*
 
 # Byte pre-compiled
 androidrepo/__pycache__/
-androidrepo/handlers/utils/__pycache__/
-androidrepo/handlers/__pycache__/
-androidrepo/database/__pycache__/
+androidrepo/modules/utils/__pycache__/
+androidrepo/modules/__pycache__/
+androidrepo/modules/__pycache__/
 androidrepo/utils/__pycache__/
 
 # Environments

@@ -28,7 +28,7 @@ from androidrepo.database.magisk import (
     update_magisk_from_dict,
     update_module_by_dict,
 )
-from androidrepo.handlers.utils import get_changelog
+from androidrepo.modules.utils import get_changelog
 from androidrepo.utils import httpx_timeout
 
 DOWNLOAD_DIR: str = "./downloads/"

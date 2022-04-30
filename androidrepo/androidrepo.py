@@ -42,7 +42,7 @@ class AndroidRepo(Client):
             parse_mode=enums.ParseMode.HTML,
             workers=24,
             workdir="androidrepo",
-            plugins={"root": "androidrepo.handlers"},
+            plugins={"root": "androidrepo.modules"},
             sleep_threshold=180,
         )
 

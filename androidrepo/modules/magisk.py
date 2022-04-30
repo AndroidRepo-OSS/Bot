@@ -8,8 +8,8 @@ from pyrogram import enums, filters
 from pyrogram.types import Message
 
 from androidrepo.database.magisk import create_magisk, get_magisk_by_branch
-from androidrepo.handlers.utils import get_changelog
-from androidrepo.handlers.utils.magisk import get_magisk, get_modules
+from androidrepo.modules.utils import get_changelog
+from androidrepo.modules.utils.magisk import get_magisk, get_modules
 
 from ..androidrepo import AndroidRepo
 
