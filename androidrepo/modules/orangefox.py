@@ -7,7 +7,8 @@ from typing import List
 import httpx
 import rapidjson as json
 from httpx import TimeoutException
-from pyrogram import enums, filters
+from pyrogram import filters
+from pyrogram.enums import ChatType
 from pyrogram.types import Message
 
 from androidrepo.bot import AndroidRepo
@@ -32,7 +33,7 @@ async def orangefox_list(c: AndroidRepo, m: Message, build_type: str = None):
         else:
             build_type = args[1]
 
-    if m.chat.type == enums.ChatType.PRIVATE:
+    if m.chat.type == ChatType.PRIVATE:
         async with httpx.AsyncClient(
             http2=True, timeout=40, follow_redirects=True
         ) as client:

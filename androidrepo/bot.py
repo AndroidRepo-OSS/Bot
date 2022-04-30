@@ -79,9 +79,9 @@ class AndroidRepo(Client):
         # Sync Magisk every 1h
         @aiocron.crontab("0 * * * *")
         async def magisk_sync() -> None:
-            from androidrepo.handlers.utils.magisk import check_magisk, check_modules
-            from androidrepo.handlers.utils.quickpic import check_quickpic
-            from androidrepo.handlers.utils.xposed import check_lsposed
+            from androidrepo.modules.utils.magisk import check_magisk, check_modules
+            from androidrepo.modules.utils.quickpic import check_quickpic
+            from androidrepo.modules.utils.xposed import check_lsposed
 
             await check_modules(self)
             await check_lsposed(self)

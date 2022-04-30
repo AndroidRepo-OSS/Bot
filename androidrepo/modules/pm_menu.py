@@ -4,7 +4,8 @@
 import html
 from typing import Union
 
-from pyrogram import enums, filters
+from pyrogram import filters
+from pyrogram.enums import ChatType
 from pyrogram.types import CallbackQuery, Message
 
 from androidrepo.bot import AndroidRepo
@@ -22,7 +23,7 @@ async def start(c: AndroidRepo, m: Union[Message, CallbackQuery]):
         ]
     )
     if isinstance(m, Message):
-        if m.chat.type == enums.ChatType.PRIVATE:
+        if m.chat.type == ChatType.PRIVATE:
             keyboard.append([("❔ Help", "help")])
         else:
             keyboard.append(
@@ -53,7 +54,7 @@ async def start(c: AndroidRepo, m: Union[Message, CallbackQuery]):
 @AndroidRepo.on_callback_query(filters.regex("^help$"))
 async def on_help(c: AndroidRepo, m: Union[Message, CallbackQuery]):
     chat_type = m.chat.type if isinstance(m, Message) else m.message.chat.type
-    if chat_type == enums.ChatType.PRIVATE:
+    if chat_type == ChatType.PRIVATE:
         keyboard = [
             [
                 ("🔧 Utilities", "help_commands"),

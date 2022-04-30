@@ -4,7 +4,8 @@
 from typing import List
 
 import httpx
-from pyrogram import enums, filters
+from pyrogram import filters
+from pyrogram.enums import ParseMode
 from pyrogram.types import Message
 
 from androidrepo.bot import AndroidRepo
@@ -58,7 +59,7 @@ async def lsposed(c: AndroidRepo, m: Message):
     await sm.edit_text(
         text,
         reply_markup=c.ikb(keyboard),
-        parse_mode=enums.ParseMode.DEFAULT,
+        parse_mode=ParseMode.DEFAULT,
         disable_web_page_preview=True,
     )
 

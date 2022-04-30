@@ -5,11 +5,11 @@ import asyncio
 import datetime
 import time
 from contextlib import suppress
-from tokenize import Ignore
 from typing import List
 
 from kantex.html import Bold, Code, Italic, Item, KanTeXDocument, KeyValueItem, Section
-from pyrogram import enums, filters
+from pyrogram import filters
+from pyrogram.enums import ChatType
 from pyrogram.errors import BadRequest, UserIsBlocked
 from pyrogram.types import Message, User
 
@@ -27,7 +27,7 @@ from androidrepo.database.requests import (
 
 @AndroidRepo.on_message((filters.cmd("request ") | filters.regex("^#request ")))
 async def on_request_m(c: AndroidRepo, m: Message):
-    if m.chat.type in (enums.ChatType.GROUP, enums.ChatType.SUPERGROUP):
+    if m.chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
         keyboard = [
             [
                 (
