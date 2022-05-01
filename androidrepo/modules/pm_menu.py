@@ -6,7 +6,6 @@ from typing import Union
 
 from pyrogram import filters
 from pyrogram.enums import ChatType
-from pyrogram.helpers import array_chunk
 from pyrogram.types import CallbackQuery, Message
 
 from androidrepo.bot import AndroidRepo
@@ -20,20 +19,20 @@ async def start(c: AndroidRepo, union: Union[Message, CallbackQuery]):
     user = union.from_user
 
     text = f"Hi <b>{html.escape(user.first_name)}</b>, I am the <b>official bot of the Android Repository channel</b>."
-    buttons = [("ℹ️ About", "about")]
-
-    if m.chat.type == ChatType.PRIVATE:
-        buttons.append(("❔ Help", "help"))
-    else:
-        buttons.append(
-            (
-                "Click here for help!",
-                f"http://t.me/{c.me.username}?start=help",
-                "url",
-            )
+    keyboard = [
+        (
+            "Click here for help!",
+            f"http://t.me/{c.me.username}?start=help",
+            "url",
         )
-
-    keyboard = array_chunk(buttons, 2)
+    ]
+    if m.chat.type == ChatType.PRIVATE:
+        keyboard = [
+            (
+                ("ℹ️ About", "about"),
+                ("❔ Help", "help"),
+            )
+        ]
 
     await (m.edit_text if is_callback else m.reply_text)(
         text,
