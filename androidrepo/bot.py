@@ -95,7 +95,7 @@ class AndroidRepo(Client):
             await check_quickpic(self)
             await check_magisk(self)
 
-        aiocron.crontab("0 * * * *", func=magisk_sync, args=(self,), start=True)
+        aiocron.crontab("0 * * * *", func=magisk_sync, start=True)
 
     async def stop(self):
         await super().stop()
