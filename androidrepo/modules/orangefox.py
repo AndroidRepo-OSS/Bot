@@ -68,7 +68,7 @@ async def orangefox_list(c: AndroidRepo, m: Message, build_type: str = None):
 @AndroidRepo.on_message(filters.cmd(r"ofox (?P<args>.+)"))
 async def orangefox(c: AndroidRepo, m: Message):
     args = m.matches[0]["args"].split(" ")
-    if len(args) == 1 or len(args) == 2:
+    if len(args) in (1, 2):
         codename = args[0]
         build_type = "stable"
 
