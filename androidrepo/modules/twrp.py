@@ -15,7 +15,12 @@ async def twrp(c: AndroidRepo, m: Message):
     device = m.text[len(command) :]
 
     if len(device) < 1:
-        await m.reply_text("Use <code>/twrp (device)</code>.")
+        await m.reply_text(
+            text=(
+                "<b>Usage</b>: <code>/twrp (codename)</code>."
+                "\n<b>Example</b>: <code>/twrp beryllium</code>"
+            )
+        )
         return
 
     if len(device) > 1:
