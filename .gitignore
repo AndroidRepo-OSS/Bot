@@ -12,7 +12,7 @@ androidrepo/database/*.sqlite*
 androidrepo/__pycache__/
 androidrepo/modules/utils/__pycache__/
 androidrepo/modules/__pycache__/
-androidrepo/modules/__pycache__/
+androidrepo/database/__pycache__/
 androidrepo/utils/__pycache__/
 
 # Environments

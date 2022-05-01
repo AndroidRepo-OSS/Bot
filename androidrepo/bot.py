@@ -24,6 +24,7 @@ from androidrepo.config import (
     STAFF_ID,
     SUDO_USERS,
 )
+from androidrepo.utils import shell_exec
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +32,6 @@ log = logging.getLogger(__name__)
 class AndroidRepo(Client):
     def __init__(self):
         name = self.__class__.__name__.lower()
-        self.is_sudo = SUDO_USERS
 
         super().__init__(
             name=name,
@@ -49,9 +49,14 @@ class AndroidRepo(Client):
     async def start(self):
         await super().start()
 
+        # Save version info
+        self.version_code = int((await shell_exec("git rev-list --count HEAD"))[0])
+        self.version = str((await shell_exec("git rev-parse --short HEAD"))[0])
+
         # Misc monkeypatch
         self.me = await self.get_me()
         self.ikb = ikb
+        self.is_sudo = SUDO_USERS
 
         if not SENTRY_KEY or SENTRY_KEY == "":
             log.warning("No sentry.io key found! Service not initialized.")
@@ -64,15 +69,18 @@ class AndroidRepo(Client):
         )
 
         # Startup message
-        start_message = (
-            f"<b>AndroidRepo <code>v{androidrepo.__version__}</code> started...</b>\n"
-            f"- <b>Pyrogram:</b> <code>v{pyrogram.__version__}</code>\n"
-            f"- <b>Python:</b> <code>v{platform.python_version()}</code>\n"
-            f"- <b>System:</b> <code>{self.system_version}</code>"
-        )
         try:
             for user in self.is_sudo:
-                await self.send_message(chat_id=user, text=start_message)
+                await self.send_message(
+                    chat_id=user,
+                    text=(
+                        f"<b>AndroidRepo</b> <a href='https://github.com/AmanoTeam/AndroidRepo/commit/{self.version}'>{self.version}</a> (<code>{self.version_code}</code>) started!\n"
+                        f"- <b>Pyrogram:</b> <code>v{pyrogram.__version__}</code>\n"
+                        f"- <b>Python:</b> <code>v{platform.python_version()}</code>\n"
+                        f"- <b>System:</b> <code>{self.system_version}</code>"
+                    ),
+                    disable_web_page_preview=True,
+                )
         except (BadRequest, ChatWriteForbidden):
             log.warning("Unable to send the startup message to the SUDO_USERS")
 
