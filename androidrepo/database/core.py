@@ -28,7 +28,7 @@ class Database(object):
                 user INTEGER
         );
         CREATE TABLE IF NOT EXISTS modules (
-                id INTEGER PRIMARY KEY,
+                id TEXT PRIMARY KEY,
                 url TEXT,
                 name TEXT,
                 version TEXT,

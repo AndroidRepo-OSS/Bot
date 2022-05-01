@@ -60,7 +60,7 @@ async def check_modules(c: Client):
             for module in modules:
                 module = await parse_module(module)
                 _module = await get_module_by_id(id=module["id"])
-                if len(_module) < 1:
+                if not _module:
                     await create_module(
                         id=module["id"],
                         url=module["url"],
