@@ -87,7 +87,7 @@ async def about(c: AndroidRepo, union: Union[Message, CallbackQuery]):
     keyboard = [
         [
             ("📦 GitHub", "https://github.com/AmanoTeam/AndroidRepo", "url"),
-            ("📚 Channel", "https://t.me/AndroidRepo", "url"),
+            ("📚 Channel", "https://t.me/HitaloProjects", "url"),
         ]
     ]
 
