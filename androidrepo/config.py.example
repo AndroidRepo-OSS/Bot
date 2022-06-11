@@ -26,9 +26,8 @@ CHAT_ID: int = 0
 STAFF_ID: int = 0
 LOGS_ID: int = 0
 
-# The json (compatible) with the list of modules of Magisk
-# We use the original Magisk repository
-MODULES_URL: str = "https://github.com/Magisk-Modules-Repo/submission/raw/modules/modules.json"
+# GitHub OAuth token
+GITHUB_TOKEN: str = ""
 
 # Don't change if you don't know what it's for
 LAST_UPDATE: int = 0

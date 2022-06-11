@@ -6,12 +6,14 @@ import io
 import os
 import shutil
 from datetime import datetime
-from typing import Dict, List, Union
+from typing import Dict, List
 from zipfile import ZipFile
 
 import aiodown
 import httpx
 import rapidjson as json
+from github import Github
+from github.GithubException import UnknownObjectException
 from pyrogram import Client
 from pyrogram.enums import ParseMode
 from pyrogram.types import Message
@@ -33,70 +35,65 @@ from androidrepo.modules.utils import get_changelog
 DOWNLOAD_DIR: str = "./downloads/"
 MAGISK_URL: str = "https://github.com/topjohnwu/magisk-files/raw/master/{}.json"
 
+github = Github(config.GITHUB_TOKEN)
+user = github.get_user("Magisk-Modules-Repo")
+repos = user.get_repos()
+
 
 async def check_modules(c: Client):
     date = datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
-    modules = []
+    modules = {"list": []}
     updated_modules = []
     excluded_modules = []
-    try:
-        async with httpx.AsyncClient(
-            http2=True, timeout=40, follow_redirects=True
-        ) as client:
-            response = await client.get(config.MODULES_URL)
-            if response.status_code in [500, 503, 504, 505]:
-                return await c.send_log_message(
-                    config.LOGS_ID,
-                    f"<b>GitHub is in serious trouble, I couldn't complete the verification..</b>\n\n"
-                    f"<b>Date</b>: <code>{date}</code>\n"
-                    "#Sync #Magisk #Modules",
+    for repo in repos:
+        try:
+            module_prop = repo.get_contents("module.prop").decoded_content.decode(
+                "utf-8"
+            )
+            module = await parse_module(module_prop)
+            module[
+                "url"
+            ] = f"https://github.com/{repo.full_name}/archive/{repo.default_branch}.zip"
+            commit_sha = repo.get_commits()[0].sha
+            commit = repo.get_commit(sha=commit_sha)
+            commit_date = commit.commit.committer.date
+            module["last_update"] = int(commit_date.timestamp() * 1000)
+            modules["list"].append(module)
+            _module = await get_module_by_id(id=module["id"])
+            if not _module:
+                await create_module(
+                    id=module["id"],
+                    url=module["url"],
+                    name=module["name"],
+                    version=module["version"],
+                    version_code=module["versionCode"],
+                    last_update=module["last_update"],
                 )
-            data = response.json()
-            # last_update = data["last_update"]
-            # if config.LAST_UPDATE == last_update:
-            #     return
-            # config.LAST_UPDATE = last_update
-            modules = data["modules"]
-            for module in modules:
-                module = await parse_module(module)
-                _module = await get_module_by_id(id=module["id"])
-                if not _module:
-                    await create_module(
-                        id=module["id"],
-                        url=module["url"],
-                        name=module["name"],
-                        version=module["version"],
-                        version_code=module["versionCode"],
-                        last_update=module["last_update"],
-                    )
-                    continue
-                if _module["version"] != module["version"] or int(
-                    _module["version_code"]
-                ) != int(module["versionCode"]):
-                    updated_modules.append(module)
-                    await asyncio.sleep(2)
-                    await update_module(c, module)
-    except httpx.ReadTimeout:
-        return await c.send_log_message(
-            config.LOGS_ID,
-            "<b>Check timeout...</b>\n"
-            f"<b>Date</b>: <code>{date}</code>\n"
-            "#Sync #Timeout #Magisk #Modules",
-        )
-    module_ids = list(map(lambda module: module["id"], modules))
+                continue
+        except UnknownObjectException:
+            continue
+
+        if _module["version"] != module["version"] or int(
+            _module["version_code"]
+        ) != int(module["versionCode"]):
+            updated_modules.append(module)
+            await asyncio.sleep(2)
+            await update_module(c, module)
+
+    module_ids = list(map(lambda module: module["id"], modules["list"]))
     for _module in await get_all_modules():
         if _module["id"] not in module_ids:
             excluded_modules.append(_module)
-            for index, module in enumerate(modules):
+            for index, module in enumerate(modules["list"]):
                 if _module["id"] == module["id"]:
-                    del modules[index]
+                    del modules["list"][index]
             await delete_module(id=_module["id"])
     if len(updated_modules) > 0 or len(excluded_modules) > 0:
         await c.send_log_message(
             config.LOGS_ID,
             f"""
 <b>Magisk Modules check finished</b>
-    <b>Found</b>: <code>{len(modules)}</code>
+    <b>Found</b>: <code>{len(modules["list"])}</code>
     <b>Updated</b>: <code>{len(updated_modules)}</code>
     <b>Excluded</b>: <code>{len(excluded_modules)}</code>
 
@@ -161,38 +158,23 @@ async def get_magisk(m: Message):
     return await m.reply_text("No Magisks found.")
 
 
-async def parse_module(to_parse: Union[Dict, str]) -> Dict:
-    if isinstance(to_parse, Dict):
-        module = {
-            "id": to_parse["id"],
-            "url": to_parse["zip_url"],
-            "last_update": to_parse["last_update"],
-        }
-        prop_url = to_parse["prop_url"]
-
-    if isinstance(to_parse, str):
-        prop_url = to_parse
-
-    async with httpx.AsyncClient(
-        http2=True, timeout=40, follow_redirects=True
-    ) as client:
-        response = await client.get(prop_url)
-        data = response.read().decode()
-        lines = data.split("\n")
-        for line in lines:
-            try:
-                key, value = line.split("=", 1)
-                if key in [
-                    "api",
-                    "author",
-                    "description",
-                    "name",
-                    "version",
-                    "versionCode",
-                ]:
-                    module[key] = value
-            except BaseException:
-                continue
+async def parse_module(data: str) -> Dict:
+    module: Dict = {}
+    for line in data.splitlines():
+        try:
+            key, value = line.split("=", 1)
+            if key in [
+                "id",
+                "author",
+                "description",
+                "name",
+                "version",
+                "versionCode",
+                "updateJson",
+            ]:
+                module[key] = value
+        except BaseException:
+            continue
     return module
 
 
