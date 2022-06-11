@@ -26,7 +26,7 @@ exclude = ["androidrepo/config.py", "androidrepo/bot.session", "androidrepo/bot.
 [tool.poetry.dependencies]
 python = "^3.8"
 beautifulsoup4 = "4.11.1"
-httpx = {version = "0.22.0", extras = ["http2"]}
+httpx = {version = "0.23.0", extras = ["http2"]}
 kantex = "0.2.0"
 python-rapidjson = "1.6"
 meval = "2.5"
