@@ -100,5 +100,5 @@ async def check_quickpic(c: Client, branch: str = "stable"):
             f"    <b>Updated</b>: <code>{branch}</code>\n"
             f"    <b>Version</b>: <code>{version} ({data['current_version']})</code>\n\n"
             f"<b>Date</b>: <code>{date}</code>\n"
-            "#Sync #LSPosed #Releases",
+            "#Sync #QuickPic #Releases",
         )
