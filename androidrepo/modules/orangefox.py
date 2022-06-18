@@ -75,6 +75,10 @@ async def orangefox(c: AndroidRepo, m: Message):
     if len(args) == 2:
         build_type = args[1]
 
+    if len(args) > 2:
+        await m.reply_text("Too many arguments! See <code>/help</code>.")
+        return
+
     async with httpx.AsyncClient(
         http2=True, timeout=40, follow_redirects=True
     ) as client:
