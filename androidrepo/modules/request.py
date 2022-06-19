@@ -222,11 +222,11 @@ async def on_done_m(c: AndroidRepo, m: Message):
     query = m.text.split()
     command = query[0]
     reply = m.reply_to_message
-    request = await get_request_by_user_id(message_id=reply.id)
+    request = await get_request_by_message_id(message_id=reply.id)
     if len(request) > 0:
         request = request[0]
-        user_id = request.user
-        request_id = request.request_id
+        user_id = request["user"]
+        request_id = request["request_id"]
         staff_msg = (
             f"<code>{m.text[len(command)+1:]}</code>" if len(query) > 1 else "None"
         )
@@ -235,7 +235,7 @@ async def on_done_m(c: AndroidRepo, m: Message):
                 "Request done",
                 KeyValueItem(Bold("ID"), Code(request_id)),
                 KeyValueItem(Bold("Staff message"), Code(staff_msg)),
-                KeyValueItem(Bold("Request"), Code(request.request)),
+                KeyValueItem(Bold("Request"), Code(request["request"])),
             ),
             Section(
                 "Note",
@@ -246,7 +246,7 @@ async def on_done_m(c: AndroidRepo, m: Message):
             await c.send_message(chat_id=user_id, text=doc)
         except UserIsBlocked:
             pass
-        await request.delete()
+        await delete_request(user_id=user_id, request_id=request_id)
         await m.reply_text("The request was successfully done.")
 
 
