@@ -284,55 +284,57 @@ async def update_magisk(c: Client, m_type: str):
             return
 
         # do not send the Magisk Beta if it is the same version of Magisk Stable
-        r = await client.get(MAGISK_URL.format("beta"))
-        magiskb = r.json()
-        _magisks = await get_magisk_by_branch(branch="stable")
-        if (
-            not m_type == "beta"
-            or not magiskb["magisk"]["version"] == _magisks["version"]
-        ):
-            file_name = f"Magisk-{magisk['version']}_({magisk['versionCode']}).apk"
-            file_path = DOWNLOAD_DIR + file_name
-            async with aiodown.Client() as client:
-                download = client.add(magisk["link"], file_path)
-                await client.start()
-                while not download.is_finished():
-                    await asyncio.sleep(0.5)
-                if download.get_status() == "failed":
-                    return
+        if m_type not in ("beta", "canary"):
+            r = await client.get(MAGISK_URL.format("beta"))
+            magiskb = r.json()
+            _magisks = await get_magisk_by_branch(branch="stable")
+            if magiskb["magisk"]["version"] == _magisks["version"]:
+                return
 
-            text = f"<b>Magisk {'v' if magisk['version'][0].isdecimal() else ''}{magisk['version']} ({magisk['versionCode']})</b>\n\n"
-            text += f"⚡<i>Magisk {m_type.capitalize()}</i>\n"
-            text += "⚡<i>Magisk is a suite of open source software for customizing Android, supporting devices higher than Android 5.0.</i>\n"
-            text += "⚡️<a href='https://github.com/topjohnwu/Magisk'>GitHub Repository</a>\n"
-            text += f"⚡<a href='{magisk['note']}'>Changelog</a>\n\n"
-            text += "<b>By:</b> <a href='https://github.com/topjohnwu'>John Wu</a>\n"
-            text += "<b>Follow:</b> @AndroidRepo"
+        file_name = f"Magisk{m_type.capitalize()}-{magisk['version']}_({magisk['versionCode']}).apk"
+        file_path = DOWNLOAD_DIR + file_name
+        async with aiodown.Client() as client:
+            download = client.add(magisk["link"], file_path)
+            await client.start()
+            while not download.is_finished():
+                await asyncio.sleep(0.5)
+            if download.get_status() == "failed":
+                return
 
-            await c.send_channel_document(
-                caption=text,
-                document=file_path,
-                parse_mode=ParseMode.DEFAULT,
-                force_document=True,
-            )
-            os.remove(file_path)
-
-        chg = await get_changelog(magisk["note"])
-        await update_magisk_from_dict(
-            branch=m_type,
-            data={
-                "version": magisk["version"],
-                "version_code": int(magisk["versionCode"]),
-                "link": magisk["link"],
-                "note": magisk["note"],
-                "changelog": chg,
-            },
+        text = f"<b>Magisk {'v' if magisk['version'][0].isdecimal() else ''}{magisk['version']} ({magisk['versionCode']})</b>\n\n"
+        text += f"⚡<i>Magisk {m_type.capitalize()}</i>\n"
+        text += "⚡<i>Magisk is a suite of open source software for customizing Android, supporting devices higher than Android 5.0.</i>\n"
+        text += (
+            "⚡️<a href='https://github.com/topjohnwu/Magisk'>GitHub Repository</a>\n"
         )
-        return await c.send_log_message(
-            config.LOGS_ID,
-            "<b>Magisk Releases check finished</b>\n"
-            f"    <b>Updated</b>: <code>{m_type}</code>\n"
-            f"    <b>Version</b>: <code>{magisk['version']} ({magisk['versionCode']})</code>\n\n"
-            f"<b>Date</b>: <code>{date}</code>\n"
-            "#Sync #Magisk #Releases",
+        text += f"⚡<a href='{magisk['note']}'>Changelog</a>\n\n"
+        text += "<b>By:</b> <a href='https://github.com/topjohnwu'>John Wu</a>\n"
+        text += "<b>Follow:</b> @AndroidRepo"
+
+        await c.send_channel_document(
+            caption=text,
+            document=file_path,
+            parse_mode=ParseMode.DEFAULT,
+            force_document=True,
         )
+        os.remove(file_path)
+
+    chg = await get_changelog(magisk["note"])
+    await update_magisk_from_dict(
+        branch=m_type,
+        data={
+            "version": magisk["version"],
+            "version_code": int(magisk["versionCode"]),
+            "link": magisk["link"],
+            "note": magisk["note"],
+            "changelog": chg,
+        },
+    )
+    return await c.send_log_message(
+        config.LOGS_ID,
+        "<b>Magisk Releases check finished</b>\n"
+        f"    <b>Updated</b>: <code>{m_type}</code>\n"
+        f"    <b>Version</b>: <code>{magisk['version']} ({magisk['versionCode']})</code>\n\n"
+        f"<b>Date</b>: <code>{date}</code>\n"
+        "#Sync #Magisk #Releases",
+    )
