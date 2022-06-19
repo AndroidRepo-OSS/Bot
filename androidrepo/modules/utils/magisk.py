@@ -286,9 +286,12 @@ async def update_magisk(c: Client, m_type: str):
         # do not send the Magisk Beta if it is the same version of Magisk Stable
         if m_type not in ("beta", "canary"):
             r = await client.get(MAGISK_URL.format("beta"))
-            magiskb = r.json()
+            data = r.json()
+            magiskb = data["magisk"]
             _magisks = await get_magisk_by_branch(branch="stable")
-            if magiskb["magisk"]["version"] == _magisks["version"]:
+            if magiskb["version"] == _magisks["version"] or int(
+                magiskb["versionCode"]
+            ) == int(_magisks["version_code"]):
                 return
 
         file_name = f"Magisk{m_type.capitalize()}-{magisk['version']}_({magisk['versionCode']}).apk"
