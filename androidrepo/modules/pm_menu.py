@@ -158,6 +158,7 @@ async def help_commands(c: AndroidRepo, m: CallbackQuery):
         " - <b>/twrp (codename)</b>: <i>Gets latest TWRP for the android device using the codename.</i>\n"
         " - <b>/ofox (codename)</b>: <i>Gets latest OFRP for the android device using the codename.</i>\n"
         " - <b>/ofox or /ofox beta</b>: <i>Sends the list of devices with stable or beta releases supported by OFRP.</i>\n"
+        " - <b>/microg</b>: <i>Gets latest microG apps.</i>\n"
         "\n<b>Available Magisk branches:</b> <code>stable</code>, <code>beta</code>, <code>canary</code>."
     )
     await m.message.edit_text(
