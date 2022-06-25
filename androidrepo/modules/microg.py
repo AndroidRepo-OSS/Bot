@@ -11,9 +11,15 @@ from pyrogram.types import CallbackQuery, Message
 from androidrepo.bot import AndroidRepo
 
 
-@AndroidRepo.on_callback_query(filters.regex(r"^microg (\w+)"))
+@AndroidRepo.on_callback_query(filters.regex(r"^microg (\w+) (\d+)"))
 async def on_microg(c: AndroidRepo, q: CallbackQuery):
     app = q.matches[0].group(1)
+    user_id = int(q.matches[0].group(2))
+
+    if q.from_user.id != user_id:
+        await q.answer("This button is not for you.", cache_time=60)
+        return
+
     if app == "vending":
         app_id = "com.android.vending"
     if app == "droidguard":
@@ -58,14 +64,16 @@ async def microg_menu(c: AndroidRepo, u: Union[Message, CallbackQuery]):
     is_callback = isinstance(u, CallbackQuery)
     union = u.message if is_callback else u
 
+    user_id = u.from_user.id
+
     keyboard = [
         [
-            ("FakeStore", "microg vending"),
-            ("microG DroidGuard Helper", "microg droidguard"),
+            ("FakeStore", f"microg vending {user_id}"),
+            ("microG DroidGuard Helper", f"microg droidguard {user_id}"),
         ],
         [
-            ("microG Services Core", "microg gms"),
-            ("microG Services Framework Proxy", "microg gsf"),
+            ("microG Services Core", f"microg gms {user_id}"),
+            ("microG Services Framework Proxy", f"microg gsf {user_id}"),
         ],
     ]
 
