@@ -37,7 +37,7 @@ pyrogram = {git = "https://github.com/AmanoTeam/pyrogram"}
 sentry-sdk = "1.6.0"
 aiodown = {git = "https://github.com/AmanoTeam/aiodown", rev = "main"}
 uvloop = {version = "^0.16", optional = true}
-lxml = "4.9.0"
+lxml = "4.9.1"
 PyGithub = "1.55"
 xmltodict = "0.13.0"
 
