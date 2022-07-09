@@ -20,11 +20,13 @@ async def start(c: AndroidRepo, union: Union[Message, CallbackQuery]):
 
     text = f"Hi <b>{html.escape(user.first_name)}</b>, I am the <b>official bot of the Android Repository channel</b>."
     keyboard = [
-        (
-            "Click here for help!",
-            f"http://t.me/{c.me.username}?start=help",
-            "url",
-        )
+        [
+            (
+                "Click here for help!",
+                f"https://t.me/{c.me.username}?start=help",
+                "url",
+            )
+        ]
     ]
     if m.chat.type == ChatType.PRIVATE:
         keyboard = [
@@ -65,9 +67,9 @@ async def on_help(c: AndroidRepo, union: Union[Message, CallbackQuery]):
             [
                 (
                     "Click here for help!",
-                    f"http://t.me/{c.me.username}?start=help",
+                    f"https://t.me/{c.me.username}?start=help",
                     "url",
-                )
+                ),
             ]
         ]
         text = "I am the <b>official bot of the Android Repository channel</b>, click the button below to find out what I can do for you."
