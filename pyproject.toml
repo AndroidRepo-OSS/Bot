@@ -44,7 +44,7 @@ xmltodict = "0.13.0"
 [tool.poetry.dev-dependencies]
 black = "^22.6"
 isort = "^5.10.1"
-flake8 = "^4.0.1"
+flake8 = "^5.0.1"
 
 [tool.poetry.extras]
 fast = ["uvloop"]
