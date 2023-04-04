@@ -1,6 +1,6 @@
 """Android Repository Telegram Bot modules utilities."""
 # SPDX-License-Identifier: BSD-3-Clause
-# Copyright (c) 2021-2022 Hitalo M. <https://github.com/HitaloM>
+# Copyright (c) 2021-2023 Hitalo M. <https://github.com/HitaloM>
 
 import httpx
 
