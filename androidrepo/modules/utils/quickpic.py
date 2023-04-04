@@ -18,7 +18,7 @@ from androidrepo.database.quickpic import (
 )
 
 DOWNLOAD_DIR: str = "./downloads/QuickPic/"
-QUICKPIC_URL: str = "https://github.com/WSTxda/QP-Gallery-Releases/raw/master/OTA%20updater/updater.json"
+QUICKPIC_URL: str = "https://cdn.jsdelivr.net/gh/WSTxda/QP-Gallery-Releases@master/OTA%20updater/updater.json"
 
 
 async def check_quickpic(c: Client, branch: str = "stable"):

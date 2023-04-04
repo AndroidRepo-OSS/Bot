@@ -34,7 +34,7 @@ from androidrepo.database.magisk import (
 from androidrepo.modules.utils import get_changelog
 
 DOWNLOAD_DIR: str = "./downloads/"
-MAGISK_URL: str = "https://github.com/topjohnwu/magisk-files/raw/master/{}.json"
+MAGISK_URL: str = "https://cdn.jsdelivr.net/gh/topjohnwu/magisk-files@master/{}.json"
 
 github = Github(config.GITHUB_TOKEN)
 user = github.get_user("Magisk-Modules-Repo")
