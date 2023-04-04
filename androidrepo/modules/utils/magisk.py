@@ -331,7 +331,7 @@ async def update_magisk(c: Client, m_type: str):
 
         text = f"<b>Magisk {'v' if magisk['version'][0].isdecimal() else ''}{magisk['version']} ({magisk['versionCode']})</b>\n\n"
         text += f"⚡<i>Magisk {m_type.capitalize()}</i>\n"
-        text += "⚡<i>Magisk is a suite of open source software for customizing Android, supporting devices higher than Android 5.0.</i>\n"
+        text += "⚡<i>Magisk is a free and open-source software that enables users to gain root access to their Android devices</i>\n"
         text += (
             "⚡️<a href='https://github.com/topjohnwu/Magisk'>GitHub Repository</a>\n"
         )
