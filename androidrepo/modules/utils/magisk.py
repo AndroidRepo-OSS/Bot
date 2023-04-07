@@ -339,7 +339,7 @@ async def update_magisk(c: Client, m_type: str):
         text += "<b>By:</b> <a href='https://github.com/topjohnwu'>John Wu</a>\n"
         text += "<b>Follow:</b> @AndroidRepo"
 
-        if m_type == "canary":
+        if m_type != "canary":
             await c.send_channel_document(
                 caption=text,
                 document=file_path,
