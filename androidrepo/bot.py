@@ -90,7 +90,7 @@ class AndroidRepo(Client):
             from androidrepo.modules.utils.quickpic import check_quickpic
             from androidrepo.modules.utils.xposed import check_lsposed
 
-            await check_modules(self)
+            # await check_modules(self)
             await check_lsposed(self)
             await check_quickpic(self)
             await check_magisk(self)
