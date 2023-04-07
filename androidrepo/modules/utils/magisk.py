@@ -339,13 +339,14 @@ async def update_magisk(c: Client, m_type: str):
         text += "<b>By:</b> <a href='https://github.com/topjohnwu'>John Wu</a>\n"
         text += "<b>Follow:</b> @AndroidRepo"
 
-        await c.send_channel_document(
-            caption=text,
-            document=file_path,
-            parse_mode=ParseMode.DEFAULT,
-            force_document=True,
-        )
-        os.remove(file_path)
+        if m_type == "canary":
+            await c.send_channel_document(
+                caption=text,
+                document=file_path,
+                parse_mode=ParseMode.DEFAULT,
+                force_document=True,
+            )
+            os.remove(file_path)
 
     chg = await get_changelog(magisk["note"])
     await update_magisk_from_dict(
