@@ -12,6 +12,8 @@ async def get_changelog(url: str) -> str:
     ) as client:
         response = await client.get(url)
         data = response.read()
+        if "Page not found" in data.decode():
+            return "Changelog not found."
         lines = data.decode().split("\n")
         latest_version = False
         for line in lines:
