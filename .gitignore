@@ -1,0 +1,14 @@
+# private
+data/config.env
+
+# cache
+__pycache__/
+.ruff_cache/
+
+# virtualenv
+.venv/
+
+# Rye
+.python-version
+requirements.lock
+requirements-dev.lock
