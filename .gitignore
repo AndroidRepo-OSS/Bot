@@ -1,5 +1,6 @@
 # private
 data/config.env
+database/db.sqlite3
 
 # cache
 __pycache__/
