@@ -1,6 +1,9 @@
 # private
 data/config.env
-database/db.sqlite3
+androidrepo/database/db.sqlite3
+
+# gettext
+locales/*/*/*.mo
 
 # cache
 __pycache__/

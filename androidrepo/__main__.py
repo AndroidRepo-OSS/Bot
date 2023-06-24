@@ -8,7 +8,7 @@ import sentry_sdk
 from cashews.exceptions import CacheBackendInteractionError
 
 from androidrepo import bot, cache, config, dp, i18n
-from androidrepo.handlers import pm_menu
+from androidrepo.handlers import language, pm_menu
 from androidrepo.middlewares.acl import ACLMiddleware
 from androidrepo.middlewares.i18n import MyI18nMiddleware
 from androidrepo.utils.command_list import set_ui_commands
@@ -34,7 +34,7 @@ async def main():
     dp.callback_query.middleware(ACLMiddleware())
     dp.callback_query.middleware(MyI18nMiddleware(i18n=i18n))
 
-    dp.include_routers(pm_menu.router)
+    dp.include_routers(pm_menu.router, language.router)
 
     await set_ui_commands(bot, i18n)
 
