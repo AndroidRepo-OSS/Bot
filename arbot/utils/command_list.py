@@ -22,28 +22,23 @@ async def set_ui_commands(bot: Bot, i18n: I18n):
             all_chats_commands: list[BotCommand] = []
 
             user_commands: list[BotCommand] = [
-                BotCommand(
-                    command="start",
-                    description=_("Start the bot.", locale=lang),
-                ),
-                BotCommand(
-                    command="help",
-                    description=_("Get help.", locale=lang),
-                ),
-            ] + all_chats_commands
+                BotCommand(command="start", description=_("Start the bot.", locale=lang)),
+                BotCommand(command="help", description=_("Get help.", locale=lang)),
+                *all_chats_commands,
+            ]
 
             group_commands: list[
                 BotCommand
             ] = all_chats_commands  # this will be changed in the future with new commands
 
             await bot.set_my_commands(
-                user_commands,
-                BotCommandScopeAllPrivateChats(type="all_private_chats"),
+                commands=user_commands,
+                scope=BotCommandScopeAllPrivateChats(),
                 language_code=lang.split("_")[0].lower() if "_" in lang else lang,
             )
 
             await bot.set_my_commands(
-                group_commands,
-                BotCommandScopeAllGroupChats(type="all_group_chats"),
+                commands=group_commands,
+                scope=BotCommandScopeAllGroupChats(),
                 language_code=lang.split("_")[0].lower() if "_" in lang else lang,
             )

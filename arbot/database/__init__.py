@@ -3,6 +3,13 @@
 
 from .base import SqliteConnection, SqliteDBConn
 from .chats import Chats
+from .magisk import MagiskModules
 from .users import Users
 
-__all__ = ("SqliteConnection", "SqliteDBConn", "Chats", "Users")
+__all__ = (
+    "SqliteConnection",
+    "SqliteDBConn",
+    "Chats",
+    "MagiskModules",
+    "Users",
+)

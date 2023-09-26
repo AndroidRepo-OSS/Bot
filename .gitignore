@@ -1,6 +1,6 @@
 # private
 data/config.env
-androidrepo/database/db.sqlite3
+arbot/database/db.sqlite3
 
 # gettext
 locales/*/*/*.mo

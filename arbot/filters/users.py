@@ -5,7 +5,7 @@ from aiogram.enums import ChatMemberStatus, ChatType
 from aiogram.filters import BaseFilter
 from aiogram.types import CallbackQuery, Message
 
-from androidrepo.config import config
+from arbot.config import config
 
 
 class IsAdmin(BaseFilter):

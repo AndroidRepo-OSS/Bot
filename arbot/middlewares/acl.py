@@ -9,8 +9,8 @@ from aiogram.enums import ChatType
 from aiogram.types import Chat, TelegramObject, User
 from babel import Locale, UnknownLocaleError
 
-from androidrepo import i18n
-from androidrepo.database import Chats, Users
+from arbot import i18n
+from arbot.database import Chats, Users
 
 
 class ACLMiddleware(BaseMiddleware):

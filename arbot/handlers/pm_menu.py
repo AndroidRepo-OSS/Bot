@@ -10,12 +10,13 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, Message
 from aiogram.utils.i18n import gettext as _
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from androidrepo.utils.callback_data import StartCallback
+from arbot.filters.chats import ChatTypeFilter
+from arbot.utils.callback_data import StartCallback
 
 router = Router(name="pm_menu")
 
 
-@router.message(CommandStart(), F.chat.type == ChatType.PRIVATE)
+@router.message(CommandStart(), ChatTypeFilter(ChatType.PRIVATE))
 @router.callback_query(StartCallback.filter(F.menu == "start"))
 async def start_command(union: Message | CallbackQuery):
     is_callback = isinstance(union, CallbackQuery)
@@ -40,7 +41,7 @@ bot developed to help the admins of the @AndroidRepo channel and its members."
     )
 
 
-@router.message(Command("help"), F.chat.type == ChatType.PRIVATE)
+@router.message(Command("help"), ChatTypeFilter(ChatType.PRIVATE))
 @router.callback_query(StartCallback.filter(F.menu == "help"))
 async def help(union: Message | CallbackQuery):
     is_callback = isinstance(union, CallbackQuery)

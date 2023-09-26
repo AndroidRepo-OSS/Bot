@@ -3,9 +3,8 @@
 
 from aiogram.enums import ChatType
 from aiogram.types import CallbackQuery, Message
-from aiogram.utils.i18n import gettext as _
 
-from androidrepo.database import Chats, Users
+from arbot.database import Chats, Users
 
 
 async def get_chat_language(

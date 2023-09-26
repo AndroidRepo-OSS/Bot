@@ -7,7 +7,7 @@ from aiogram.enums import ChatType
 from aiogram.types import Chat, TelegramObject, User
 from aiogram.utils.i18n import I18nMiddleware
 
-from androidrepo.database import Chats, Users
+from arbot.database import Chats, Users
 
 
 class MyI18nMiddleware(I18nMiddleware):

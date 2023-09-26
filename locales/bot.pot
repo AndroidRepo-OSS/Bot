@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2023-06-06 01:21-0300\n"
+"POT-Creation-Date: 2023-06-24 10:42-0300\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,8 +17,80 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.11.0\n"
 
-#: androidrepo/handlers/pm_menu.py:14
-msgid "Hello!"
+#: androidrepo/handlers/language.py:32
+msgid ""
+"You can select your preferred language for the bot in this chat by "
+"clicking on one of the buttons below. These are the languages that the "
+"bot currently supports.\n"
+"If you are interested in contributing to the translations with your "
+"language, please contact @Hitalo.\n"
+msgstr ""
+
+#: androidrepo/handlers/language.py:40
+msgid ""
+"\n"
+"Your current language: {lang}"
+msgstr ""
+
+#: androidrepo/handlers/language.py:42
+msgid ""
+"\n"
+"Group current language: {lang}"
+msgstr ""
+
+#: androidrepo/handlers/language.py:58
+msgid "🌎 Contribute in translations!"
+msgstr ""
+
+#: androidrepo/handlers/language.py:66 androidrepo/handlers/pm_menu.py:92
+msgid "🔙 Back"
+msgstr ""
+
+#: androidrepo/handlers/language.py:88
+msgid "Changed language to {lang}"
+msgstr ""
+
+#: androidrepo/handlers/pm_menu.py:27
+msgid "ℹ️ About"
+msgstr ""
+
+#: androidrepo/handlers/pm_menu.py:28
+msgid "🌐 Language"
+msgstr ""
+
+#: androidrepo/handlers/pm_menu.py:29
+msgid "👮‍♂️ Help"
+msgstr ""
+
+#: androidrepo/handlers/pm_menu.py:32
+msgid ""
+"Hello, <b>{user_name}</b>. I am the <b>official Android Repository "
+"bot</b>, a Telegram bot developed to help the admins of the @AndroidRepo "
+"channel and its members."
+msgstr ""
+
+#: androidrepo/handlers/pm_menu.py:61
+msgid ""
+"This is the menu where all my modules are concentrated, click on one of "
+"the buttons below to start exploring all my functions."
+msgstr ""
+
+#: androidrepo/handlers/pm_menu.py:77
+msgid ""
+"AndroidRepo[Bot] is a bot developed in Python using the AIOGram library, "
+"it was made to be fast and stable in order to help the admins of the "
+"@AndroidRepo channel and its members. The bot is open source and is "
+"available on GitHub, if you want to contribute to the project, just click"
+" on the button below and join our channel to stay on top of all the news "
+"and updates."
+msgstr ""
+
+#: androidrepo/handlers/pm_menu.py:85
+msgid "📦 GitHub"
+msgstr ""
+
+#: androidrepo/handlers/pm_menu.py:86
+msgid "📚 Channel"
 msgstr ""
 
 #: androidrepo/utils/command_list.py:27

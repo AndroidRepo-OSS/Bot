@@ -9,11 +9,11 @@ from aiogram.utils.i18n import gettext as _
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from babel import Locale
 
-from androidrepo import i18n
-from androidrepo.database import Chats, Users
-from androidrepo.filters.user_status import IsAdmin
-from androidrepo.utils.callback_data import LanguageCallback, StartCallback
-from androidrepo.utils.language import get_chat_language
+from arbot import i18n
+from arbot.database import Chats, Users
+from arbot.filters.users import IsAdmin
+from arbot.utils.callback_data import LanguageCallback, StartCallback
+from arbot.utils.language import get_chat_language
 
 router = Router(name="language")
 
