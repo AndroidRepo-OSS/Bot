@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "androidrepo"
+version = "0.1.0"
+description = "Telegram bot to automate posts in Android Repository channel"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Hitalo M." }]
+requires-python = ">=3.13"
+dependencies = ["aiogram[fast]>=3.20.0.post0", "pydantic-settings>=2.0.0"]
+
+[dependency-groups]
+dev = ["pre-commit>=4.2.0", "ruff>=0.11.13"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bot"]
