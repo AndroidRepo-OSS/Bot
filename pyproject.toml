@@ -10,7 +10,12 @@ readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Hitalo M." }]
 requires-python = ">=3.13"
-dependencies = ["aiogram[fast]>=3.20.0.post0", "pydantic-settings>=2.0.0"]
+dependencies = [
+    "aiogram[fast]>=3.20.0.post0",
+    "pydantic-settings>=2.0.0",
+    "aiohttp[speedups]>=3.9.0",
+    "openai>=1.58.1",
+]
 
 [dependency-groups]
 dev = ["pre-commit>=4.2.0", "ruff>=0.11.13"]

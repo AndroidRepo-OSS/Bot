@@ -6,16 +6,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """
-    Application settings loaded from environment variables and .env files.
-
-    This class follows Pydantic Settings best practices including:
-    - Using SettingsConfigDict for configuration
-    - Proper field descriptions and validation
-    - Secret handling for sensitive data
-    - Environment variable validation
-    """
-
     model_config = SettingsConfigDict(
         env_file="data/config.env",
         env_file_encoding="utf-8",
@@ -33,13 +23,13 @@ class Settings(BaseSettings):
         min_length=1,
     )
 
+    openai_api_key: SecretStr = Field(description="OpenAI API key for content enhancement")
+
+    openai_base_url: str = Field(
+        default="https://api.openai.com/v1", description="OpenAI API base URL"
+    )
+
     @computed_field
     @property
     def bot_id(self) -> str:
-        """
-        Retrieve the bot ID derived from the bot token.
-
-        Returns:
-            str: The bot ID, which is the first component of the bot token.
-        """
         return self.bot_token.get_secret_value().split(":")[0]

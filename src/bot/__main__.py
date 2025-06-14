@@ -8,8 +8,10 @@ import uvloop
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.fsm.storage.memory import MemoryStorage
 
 from .config import Settings
+from .handlers.post import router as post_router
 from .handlers.start import router as start_router
 
 logging.basicConfig(
@@ -21,13 +23,14 @@ logger = logging.getLogger(__name__)
 
 
 async def main() -> None:
-    dp = Dispatcher()
+    storage = MemoryStorage()
+    dp = Dispatcher(storage=storage)
     settings = Settings()  # type: ignore
 
     defaults = DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True)
     bot = Bot(token=settings.bot_token.get_secret_value(), default=defaults)
 
-    dp.include_routers(start_router)
+    dp.include_routers(start_router, post_router)
 
     logger.info("Starting bot...")
 
