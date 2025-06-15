@@ -625,42 +625,37 @@ async def handle_field_edit(
 def format_enhanced_post(
     repository: GitHubRepository, ai_content: AIGeneratedContent | None
 ) -> str:
-    description = (
+    desc = (
         ai_content.enhanced_description
         if ai_content and ai_content.enhanced_description
-        else repository.description
+        else repository.description or ""
     )
     tags = (
-        ai_content.relevant_tags[:5]
-        if ai_content and ai_content.relevant_tags
-        else repository.topics[:5]
-    )
+        ai_content.relevant_tags if ai_content and ai_content.relevant_tags else repository.topics
+    )[:5]
 
     parts = [f"<b>{repository.name}</b>"]
+    if desc:
+        parts.append(f"<i>{desc}</i>")
 
-    if description:
-        parts.append(f"<i>{description}</i>")
+    features = ai_content.key_features if ai_content and ai_content.key_features else []
+    if features:
+        parts.append("✨ <b>Key Features:</b>\n" + "\n".join(f"• {f}" for f in features))
 
-    if ai_content and ai_content.key_features:
-        features = "\n".join(f"• {feature}" for feature in ai_content.key_features)
-        parts.append(f"<b>Key Features:</b>\n{features}")
+    links_list = (ai_content.important_links if ai_content and ai_content.important_links else [])[
+        :3
+    ]
+    link_items = [f'• <a href="{repository.url}">GitHub Repository</a>'] + [
+        f'• <a href="{link.url}">{link.title}</a>' for link in links_list
+    ]
+    parts.append("🔗 <b>Links:</b>\n" + "\n".join(link_items))
 
-    links = [f'• <a href="{repository.url}">GitHub Repository</a>']
-    if ai_content and ai_content.important_links:
-        links.extend([
-            f'• <a href="{link.url}">{link.title}</a>' for link in ai_content.important_links[:3]
-        ])
+    hashtags = " ".join(f"#{t}" for t in tags)
+    author_lines = [f"👤 <b>Author:</b> <code>{repository.owner}</code>"]
+    if hashtags:
+        author_lines.append(f"🏷️ <b>Tags:</b> {hashtags}")
 
-    parts.extend([
-        "<b>Links:</b>\n" + "\n".join(links),
-        f"<b>Author:</b> <code>{repository.owner}</code>",
-    ])
-
-    if tags:
-        hashtags = " ".join(f"#{tag}" for tag in tags)
-        parts[-1] += f"\n<b>Tags:</b> {hashtags}"
-
-    parts[-1] += "\n<b>Follow:</b> @AndroidRepo\n<b>Join:</b> @AndroidRepo_chat"
+    parts.append("\n".join(author_lines))
     return "\n\n".join(parts)
 
 
