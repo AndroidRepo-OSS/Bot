@@ -246,11 +246,42 @@ async def confirm_post_handler(
 
     repo_name = github_url.split("/")[-1]
 
+    url_parts = github_url.rstrip("/").split("/")
+    owner = url_parts[-2]
+    repository_full_name = f"{owner}/{repo_name}"
+
+    await try_edit_message(
+        callback.message,
+        f"🔄 <b>Checking Submission History</b>\n\n"
+        f"<b>Repository:</b> {repository_full_name}\n"
+        f"<i>Verifying if this app can be submitted...</i>",
+    )
+
+    can_submit, last_submission_date = await can_submit_app(repository_full_name)
+
+    if not can_submit and last_submission_date:
+        if last_submission_date.tzinfo is None:
+            last_submission_date = last_submission_date.replace(tzinfo=UTC)
+
+        days_since_last = (datetime.now(tz=UTC) - last_submission_date).days
+        remaining_days = 90 - days_since_last
+
+        await try_edit_message(
+            callback.message,
+            f"🚫 <b>Repost Prevention</b>\n\n"
+            f"<b>Repository:</b> {repository_full_name}\n\n"
+            f"❌ This app was already posted <b>{days_since_last} days ago</b>\n"
+            f"You need to wait <b>{remaining_days} more days</b> before reposting.\n\n"
+            f"<i>Our 3-month repost policy prevents channel spam.</i>",
+        )
+        await state.clear()
+        return
+
     await try_edit_message(
         callback.message,
         f"🔄 <b>Processing Repository</b>\n\n"
-        f"<b>Repository:</b> {repo_name}\n"
-        f"<i>Checking submission history and fetching repository data...</i>",
+        f"<b>Repository:</b> {repository_full_name}\n"
+        f"<i>Fetching repository data and generating enhanced content...</i>",
     )
 
     try:
@@ -262,29 +293,6 @@ async def confirm_post_handler(
                 settings.openai_api_key.get_secret_value(),
                 settings.openai_base_url,
             )
-
-        repository = enhanced_data.repository
-
-        can_submit, last_submission_date = await can_submit_app(repository.full_name)
-
-        if not can_submit and last_submission_date:
-            if last_submission_date.tzinfo is None:
-                last_submission_date = last_submission_date.replace(tzinfo=UTC)
-
-            days_since_last = (datetime.now(tz=UTC) - last_submission_date).days
-            remaining_days = 90 - days_since_last
-
-            await try_edit_message(
-                callback.message,
-                f"🚫 <b>Repost Prevention</b>\n\n"
-                f"<b>Repository:</b> {repository.name}\n"
-                f"<b>Owner:</b> {repository.owner}\n\n"
-                f"❌ This app was already posted <b>{days_since_last} days ago</b>\n"
-                f"You need to wait <b>{remaining_days} more days</b> before reposting.\n\n"
-                f"<i>Our 3-month repost policy prevents channel spam.</i>",
-            )
-            await state.clear()
-            return
 
         await show_post_preview(callback.message, state, enhanced_data)
 
