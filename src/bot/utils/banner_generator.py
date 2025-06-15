@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
+from __future__ import annotations
+
 import random
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -252,17 +254,6 @@ def generate_banner(title_text: str) -> BytesIO:
 
 @contextmanager
 def banner_context(title_text: str, output_filename: str | None = None):
-    """
-    Context manager for banner generation and cleanup.
-    Ensures proper memory management of BytesIO objects.
-
-    Args:
-        title_text: The text to display on the banner
-        output_filename: Optional filename (kept for compatibility)
-
-    Yields:
-        BytesIO object containing the banner image data
-    """
     banner_buffer = None
     try:
         banner_buffer = generate_banner(title_text)

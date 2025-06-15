@@ -96,33 +96,27 @@ def create_keyboard(keyboard_type: KeyboardType) -> InlineKeyboardMarkup:
             builder.adjust(2)
 
         case KeyboardType.PREVIEW:
-            builder.button(
-                text="✅ Publish", callback_data=PostCallback(action=PostAction.PUBLISH)
-            )
-            builder.button(text="✏️ Edit", callback_data=PostCallback(action=PostAction.EDIT))
-            builder.button(
-                text="🔄 Regenerate", callback_data=PostCallback(action=PostAction.REGENERATE)
-            )
-            builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
+            buttons = [
+                ("✅ Publish", PostCallback(action=PostAction.PUBLISH)),
+                ("✏️ Edit", PostCallback(action=PostAction.EDIT)),
+                ("🔄 Regenerate", PostCallback(action=PostAction.REGENERATE)),
+                ("❌ Cancel", PostCallback(action=PostAction.CANCEL)),
+            ]
+            for text, data in buttons:
+                builder.button(text=text, callback_data=data)
             builder.adjust(2, 2)
 
         case KeyboardType.EDIT:
-            builder.button(
-                text="📝 Description",
-                callback_data=EditCallback(action=EditAction.FIELD, field=EditField.DESCRIPTION),
-            )
-            builder.button(
-                text="🏷️ Tags",
-                callback_data=EditCallback(action=EditAction.FIELD, field=EditField.TAGS),
-            )
-            builder.button(
-                text="⭐ Features",
-                callback_data=EditCallback(action=EditAction.FIELD, field=EditField.FEATURES),
-            )
-            builder.button(
-                text="🔗 Links",
-                callback_data=EditCallback(action=EditAction.FIELD, field=EditField.LINKS),
-            )
+            edit_fields = [
+                ("📝 Description", EditField.DESCRIPTION),
+                ("🏷️ Tags", EditField.TAGS),
+                ("⭐ Features", EditField.FEATURES),
+                ("🔗 Links", EditField.LINKS),
+            ]
+            for text, field in edit_fields:
+                builder.button(
+                    text=text, callback_data=EditCallback(action=EditAction.FIELD, field=field)
+                )
             builder.button(
                 text="🔙 Back", callback_data=PostCallback(action=PostAction.BACK_TO_PREVIEW)
             )
@@ -788,115 +782,39 @@ def update_links(enhanced_data: EnhancedRepositoryData, new_text: str) -> None:
 
 
 @router.message(PostStates.editing_description, F.text)
-async def handle_description_edit(message: Message, state: FSMContext) -> None:
-    if not message.text:
-        return
-
-    data = await state.get_data()
-    enhanced_data = data.get("enhanced_data")
-
-    if not enhanced_data:
-        await message.reply("❌ Edit session expired. Please start over with /post")
-        await state.clear()
-        return
-
-    try:
-        update_enhanced_data(enhanced_data, EditField.DESCRIPTION, message.text)
-        await finalize_field_edit(message, state, enhanced_data, EditField.DESCRIPTION)
-    except Exception:
-        await message.reply(
-            "❌ <b>Error updating Description</b>\n"
-            "Something went wrong while updating this field. Please try again or /cancel."
-        )
-
-
 @router.message(PostStates.editing_tags, F.text)
-async def handle_tags_edit(message: Message, state: FSMContext) -> None:
-    if not message.text:
-        return
-
-    data = await state.get_data()
-    enhanced_data = data.get("enhanced_data")
-
-    if not enhanced_data:
-        await message.reply("❌ Edit session expired. Please start over with /post")
-        await state.clear()
-        return
-
-    try:
-        update_enhanced_data(enhanced_data, EditField.TAGS, message.text)
-        await finalize_field_edit(message, state, enhanced_data, EditField.TAGS)
-    except Exception:
-        await message.reply(
-            "❌ <b>Error updating Tags</b>\n"
-            "Something went wrong while updating this field. Please try again or /cancel."
-        )
-
-
 @router.message(PostStates.editing_features, F.text)
-async def handle_features_edit(message: Message, state: FSMContext) -> None:
-    if not message.text:
-        return
-
-    data = await state.get_data()
-    enhanced_data = data.get("enhanced_data")
-
-    if not enhanced_data:
-        await message.reply("❌ Edit session expired. Please start over with /post")
-        await state.clear()
-        return
-
-    try:
-        update_enhanced_data(enhanced_data, EditField.FEATURES, message.text)
-        await finalize_field_edit(message, state, enhanced_data, EditField.FEATURES)
-    except Exception:
-        await message.reply(
-            "❌ <b>Error updating Features</b>\n"
-            "Something went wrong while updating this field. Please try again or /cancel."
-        )
-
-
 @router.message(PostStates.editing_links, F.text)
-async def handle_links_edit(message: Message, state: FSMContext) -> None:
+async def handle_generic_edit(message: Message, state: FSMContext) -> None:
     if not message.text:
+        await message.reply("❗ Send the new value or /cancel to abort editing.")
         return
 
     data = await state.get_data()
     enhanced_data = data.get("enhanced_data")
+    editing_field = data.get("editing_field")
 
-    if not enhanced_data:
+    if not enhanced_data or not editing_field:
         await message.reply("❌ Edit session expired. Please start over with /post")
         await state.clear()
         return
 
     try:
-        update_enhanced_data(enhanced_data, EditField.LINKS, message.text)
-        await finalize_field_edit(message, state, enhanced_data, EditField.LINKS)
+        update_enhanced_data(enhanced_data, EditField(editing_field), message.text)
+        await finalize_field_edit(message, state, enhanced_data, EditField(editing_field))
     except Exception:
         await message.reply(
-            "❌ <b>Error updating Links</b>\n"
+            f"❌ <b>Error updating {editing_field.title()}</b>\n"
             "Something went wrong while updating this field. Please try again or /cancel."
         )
 
 
 @router.message(PostStates.editing_description)
-async def handle_invalid_description_input(message: Message, state: FSMContext) -> None:
-    await message.reply("❗ Send description text or /cancel to abort editing.")
-
-
 @router.message(PostStates.editing_tags)
-async def handle_invalid_tags_input(message: Message, state: FSMContext) -> None:
-    await message.reply("❗ Send tags text or /cancel to abort editing.")
-
-
 @router.message(PostStates.editing_features)
-async def handle_invalid_features_input(message: Message, state: FSMContext) -> None:
-    await message.reply("❗ Send features text or /cancel to abort editing.")
-
-
 @router.message(PostStates.editing_links)
-async def handle_invalid_links_input(message: Message, state: FSMContext) -> None:
-    await message.reply("❗ Send links text or /cancel to abort editing.")
+async def handle_invalid_edit_input(message: Message, state: FSMContext) -> None:
+    await message.reply("❗ Send the new value or /cancel to abort editing.")
 
 
 async def finalize_field_edit(
@@ -939,6 +857,23 @@ async def back_to_edit_menu_handler(
 async def send_banner_preview(
     message: Message, banner_buffer: BytesIO, post_text: str, preview_header: str
 ) -> None:
+    banner_input = BufferedInputFile(banner_buffer.getvalue(), filename="banner.png")
+
+    if message.photo:
+        await message.delete()
+        await message.answer(preview_header)
+        await message.answer_photo(
+            photo=banner_input,
+            caption=post_text,
+            reply_markup=create_keyboard(KeyboardType.PREVIEW),
+        )
+    else:
+        await try_edit_message(message, preview_header)
+        await message.answer_photo(
+            photo=banner_input,
+            caption=post_text,
+            reply_markup=create_keyboard(KeyboardType.PREVIEW),
+        )
     banner_input = BufferedInputFile(banner_buffer.getvalue(), filename="banner.png")
 
     if message.photo:

@@ -10,10 +10,7 @@ from urllib.parse import urlparse
 import aiohttp
 
 from .cache import repository_cache
-from .models import (
-    EnhancedRepositoryData,
-    GitHubRepository,
-)
+from .models import EnhancedRepositoryData, GitHubRepository
 from .openai_client import OpenAIClient
 
 logger = logging.getLogger(__name__)
