@@ -10,11 +10,11 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InaccessibleMessage, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import Settings
-from bot.states import PostStates
 from bot.utils.cache import repository_cache
 from bot.utils.github_client import GitHubClient
 from bot.utils.models import AIGeneratedContent, EnhancedRepositoryData, GitHubRepository
@@ -23,6 +23,41 @@ logger = logging.getLogger(__name__)
 router = Router(name="post")
 
 GITHUB_URL_PATTERN = re.compile(r"^https?://github\.com/[\w.-]+/[\w.-]+/?$")
+
+
+class PostStates(StatesGroup):
+    """
+    Finite state machine states for the post creation workflow in the bot.
+
+    This class defines all the states used during the process of creating,
+    editing, previewing, and confirming a post. Each state represents a
+    specific step or field in the workflow, allowing for granular control
+    over user interactions.
+    """
+
+    waiting_for_github_url = State()
+    """State when the bot is waiting for the user to provide a GitHub repository URL."""
+
+    waiting_for_confirmation = State()
+    """State when the bot is waiting for the user to confirm the final post before publishing."""
+
+    previewing_post = State()
+    """State when the user is previewing the generated post with all its details."""
+
+    editing_post = State()
+    """State when the user is in the main editing mode, choosing which field to modify."""
+
+    editing_description = State()
+    """State when the user is editing the description field of the post."""
+
+    editing_tags = State()
+    """State when the user is editing the tags field of the post."""
+
+    editing_features = State()
+    """State when the user is editing the features field of the post."""
+
+    editing_links = State()
+    """State when the user is editing the links field of the post."""
 
 
 class PostAction(Enum):
@@ -181,8 +216,7 @@ async def post_command_handler(message: Message, state: FSMContext) -> None:
 
 
 @router.message(Command("cancel"))
-@router.message(Command("cancel"), PostStates.waiting_for_github_url)
-@router.message(Command("cancel"), PostStates.waiting_for_confirmation)
+@router.message(F.text.casefold() == "cancel")
 async def cancel_command_handler(message: Message, state: FSMContext) -> None:
     current_state = await state.get_state()
 
@@ -195,6 +229,7 @@ async def cancel_command_handler(message: Message, state: FSMContext) -> None:
         return
 
     await state.clear()
+
     await message.reply(
         "❌ <b>Post Creation Cancelled</b>\n\n"
         "The post creation has been cancelled successfully.\n\n"
@@ -207,14 +242,19 @@ async def github_url_handler(message: Message, state: FSMContext) -> None:
     if not message.text:
         await message.reply(
             "❌ <b>Invalid Input</b>\n\n"
-            "<i>Example: https://github.com/user/repository</i>\n\n"
-            "💡 Use /cancel to cancel the post creation."
+            "Please send a valid GitHub repository URL as text.\n\n"
+            "<i>Example: https://github.com/user/repository</i>"
         )
         return
 
     url = message.text.strip()
     if not GITHUB_URL_PATTERN.match(url):
-        await message.reply("<i>Example: https://github.com/user/repository</i>")
+        await message.reply(
+            "❌ <b>Invalid GitHub URL</b>\n\n"
+            "Please provide a valid GitHub repository URL.\n\n"
+            "<i>Example: https://github.com/user/repository</i>\n\n"
+            "💡 Use /cancel to cancel the post creation."
+        )
         return
 
     await state.update_data(github_url=url)
@@ -231,8 +271,10 @@ async def github_url_handler(message: Message, state: FSMContext) -> None:
 @router.message(PostStates.waiting_for_github_url)
 async def invalid_github_url_handler(message: Message) -> None:
     await message.reply(
-        "❌ <b>Invalid Input</b>\n\n<i>Example: https://github.com/user/repository</i>"
-        "\n\n💡 Use /cancel to cancel the post creation."
+        "❌ <b>Invalid Input</b>\n\n"
+        "Please send a valid GitHub repository URL as text.\n\n"
+        "<i>Example: https://github.com/user/repository</i>\n\n"
+        "💡 Use /cancel to cancel the post creation."
     )
 
 
@@ -580,6 +622,18 @@ async def edit_field_handler(
     if not callback.message or not enhanced_data or not callback_data.field:
         return
 
+    field_state_mapping = {
+        EditField.DESCRIPTION: PostStates.editing_description,
+        EditField.TAGS: PostStates.editing_tags,
+        EditField.FEATURES: PostStates.editing_features,
+        EditField.LINKS: PostStates.editing_links,
+    }
+
+    new_state = field_state_mapping.get(callback_data.field)
+    if new_state:
+        await state.set_state(new_state)
+        await state.update_data(editing_field=callback_data.field.value)
+
     field_handlers = {
         EditField.DESCRIPTION: _handle_description_edit,
         EditField.TAGS: _handle_tags_edit,
@@ -590,8 +644,6 @@ async def edit_field_handler(
     handler = field_handlers.get(callback_data.field)
     if handler:
         await handler(callback, enhanced_data)
-
-    await state.update_data(editing_field=callback_data.field.value)
     await callback.answer(f"Edit {callback_data.field.value} mode activated!")
 
 
@@ -756,67 +808,134 @@ def _update_links(enhanced_data: EnhancedRepositoryData, new_text: str) -> None:
         enhanced_data.ai_content.important_links = links[:3]
 
 
-@router.message(PostStates.editing_post, F.text)
-async def handle_post_edit(message: Message, state: FSMContext) -> None:
+@router.message(PostStates.editing_description, F.text)
+async def handle_description_edit(message: Message, state: FSMContext) -> None:
     if not message.text:
+        await message.reply("Please send a valid description text.")
         return
 
     data = await state.get_data()
     enhanced_data = data.get("enhanced_data")
-    editing_field = data.get("editing_field")
 
-    if not enhanced_data or not editing_field:
+    if not enhanced_data:
         await message.reply("❌ Edit session expired. Please start over with /post")
         await state.clear()
         return
 
     try:
-        if editing_field == EditField.DESCRIPTION.value:
-            _update_description(enhanced_data, message.text)
-        elif editing_field == EditField.TAGS.value:
-            _update_tags(enhanced_data, message.text)
-        elif editing_field == EditField.FEATURES.value:
-            _update_features(enhanced_data, message.text)
-        elif editing_field == EditField.LINKS.value:
-            _update_links(enhanced_data, message.text)
-
-        await state.update_data(enhanced_data=enhanced_data)
-
-        new_post_text = _format_enhanced_post(enhanced_data.repository, enhanced_data.ai_content)
-        await state.update_data(post_text=new_post_text)
-
-        await message.reply(
-            f"✅ <b>{editing_field.title()} Updated Successfully!</b>\n\n"
-            f"Your changes have been applied to the post.\n\n"
-            f"<i>Returning to preview...</i>"
-        )
-
-        await _show_post_preview(message, state, enhanced_data)
-
+        _update_description(enhanced_data, message.text)
+        await _finalize_field_edit(message, state, enhanced_data, "description")
     except Exception as e:
-        logger.error("Error updating post %s: %s", editing_field, e)
-        await message.reply(
-            f"❌ <b>Error Updating {editing_field.title()}</b>\n\n"
-            f"Failed to update the {editing_field}. Please try again or go back to preview.\n\n"
-            f"Error: <code>{e!s}</code>"
-        )
+        await _handle_edit_error(message, e, "description")
 
 
-@router.message(Command("cancel"), PostStates.editing_post)
-async def cancel_edit_handler(message: Message, state: FSMContext) -> None:
+@router.message(PostStates.editing_tags, F.text)
+async def handle_tags_edit(message: Message, state: FSMContext) -> None:
+    if not message.text:
+        await message.reply("Please send valid tags.")
+        return
+
     data = await state.get_data()
     enhanced_data = data.get("enhanced_data")
 
-    if enhanced_data:
-        await _show_post_preview(message, state, enhanced_data)
-        await message.reply("✅ Edit cancelled. Returned to post preview.")
-    else:
+    if not enhanced_data:
+        await message.reply("❌ Edit session expired. Please start over with /post")
         await state.clear()
-        await message.reply(
-            "❌ <b>Post Creation Cancelled</b>\n\n"
-            "The post creation has been cancelled successfully.\n\n"
-            "You can start again anytime with /post command."
-        )
+        return
+
+    try:
+        _update_tags(enhanced_data, message.text)
+        await _finalize_field_edit(message, state, enhanced_data, "tags")
+    except Exception as e:
+        await _handle_edit_error(message, e, "tags")
+
+
+@router.message(PostStates.editing_features, F.text)
+async def handle_features_edit(message: Message, state: FSMContext) -> None:
+    if not message.text:
+        await message.reply("Please send valid features.")
+        return
+
+    data = await state.get_data()
+    enhanced_data = data.get("enhanced_data")
+
+    if not enhanced_data:
+        await message.reply("❌ Edit session expired. Please start over with /post")
+        await state.clear()
+        return
+
+    try:
+        _update_features(enhanced_data, message.text)
+        await _finalize_field_edit(message, state, enhanced_data, "features")
+    except Exception as e:
+        await _handle_edit_error(message, e, "features")
+
+
+@router.message(PostStates.editing_links, F.text)
+async def handle_links_edit(message: Message, state: FSMContext) -> None:
+    if not message.text:
+        await message.reply("Please send valid links.")
+        return
+
+    data = await state.get_data()
+    enhanced_data = data.get("enhanced_data")
+
+    if not enhanced_data:
+        await message.reply("❌ Edit session expired. Please start over with /post")
+        await state.clear()
+        return
+
+    try:
+        _update_links(enhanced_data, message.text)
+        await _finalize_field_edit(message, state, enhanced_data, "links")
+    except Exception as e:
+        await _handle_edit_error(message, e, "links")
+
+
+@router.message(PostStates.editing_description)
+async def handle_invalid_description_input(message: Message) -> None:
+    await message.reply("Please send a text description or use /cancel to abort editing.")
+
+
+@router.message(PostStates.editing_tags)
+async def handle_invalid_tags_input(message: Message) -> None:
+    await message.reply("Please send text tags or use /cancel to abort editing.")
+
+
+@router.message(PostStates.editing_features)
+async def handle_invalid_features_input(message: Message) -> None:
+    await message.reply("Please send text features or use /cancel to abort editing.")
+
+
+@router.message(PostStates.editing_links)
+async def handle_invalid_links_input(message: Message) -> None:
+    await message.reply("Please send text links or use /cancel to abort editing.")
+
+
+async def _finalize_field_edit(
+    message: Message, state: FSMContext, enhanced_data: EnhancedRepositoryData, field_name: str
+) -> None:
+    await state.update_data(enhanced_data=enhanced_data)
+
+    new_post_text = _format_enhanced_post(enhanced_data.repository, enhanced_data.ai_content)
+    await state.update_data(post_text=new_post_text)
+
+    await message.reply(
+        f"✅ <b>{field_name.title()} Updated Successfully!</b>\n\n"
+        f"Your changes have been applied to the post.\n\n"
+        f"<i>Returning to preview...</i>"
+    )
+
+    await _show_post_preview(message, state, enhanced_data)
+
+
+async def _handle_edit_error(message: Message, error: Exception, field_name: str) -> None:
+    logger.error("Error updating post %s: %s", field_name, error)
+    await message.reply(
+        f"❌ <b>Error Updating {field_name.title()}</b>\n\n"
+        f"Failed to update the {field_name}. Please try again or use /cancel.\n\n"
+        f"Error: <code>{error!s}</code>"
+    )
 
 
 @router.callback_query(EditCallback.filter(F.action == EditAction.BACK_TO_MENU))
