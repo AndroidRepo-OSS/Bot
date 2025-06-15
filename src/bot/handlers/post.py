@@ -246,10 +246,11 @@ async def confirm_post_handler(
 
     repo_name = github_url.split("/")[-1]
 
-    await callback.message.edit_text(
+    await try_edit_message(
+        callback.message,
         f"🔄 <b>Processing Repository</b>\n\n"
         f"<b>Repository:</b> {repo_name}\n"
-        f"<i>Please wait while we fetch and analyze the repository...</i>"
+        f"<i>Please wait while we fetch and analyze the repository...</i>",
     )
 
     try:
@@ -265,10 +266,11 @@ async def confirm_post_handler(
         await show_post_preview(callback.message, state, enhanced_data)
 
     except Exception as e:
-        await callback.message.edit_text(
+        await try_edit_message(
+            callback.message,
             f"❌ <b>Error Processing Repository</b></b>\n\n"
             f"<code>{github_url}</code>\n\n"
-            f"<b>Error:</b> <code>{str(e)[:200]}...</code>"
+            f"<b>Error:</b> <code>{str(e)[:200]}...</code>",
         )
         await state.clear()
 
@@ -776,19 +778,9 @@ def update_links(enhanced_data: EnhancedRepositoryData, new_text: str) -> None:
         enhanced_data.ai_content.important_links = links[:3]
 
 
-@router.message(
-    PostStates.editing_description,
-    PostStates.editing_tags,
-    PostStates.editing_features,
-    PostStates.editing_links,
-    F.text,
-)
-async def handle_field_text_edit(message: Message, state: FSMContext) -> None:
+@router.message(PostStates.editing_description, F.text)
+async def handle_description_edit(message: Message, state: FSMContext) -> None:
     if not message.text:
-        return
-
-    current_state = await state.get_state()
-    if not current_state:
         return
 
     data = await state.get_data()
@@ -799,52 +791,103 @@ async def handle_field_text_edit(message: Message, state: FSMContext) -> None:
         await state.clear()
         return
 
-    match current_state:
-        case PostStates.editing_description.state:
-            field = EditField.DESCRIPTION
-        case PostStates.editing_tags.state:
-            field = EditField.TAGS
-        case PostStates.editing_features.state:
-            field = EditField.FEATURES
-        case PostStates.editing_links.state:
-            field = EditField.LINKS
-        case _:
-            return
-
     try:
-        update_enhanced_data(enhanced_data, field, message.text)
-        await finalize_field_edit(message, state, enhanced_data, field)
+        update_enhanced_data(enhanced_data, EditField.DESCRIPTION, message.text)
+        await finalize_field_edit(message, state, enhanced_data, EditField.DESCRIPTION)
     except Exception:
         await message.reply(
-            f"❌ <b>Error updating {field.value.title()}</b>\n"
+            "❌ <b>Error updating Description</b>\n"
             "Something went wrong while updating this field. Please try again or /cancel."
         )
 
 
-@router.message(
-    PostStates.editing_description,
-    PostStates.editing_tags,
-    PostStates.editing_features,
-    PostStates.editing_links,
-)
-async def handle_invalid_field_input(message: Message, state: FSMContext) -> None:
-    current_state = await state.get_state()
-    if not current_state:
+@router.message(PostStates.editing_tags, F.text)
+async def handle_tags_edit(message: Message, state: FSMContext) -> None:
+    if not message.text:
         return
 
-    match current_state:
-        case PostStates.editing_description.state:
-            field = EditField.DESCRIPTION
-        case PostStates.editing_tags.state:
-            field = EditField.TAGS
-        case PostStates.editing_features.state:
-            field = EditField.FEATURES
-        case PostStates.editing_links.state:
-            field = EditField.LINKS
-        case _:
-            return
+    data = await state.get_data()
+    enhanced_data = data.get("enhanced_data")
 
-    await message.reply(f"❗ Send {field.value} text or /cancel to abort editing.")
+    if not enhanced_data:
+        await message.reply("❌ Edit session expired. Please start over with /post")
+        await state.clear()
+        return
+
+    try:
+        update_enhanced_data(enhanced_data, EditField.TAGS, message.text)
+        await finalize_field_edit(message, state, enhanced_data, EditField.TAGS)
+    except Exception:
+        await message.reply(
+            "❌ <b>Error updating Tags</b>\n"
+            "Something went wrong while updating this field. Please try again or /cancel."
+        )
+
+
+@router.message(PostStates.editing_features, F.text)
+async def handle_features_edit(message: Message, state: FSMContext) -> None:
+    if not message.text:
+        return
+
+    data = await state.get_data()
+    enhanced_data = data.get("enhanced_data")
+
+    if not enhanced_data:
+        await message.reply("❌ Edit session expired. Please start over with /post")
+        await state.clear()
+        return
+
+    try:
+        update_enhanced_data(enhanced_data, EditField.FEATURES, message.text)
+        await finalize_field_edit(message, state, enhanced_data, EditField.FEATURES)
+    except Exception:
+        await message.reply(
+            "❌ <b>Error updating Features</b>\n"
+            "Something went wrong while updating this field. Please try again or /cancel."
+        )
+
+
+@router.message(PostStates.editing_links, F.text)
+async def handle_links_edit(message: Message, state: FSMContext) -> None:
+    if not message.text:
+        return
+
+    data = await state.get_data()
+    enhanced_data = data.get("enhanced_data")
+
+    if not enhanced_data:
+        await message.reply("❌ Edit session expired. Please start over with /post")
+        await state.clear()
+        return
+
+    try:
+        update_enhanced_data(enhanced_data, EditField.LINKS, message.text)
+        await finalize_field_edit(message, state, enhanced_data, EditField.LINKS)
+    except Exception:
+        await message.reply(
+            "❌ <b>Error updating Links</b>\n"
+            "Something went wrong while updating this field. Please try again or /cancel."
+        )
+
+
+@router.message(PostStates.editing_description)
+async def handle_invalid_description_input(message: Message, state: FSMContext) -> None:
+    await message.reply("❗ Send description text or /cancel to abort editing.")
+
+
+@router.message(PostStates.editing_tags)
+async def handle_invalid_tags_input(message: Message, state: FSMContext) -> None:
+    await message.reply("❗ Send tags text or /cancel to abort editing.")
+
+
+@router.message(PostStates.editing_features)
+async def handle_invalid_features_input(message: Message, state: FSMContext) -> None:
+    await message.reply("❗ Send features text or /cancel to abort editing.")
+
+
+@router.message(PostStates.editing_links)
+async def handle_invalid_links_input(message: Message, state: FSMContext) -> None:
+    await message.reply("❗ Send links text or /cancel to abort editing.")
 
 
 async def finalize_field_edit(
@@ -862,8 +905,7 @@ async def finalize_field_edit(
     await message.reply(
         f"✅ <b>{field.value.title()} updated!</b>\n"
         f"Your changes have been saved. The preview has been updated with your new content.\n\n"
-        f"You can continue editing, publish the post, or make further changes.",
-        reply_markup=create_keyboard(KeyboardType.PREVIEW),
+        f"You can continue editing, publish the post, or make further changes."
     )
 
 
