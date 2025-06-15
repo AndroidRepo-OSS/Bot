@@ -3,7 +3,7 @@
 
 import re
 from enum import Enum
-from pathlib import Path
+from io import BytesIO
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
@@ -12,8 +12,8 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
+    BufferedInputFile,
     CallbackQuery,
-    FSInputFile,
     InaccessibleMessage,
     InlineKeyboardMarkup,
     Message,
@@ -154,11 +154,6 @@ async def try_edit_message(
         await message.answer(text, reply_markup=markup)
 
 
-def cleanup_banner(path: str | None) -> None:
-    if path and Path(path).exists():
-        Path(path).unlink()
-
-
 @router.message(Command("post"))
 async def post_command_handler(message: Message, state: FSMContext) -> None:
     await state.set_state(PostStates.waiting_for_github_url)
@@ -184,7 +179,10 @@ async def cancel_command_handler(message: Message, state: FSMContext) -> None:
         return
 
     data = await state.get_data()
-    cleanup_banner(data.get("banner_path"))
+    banner_buffer = data.get("banner_buffer")
+    if banner_buffer:
+        banner_buffer.close()
+
     await state.clear()
 
     await message.reply(
@@ -284,16 +282,18 @@ async def show_post_preview(
     post_text = format_enhanced_post(repository, ai_content)
 
     banner_generated = False
-    banner_path = None
+    banner_buffer = None
 
-    banner_filename = f"{repository.name.lower().replace(' ', '_')}_banner.png"
-    banner_path = generate_banner(repository.name, banner_filename)
-    banner_generated = True
+    try:
+        banner_buffer = generate_banner(repository.name)
+        banner_generated = True
+    except Exception:
+        banner_generated = False
 
     await state.update_data(
         enhanced_data=enhanced_data,
         post_text=post_text,
-        banner_path=str(banner_path) if banner_path else None,
+        banner_buffer=banner_buffer,
         banner_generated=banner_generated,
     )
     await state.set_state(PostStates.previewing_post)
@@ -306,14 +306,14 @@ async def show_post_preview(
         f"<b>Banner:</b> {banner_status}\n\n"
     )
 
-    if banner_generated and banner_path:
+    if banner_generated and banner_buffer:
         preview_header += (
             "<i>📸 Preview below shows exactly how your post will appear when published.</i>\n"
             "<i>You can edit content, regenerate everything, or publish to channel.</i>"
         )
 
         try:
-            await send_banner_preview(message, banner_path, post_text, preview_header)
+            await send_banner_preview(message, banner_buffer, post_text, preview_header)
         except Exception:
             await show_text_only_preview(message, preview_header, post_text, repository)
     else:
@@ -351,7 +351,7 @@ async def publish_post_handler(
     data = await state.get_data()
     post_text = data.get("post_text")
     enhanced_data = data.get("enhanced_data")
-    banner_path = data.get("banner_path")
+    banner_buffer = data.get("banner_buffer")
 
     if not post_text or not enhanced_data:
         return
@@ -361,18 +361,24 @@ async def publish_post_handler(
     try:
         repository = enhanced_data.repository
 
-        if banner_path and Path(banner_path).exists():
-            banner_input = FSInputFile(banner_path)
+        if banner_buffer:
+            banner_input = BufferedInputFile(
+                banner_buffer.getvalue(),
+                filename=f"{repository.name.lower().replace(' ', '_')}_banner.png",
+            )
         else:
-            banner_filename = f"{repository.name.lower().replace(' ', '_')}_banner.png"
-            banner_path = generate_banner(repository.name, banner_filename)
-            banner_input = FSInputFile(banner_path)
+            banner_buffer = generate_banner(repository.name)
+            banner_input = BufferedInputFile(
+                banner_buffer.getvalue(),
+                filename=f"{repository.name.lower().replace(' ', '_')}_banner.png",
+            )
 
         await callback.bot.send_photo(
             chat_id=settings.channel_id, photo=banner_input, caption=post_text
         )
 
-        cleanup_banner(str(banner_path) if banner_path else None)
+        if banner_buffer:
+            banner_buffer.close()
 
         success_text = (
             "✅ <b>Post Published Successfully!</b>\n\n"
@@ -502,7 +508,10 @@ async def cancel_callback_handler(
     current_state = await state.get_state()
     if current_state:
         data = await state.get_data()
-        cleanup_banner(data.get("banner_path"))
+        banner_buffer = data.get("banner_buffer")
+        if banner_buffer:
+            banner_buffer.close()
+
         await state.clear()
 
     cancel_text = (
@@ -894,7 +903,9 @@ async def finalize_field_edit(
     message: Message, state: FSMContext, enhanced_data: EnhancedRepositoryData, field: EditField
 ) -> None:
     data = await state.get_data()
-    cleanup_banner(data.get("banner_path"))
+    banner_buffer = data.get("banner_buffer")
+    if banner_buffer:
+        banner_buffer.close()
 
     await state.update_data(enhanced_data=enhanced_data)
 
@@ -926,20 +937,22 @@ async def back_to_edit_menu_handler(
 
 
 async def send_banner_preview(
-    message: Message, banner_path: str | Path, post_text: str, preview_header: str
+    message: Message, banner_buffer: BytesIO, post_text: str, preview_header: str
 ) -> None:
+    banner_input = BufferedInputFile(banner_buffer.getvalue(), filename="banner.png")
+
     if message.photo:
         await message.delete()
         await message.answer(preview_header)
         await message.answer_photo(
-            photo=FSInputFile(banner_path),
+            photo=banner_input,
             caption=post_text,
             reply_markup=create_keyboard(KeyboardType.PREVIEW),
         )
     else:
         await try_edit_message(message, preview_header)
         await message.answer_photo(
-            photo=FSInputFile(banner_path),
+            photo=banner_input,
             caption=post_text,
             reply_markup=create_keyboard(KeyboardType.PREVIEW),
         )
