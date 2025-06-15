@@ -7,3 +7,5 @@ from aiogram.fsm.state import State, StatesGroup
 class PostStates(StatesGroup):
     waiting_for_github_url = State()
     waiting_for_confirmation = State()
+    previewing_post = State()
+    editing_post = State()

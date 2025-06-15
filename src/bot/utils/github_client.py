@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 import aiohttp
 
+from .cache import repository_cache
 from .models import (
     EnhancedRepositoryData,
     GitHubRepository,
@@ -107,6 +108,11 @@ class GitHubClient:
     async def get_enhanced_repository_data(
         self, github_url: str, openai_api_key: str, openai_base_url: str | None = None
     ) -> EnhancedRepositoryData:
+        cached_data = repository_cache.get(github_url)
+        if cached_data:
+            logger.info("Using cached data for repository: %s", github_url)
+            return cached_data
+
         owner, repo = self._parse_github_url(github_url)
 
         logger.info("Fetching GitHub repository data: %s/%s", owner, repo)
@@ -128,7 +134,11 @@ class GitHubClient:
             logger.warning("Failed to enhance content for %s: %s", repository.name, e)
             ai_content = None
 
-        return EnhancedRepositoryData(
+        enhanced_data = EnhancedRepositoryData(
             repository=repository,
             ai_content=ai_content,
         )
+
+        repository_cache.set(github_url, enhanced_data)
+
+        return enhanced_data

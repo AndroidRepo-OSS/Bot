@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -101,7 +102,7 @@ animation without rooting or complex setups.",
 QUALITY REQUIREMENTS FOR USER-FOCUSED CONTENT:
 - enhanced_description: 2-3 sentences explaining what the app/tool does for users and why they \
 should care. Focus on practical benefits, not technical implementation.
-- relevant_tags: 5-7 tags prioritizing: app category → main function → user benefits → platform
+- relevant_tags: 5-7 tags prioritizing: app category → main function → user benefits
 - key_features: 3-4 user-facing features that solve real problems or improve experience
 - important_links: Direct download links, official websites, setup guides - what users need to \
 get started
@@ -129,6 +130,7 @@ GUIDELINES:
         description: str | None = None,
         readme_content: str | None = None,
         topics: list[str] | None = None,
+        max_retries: int = 3,
     ) -> AIGeneratedContent:
         topics = topics or []
 
@@ -139,59 +141,80 @@ GUIDELINES:
             topics=topics,
         )
 
-        try:
-            logger.info("Requesting content enhancement from OpenAI for %s", repo_name)
-
-            response = await self._client.chat.completions.create(
-                model=self._model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a specialized Android content curator with deep "
-                        "understanding of the mobile app ecosystem and user needs. Your expertise "
-                        "lies in identifying valuable Android applications, utilities, and tools "
-                        "that solve real user problems. You excel at translating technical "
-                        "projects into user-friendly descriptions that highlight practical "
-                        "benefits. You always focus on the end-user perspective and create "
-                        "precise, structured JSON outputs without additional formatting.",
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                max_tokens=1200,
-                temperature=0.3,
-                top_p=0.9,
-                frequency_penalty=0.1,
-                presence_penalty=0.1,
-            )
-
-            content = response.choices[0].message.content
-            if not content:
-                msg = "Empty response from OpenAI"
-                raise ValueError(msg)
-
+        for attempt in range(max_retries):
             try:
-                ai_data = json.loads(content.strip())
-            except json.JSONDecodeError as e:
-                logger.error("Failed to parse OpenAI JSON response: %s", content)
+                logger.info(
+                    "Requesting content enhancement from OpenAI for %s (attempt %d/%d)",
+                    repo_name,
+                    attempt + 1,
+                    max_retries,
+                )
 
-                json_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", content, re.DOTALL)
-                if json_match:
-                    try:
-                        ai_data = json.loads(json_match.group(1))
-                        logger.info("Successfully extracted JSON from code block")
-                    except json.JSONDecodeError:
+                response = await self._client.chat.completions.create(
+                    model=self._model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are a specialized Android content curator with deep "
+                            "understanding of the mobile app ecosystem and user needs. Your "
+                            "expertise lies in identifying valuable Android applications, "
+                            "utilities, and tools that solve real user problems. You excel at "
+                            "translating technical projects into user-friendly descriptions that "
+                            "highlight practical benefits. You always focus on the end-user "
+                            "perspective and create precise, structured JSON outputs without "
+                            "additional formatting.",
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    max_tokens=1200,
+                    temperature=0.3,
+                    top_p=0.9,
+                    frequency_penalty=0.1,
+                    presence_penalty=0.1,
+                )
+
+                content = response.choices[0].message.content
+                if not content:
+                    msg = "Empty response from OpenAI"
+                    raise ValueError(msg)
+
+                try:
+                    ai_data = json.loads(content.strip())
+                except json.JSONDecodeError as e:
+                    logger.error("Failed to parse OpenAI JSON response: %s", content)
+
+                    json_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", content, re.DOTALL)
+                    if json_match:
+                        try:
+                            ai_data = json.loads(json_match.group(1))
+                            logger.info("Successfully extracted JSON from code block")
+                        except json.JSONDecodeError:
+                            msg = f"Invalid JSON response from OpenAI: {e}"
+                            raise ValueError(msg) from e
+                    else:
                         msg = f"Invalid JSON response from OpenAI: {e}"
                         raise ValueError(msg) from e
-                else:
-                    msg = f"Invalid JSON response from OpenAI: {e}"
+
+                return AIGeneratedContent(**ai_data)
+
+            except ValidationError as e:
+                logger.error("Invalid data structure from OpenAI: %s", e)
+                if attempt == max_retries - 1:
+                    msg = (
+                        f"OpenAI returned invalid data structure after {max_retries} attempts: {e}"
+                    )
                     raise ValueError(msg) from e
 
-            return AIGeneratedContent(**ai_data)
+                await asyncio.sleep(2**attempt)
+                continue
 
-        except ValidationError as e:
-            logger.error("Invalid data structure from OpenAI: %s", e)
-            msg = f"OpenAI returned invalid data structure: {e}"
-            raise ValueError(msg) from e
-        except Exception as e:
-            logger.error("OpenAI API error for %s: %s", repo_name, e)
-            raise
+            except Exception as e:
+                logger.error("OpenAI API error for %s (attempt %d): %s", repo_name, attempt + 1, e)
+                if attempt == max_retries - 1:
+                    raise
+
+                await asyncio.sleep(2**attempt)
+                continue
+
+        msg = f"Failed to enhance content for {repo_name} after {max_retries} attempts"
+        raise RuntimeError(msg)
