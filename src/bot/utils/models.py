@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -16,18 +18,30 @@ class GitHubRepository(BaseModel):
     readme_content: str | None = Field(None, description="README content (truncated)")
 
 
+class ImportantLink(BaseModel):
+    """Represents an important link with its metadata."""
+
+    title: str = Field(..., description="Human-readable title for the link")
+    url: str = Field(..., description="Valid URL to the resource")
+    type: Literal["download", "website", "documentation", "demo", "store", "repository"] = Field(
+        ..., description="Category of the link"
+    )
+
+
 class AIGeneratedContent(BaseModel):
     """AI-generated content for repository posts."""
 
-    enhanced_description: str = Field(..., description="AI-enhanced repository description")
+    enhanced_description: str = Field(
+        ..., description="User-focused description explaining benefits and problems solved"
+    )
     relevant_tags: list[str] = Field(
-        default_factory=list, description="AI-suggested relevant tags"
+        default_factory=list, description="Relevant tags for categorizing the Android app or tool"
     )
     key_features: list[str] = Field(
-        default_factory=list, description="Key features extracted from README"
+        default_factory=list, description="Key features that users will find valuable"
     )
-    important_links: list[dict[str, str]] = Field(
-        default_factory=list, description="Important links found in README"
+    important_links: list[ImportantLink] = Field(
+        default_factory=list, description="Important links for downloads, docs, or websites"
     )
 
 

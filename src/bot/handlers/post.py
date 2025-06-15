@@ -24,7 +24,12 @@ from bot.config import Settings
 from bot.utils.banner_generator import generate_banner
 from bot.utils.cache import repository_cache
 from bot.utils.github_client import GitHubClient
-from bot.utils.models import AIGeneratedContent, EnhancedRepositoryData, GitHubRepository
+from bot.utils.models import (
+    AIGeneratedContent,
+    EnhancedRepositoryData,
+    GitHubRepository,
+    ImportantLink,
+)
 
 router = Router(name="post")
 
@@ -159,7 +164,7 @@ async def post_command_handler(message: Message, state: FSMContext) -> None:
     await state.set_state(PostStates.waiting_for_github_url)
 
     await message.reply(
-        "� <b>Repository Post Creator</b>\n"
+        "📱 <b>Repository Post Creator</b>\n"
         "Send a GitHub repository URL to generate a post.\n\n"
         "Example: https://github.com/user/repository\n"
         "Use /cancel to abort."
@@ -266,8 +271,6 @@ async def confirm_post_handler(
             f"<b>Error:</b> <code>{str(e)[:200]}...</code>"
         )
         await state.clear()
-
-    await callback.answer("Processing completed!")
 
 
 async def show_post_preview(
@@ -381,8 +384,6 @@ async def publish_post_handler(
         except TelegramBadRequest:
             await callback.message.answer(success_text)
 
-        await callback.answer("Post published to channel successfully!")
-
     except Exception as e:
         error_text = (
             "❌ <b>Failed to Publish Post</b>\n\n"
@@ -396,8 +397,6 @@ async def publish_post_handler(
             await try_edit_message(callback.message, error_text)
         except TelegramBadRequest:
             await callback.message.answer(error_text)
-
-        await callback.answer("Failed to publish post. Check logs for details.", show_alert=True)
 
     await state.clear()
 
@@ -574,7 +573,7 @@ def create_edit_message(field: EditField, enhanced_data: EnhancedRepositoryData)
                 enhanced_data.ai_content.important_links if enhanced_data.ai_content else []
             )
             current_text = (
-                "\n".join(f"• {link['title']}: {link['url']}" for link in current_value)
+                "\n".join(f"• {link.title}: {link.url}" for link in current_value)
                 if current_value
                 else "No additional links available"
             )
@@ -649,8 +648,7 @@ def format_enhanced_post(
     links = [f'• <a href="{repository.url}">GitHub Repository</a>']
     if ai_content and ai_content.important_links:
         links.extend([
-            f'• <a href="{link["url"]}">{link["title"]}</a>'
-            for link in ai_content.important_links[:3]
+            f'• <a href="{link.url}">{link.title}</a>' for link in ai_content.important_links[:3]
         ])
 
     parts.extend([
@@ -660,9 +658,9 @@ def format_enhanced_post(
 
     if tags:
         hashtags = " ".join(f"#{tag}" for tag in tags)
-        parts.append(f"<b>Tags:</b> {hashtags}")
+        parts[-1] += f"\n<b>Tags:</b> {hashtags}"
 
-    parts.append("<b>Follow:</b> @AndroidRepo // <b>Join:</b> @AndroidRepo_chat")
+    parts[-1] += "\n<b>Follow:</b> @AndroidRepo\n<b>Join:</b> @AndroidRepo_chat"
     return "\n\n".join(parts)
 
 
@@ -777,7 +775,7 @@ def update_links(enhanced_data: EnhancedRepositoryData, new_text: str) -> None:
     for line in new_text.strip().split("\n"):
         if ":" in line and "http" in line:
             title, url = line.split(":", 1)
-            links.append({"title": title.strip(), "url": url.strip(), "type": "custom"})
+            links.append(ImportantLink(title=title.strip(), url=url.strip(), type="website"))
 
     if enhanced_data.ai_content:
         enhanced_data.ai_content.important_links = links[:3]

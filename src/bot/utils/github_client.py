@@ -19,7 +19,6 @@ from .openai_client import OpenAIClient
 logger = logging.getLogger(__name__)
 
 GITHUB_API_BASE = "https://api.github.com"
-README_MAX_LENGTH = 1000
 
 
 class GitHubClient:
@@ -58,14 +57,6 @@ class GitHubClient:
 
         return owner, repo
 
-    @staticmethod
-    def _truncate_readme(content: str) -> str:
-        if len(content) <= README_MAX_LENGTH:
-            return content
-
-        truncated = content[:README_MAX_LENGTH].rsplit(" ", 1)[0]
-        return f"{truncated}..."
-
     async def _fetch_json(self, url: str) -> dict:
         if not self._session:
             msg = "Session not initialized"
@@ -90,8 +81,7 @@ class GitHubClient:
             readme_data = await self._fetch_json(readme_url)
 
             if readme_data.get("content"):
-                decoded_content = base64.b64decode(readme_data["content"]).decode("utf-8")
-                readme_content = self._truncate_readme(decoded_content)
+                readme_content = base64.b64decode(readme_data["content"]).decode("utf-8")
         except Exception as e:
             logger.warning("Failed to fetch README for %s/%s: %s", owner, repo, e)
 
