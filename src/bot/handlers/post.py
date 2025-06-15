@@ -103,34 +103,34 @@ def create_keyboard(keyboard_type: KeyboardType) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
     if keyboard_type == KeyboardType.CONFIRMATION:
-        builder.button(text="✅ Confirm", callback_data=PostCallback(action=PostAction.CONFIRM))
+        builder.button(text="✅ Proceed", callback_data=PostCallback(action=PostAction.CONFIRM))
         builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
         builder.adjust(2)
 
     elif keyboard_type == KeyboardType.WARNING:
         builder.button(
-            text="✅ Continue Anyway", callback_data=PostCallback(action=PostAction.FORCE_CONTINUE)
+            text="✅ Continue",
+            callback_data=PostCallback(action=PostAction.FORCE_CONTINUE),
         )
         builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
         builder.adjust(2)
 
     elif keyboard_type == KeyboardType.PREVIEW:
+        builder.button(text="✅ Publish", callback_data=PostCallback(action=PostAction.PUBLISH))
+        builder.button(text="✏️ Edit", callback_data=PostCallback(action=PostAction.EDIT))
         builder.button(
-            text="✅ Publish Post", callback_data=PostCallback(action=PostAction.PUBLISH)
-        )
-        builder.button(text="✏️ Edit Post", callback_data=PostCallback(action=PostAction.EDIT))
-        builder.button(
-            text="🔄 Regenerate", callback_data=PostCallback(action=PostAction.REGENERATE)
+            text="🔄 Regenerate",
+            callback_data=PostCallback(action=PostAction.REGENERATE),
         )
         builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
         builder.adjust(2, 2)
 
     elif keyboard_type == KeyboardType.EDIT:
         edit_fields = [
-            ("📝 Edit Description", EditField.DESCRIPTION),
-            ("🏷️ Edit Tags", EditField.TAGS),
-            ("⭐ Edit Features", EditField.FEATURES),
-            ("🔗 Edit Links", EditField.LINKS),
+            ("📝 Description", EditField.DESCRIPTION),
+            ("🏷️ Tags", EditField.TAGS),
+            ("⭐ Features", EditField.FEATURES),
+            ("🔗 Links", EditField.LINKS),
         ]
 
         for text, field in edit_fields:
@@ -139,16 +139,14 @@ def create_keyboard(keyboard_type: KeyboardType) -> InlineKeyboardMarkup:
             )
 
         builder.button(
-            text="🔙 Back to Preview",
+            text="🔙 Back",
             callback_data=PostCallback(action=PostAction.BACK_TO_PREVIEW),
         )
         builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
         builder.adjust(2, 2, 2)
 
     elif keyboard_type == KeyboardType.BACK_TO_EDIT:
-        builder.button(
-            text="🔙 Back to Edit Menu", callback_data=EditCallback(action=EditAction.BACK_TO_MENU)
-        )
+        builder.button(text="🔙 Back", callback_data=EditCallback(action=EditAction.BACK_TO_MENU))
 
     return builder.as_markup()
 
@@ -209,9 +207,10 @@ async def post_command_handler(message: Message, state: FSMContext) -> None:
     await state.set_state(PostStates.waiting_for_github_url)
 
     await message.reply(
-        "📱 <b>Android Repository Post Creator</b>\n\n"
-        "<i>Example: https://github.com/user/repository</i>\n\n"
-        "💡 Use /cancel to cancel the post creation at any time."
+        "📱 <b>Android Repo Post Creator</b>\n"
+        "Send a GitHub repository URL to generate a post.\n\n"
+        "Example: https://github.com/user/repository\n"
+        "Use /cancel to abort."
     )
 
 
@@ -222,18 +221,16 @@ async def cancel_command_handler(message: Message, state: FSMContext) -> None:
 
     if current_state is None:
         await message.reply(
-            "❌ <b>No Active Post Creation</b>\n\n"
-            "There's no post creation in progress to cancel.\n\n"
-            "Use /post to start creating a new post."
+            "❌ <b>No active session</b>\n"
+            "You don't have any post creation in progress.\n"
+            "Send /post to begin."
         )
         return
 
     await state.clear()
 
     await message.reply(
-        "❌ <b>Post Creation Cancelled</b>\n\n"
-        "The post creation has been cancelled successfully.\n\n"
-        "You can start again anytime with /post command."
+        "❌ <b>Cancelled</b>\nYour post creation was cancelled.\nSend /post to start over."
     )
 
 
@@ -241,9 +238,9 @@ async def cancel_command_handler(message: Message, state: FSMContext) -> None:
 async def github_url_handler(message: Message, state: FSMContext) -> None:
     if not message.text:
         await message.reply(
-            "❌ <b>Invalid Input</b>\n\n"
-            "Please send a valid GitHub repository URL as text.\n\n"
-            "<i>Example: https://github.com/user/repository</i>"
+            "❌ <b>Invalid input</b>\n"
+            "Send a valid GitHub repository URL.\n"
+            "Example: https://github.com/user/repository"
         )
         return
 
@@ -271,10 +268,9 @@ async def github_url_handler(message: Message, state: FSMContext) -> None:
 @router.message(PostStates.waiting_for_github_url)
 async def invalid_github_url_handler(message: Message) -> None:
     await message.reply(
-        "❌ <b>Invalid Input</b>\n\n"
-        "Please send a valid GitHub repository URL as text.\n\n"
-        "<i>Example: https://github.com/user/repository</i>\n\n"
-        "💡 Use /cancel to cancel the post creation."
+        "❌ <b>Invalid input</b>\n"
+        "Send a valid GitHub URL or /cancel to abort.\n"
+        "Example: https://github.com/user/repository"
     )
 
 
@@ -429,12 +425,10 @@ async def publish_post_handler(
         return
 
     await callback.message.edit_text(
-        f"✅ <b>Post Published Successfully!</b>\n\n"
-        f"<b>Repository:</b> {enhanced_data.repository.name}\n"
-        f"<b>Author:</b> {enhanced_data.repository.owner}\n\n"
-        f"Your post has been formatted and is ready to be shared in the "
-        f"Android Repository channel.\n\n"
-        f"<i>Copy the formatted post below and share it manually in the channel:</i>\n\n"
+        f"✅ <b>Done!</b>\n\n"
+        f"Repository: {enhanced_data.repository.name}\n"
+        f"Author: {enhanced_data.repository.owner}\n\n"
+        f"Your post is ready. Copy and share it below:\n\n"
         f"━━━━━━━━━━━━━━━━\n"
         f"{post_text}\n"
         f"━━━━━━━━━━━━━━━━"
@@ -460,14 +454,13 @@ async def edit_post_handler(
     await state.set_state(PostStates.editing_post)
 
     await callback.message.edit_text(
-        f"✏️ <b>Edit Post Content</b>\n\n"
-        f"<b>Repository:</b> {enhanced_data.repository.name}\n\n"
-        f"Choose what you'd like to edit:\n\n"
-        f"• <b>Description:</b> Main post description\n"
-        f"• <b>Tags:</b> Repository tags/hashtags\n"
-        f"• <b>Features:</b> Key features list\n"
-        f"• <b>Links:</b> Additional important links\n\n"
-        f"<i>Select an option below to customize your post:</i>",
+        f"✏️ <b>Edit Post</b>\n"
+        f"Repository: {enhanced_data.repository.name}\n\n"
+        f"Select a field to update:\n"
+        f"• Description\n"
+        f"• Tags\n"
+        f"• Features\n"
+        f"• Links",
         reply_markup=create_keyboard(KeyboardType.EDIT),
     )
 
@@ -490,9 +483,7 @@ async def regenerate_post_handler(
     repository_cache.delete(github_url)
 
     await callback.message.edit_text(
-        "🔄 <b>Regenerating Post Content</b>\n\n"
-        "Clearing cache and generating fresh content...\n\n"
-        "<i>Please wait while we create a new version of your post.</i>"
+        "🔄 <b>Regenerating</b>\nClearing cache and generating new content.\n<i>Please wait...</i>"
     )
 
     await state.set_state(PostStates.waiting_for_confirmation)
@@ -811,7 +802,7 @@ def _update_links(enhanced_data: EnhancedRepositoryData, new_text: str) -> None:
 @router.message(PostStates.editing_description, F.text)
 async def handle_description_edit(message: Message, state: FSMContext) -> None:
     if not message.text:
-        await message.reply("Please send a valid description text.")
+        await message.reply("❗ Please send the new description or /cancel to abort.")
         return
 
     data = await state.get_data()
@@ -832,7 +823,7 @@ async def handle_description_edit(message: Message, state: FSMContext) -> None:
 @router.message(PostStates.editing_tags, F.text)
 async def handle_tags_edit(message: Message, state: FSMContext) -> None:
     if not message.text:
-        await message.reply("Please send valid tags.")
+        await message.reply("❗ Please send new tags or /cancel to abort.")
         return
 
     data = await state.get_data()
@@ -853,7 +844,7 @@ async def handle_tags_edit(message: Message, state: FSMContext) -> None:
 @router.message(PostStates.editing_features, F.text)
 async def handle_features_edit(message: Message, state: FSMContext) -> None:
     if not message.text:
-        await message.reply("Please send valid features.")
+        await message.reply("❗ Please send new features or /cancel to abort.")
         return
 
     data = await state.get_data()
@@ -874,7 +865,7 @@ async def handle_features_edit(message: Message, state: FSMContext) -> None:
 @router.message(PostStates.editing_links, F.text)
 async def handle_links_edit(message: Message, state: FSMContext) -> None:
     if not message.text:
-        await message.reply("Please send valid links.")
+        await message.reply("❗ Please send new links or /cancel to abort.")
         return
 
     data = await state.get_data()
@@ -894,22 +885,22 @@ async def handle_links_edit(message: Message, state: FSMContext) -> None:
 
 @router.message(PostStates.editing_description)
 async def handle_invalid_description_input(message: Message) -> None:
-    await message.reply("Please send a text description or use /cancel to abort editing.")
+    await message.reply("❗ Send the description text or /cancel to abort editing.")
 
 
 @router.message(PostStates.editing_tags)
 async def handle_invalid_tags_input(message: Message) -> None:
-    await message.reply("Please send text tags or use /cancel to abort editing.")
+    await message.reply("❗ Send tags text or /cancel to abort editing.")
 
 
 @router.message(PostStates.editing_features)
 async def handle_invalid_features_input(message: Message) -> None:
-    await message.reply("Please send text features or use /cancel to abort editing.")
+    await message.reply("❗ Send features text or /cancel to abort editing.")
 
 
 @router.message(PostStates.editing_links)
 async def handle_invalid_links_input(message: Message) -> None:
-    await message.reply("Please send text links or use /cancel to abort editing.")
+    await message.reply("❗ Send links text or /cancel to abort editing.")
 
 
 async def _finalize_field_edit(
@@ -921,9 +912,7 @@ async def _finalize_field_edit(
     await state.update_data(post_text=new_post_text)
 
     await message.reply(
-        f"✅ <b>{field_name.title()} Updated Successfully!</b>\n\n"
-        f"Your changes have been applied to the post.\n\n"
-        f"<i>Returning to preview...</i>"
+        f"✅ <b>{field_name.title()} updated!</b>\nYour changes are saved. Returning to preview..."
     )
 
     await _show_post_preview(message, state, enhanced_data)
@@ -932,9 +921,7 @@ async def _finalize_field_edit(
 async def _handle_edit_error(message: Message, error: Exception, field_name: str) -> None:
     logger.error("Error updating post %s: %s", field_name, error)
     await message.reply(
-        f"❌ <b>Error Updating {field_name.title()}</b>\n\n"
-        f"Failed to update the {field_name}. Please try again or use /cancel.\n\n"
-        f"Error: <code>{error!s}</code>"
+        f"❌ <b>Error updating {field_name.title()}</b>\n{error!s}\nPlease try again or /cancel."
     )
 
 
