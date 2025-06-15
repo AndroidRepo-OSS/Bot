@@ -6,6 +6,7 @@ import re
 from enum import Enum
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
@@ -347,7 +348,7 @@ async def _show_post_preview(
         "✅ Android-related" if _is_android_related(repository, ai_content) else "⚠️ Non-Android"
     )
 
-    await message.edit_text(
+    preview_text = (
         f"📋 <b>Post Preview</b>\n\n"
         f"<b>Repository:</b> {repository.name}\n"
         f"<b>Author:</b> {repository.owner}\n"
@@ -356,9 +357,19 @@ async def _show_post_preview(
         f"{post_text}\n"
         f"━━━━━━━━━━━━━━━━\n\n"
         f"<i>Review your post above. You can edit it, regenerate it, "
-        f"or publish it to the channel.</i>",
-        reply_markup=create_keyboard(KeyboardType.PREVIEW),
+        f"or publish it to the channel.</i>"
     )
+
+    try:
+        await message.edit_text(
+            preview_text,
+            reply_markup=create_keyboard(KeyboardType.PREVIEW),
+        )
+    except TelegramBadRequest:
+        await message.answer(
+            preview_text,
+            reply_markup=create_keyboard(KeyboardType.PREVIEW),
+        )
 
 
 @router.callback_query(PostCallback.filter(F.action == PostAction.PUBLISH))
@@ -760,13 +771,13 @@ async def handle_post_edit(message: Message, state: FSMContext) -> None:
         return
 
     try:
-        if editing_field == EditField.DESCRIPTION:
+        if editing_field == EditField.DESCRIPTION.value:
             _update_description(enhanced_data, message.text)
-        elif editing_field == EditField.TAGS:
+        elif editing_field == EditField.TAGS.value:
             _update_tags(enhanced_data, message.text)
-        elif editing_field == EditField.FEATURES:
+        elif editing_field == EditField.FEATURES.value:
             _update_features(enhanced_data, message.text)
-        elif editing_field == EditField.LINKS:
+        elif editing_field == EditField.LINKS.value:
             _update_links(enhanced_data, message.text)
 
         await state.update_data(enhanced_data=enhanced_data)
@@ -775,7 +786,7 @@ async def handle_post_edit(message: Message, state: FSMContext) -> None:
         await state.update_data(post_text=new_post_text)
 
         await message.reply(
-            f"✅ <b>{editing_field} Updated Successfully!</b>\n\n"
+            f"✅ <b>{editing_field.title()} Updated Successfully!</b>\n\n"
             f"Your changes have been applied to the post.\n\n"
             f"<i>Returning to preview...</i>"
         )
@@ -785,9 +796,9 @@ async def handle_post_edit(message: Message, state: FSMContext) -> None:
     except Exception as e:
         logger.error("Error updating post %s: %s", editing_field, e)
         await message.reply(
-            f"❌ <b>Error Updating {editing_field}</b>\n\n"
+            f"❌ <b>Error Updating {editing_field.title()}</b>\n\n"
             f"Failed to update the {editing_field}. Please try again or go back to preview.\n\n"
-            f"Error: <code>{e!r}</code>"
+            f"Error: <code>{e!s}</code>"
         )
 
 
