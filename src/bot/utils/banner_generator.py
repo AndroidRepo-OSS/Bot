@@ -2,61 +2,78 @@
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
 import random
+from functools import lru_cache
 from pathlib import Path
+from typing import NamedTuple
 
 from PIL import Image, ImageDraw, ImageFont
 
-MATERIAL_COLORS = [
-    "#1565C0",  # Blue 800
-    "#0D47A1",  # Blue 900
-    "#1976D2",  # Blue 700
-    "#283593",  # Indigo 700
-    "#303F9F",  # Indigo 600
-    "#512DA8",  # Deep Purple 700
-    "#5E35B1",  # Deep Purple 600
-    "#7B1FA2",  # Purple 700
-    "#8E24AA",  # Purple 600
-    "#AD1457",  # Pink 700
-    "#C2185B",  # Pink 600
-    "#D32F2F",  # Red 700
-    "#E64A19",  # Deep Orange 700
-    "#F57C00",  # Orange 700
-    "#FF8F00",  # Amber 700
-    "#388E3C",  # Green 700
-    "#00695C",  # Teal 700
-    "#0097A7",  # Cyan 700
-    "#455A64",  # Blue Grey 700
-    "#546E7A",  # Blue Grey 600
-]
+MATERIAL_COLORS = (
+    "#1565C0",
+    "#0D47A1",
+    "#1976D2",
+    "#283593",
+    "#303F9F",
+    "#512DA8",
+    "#5E35B1",
+    "#7B1FA2",
+    "#8E24AA",
+    "#AD1457",
+    "#C2185B",
+    "#D32F2F",
+    "#E64A19",
+    "#F57C00",
+    "#FF8F00",
+    "#388E3C",
+    "#00695C",
+    "#0097A7",
+    "#455A64",
+    "#546E7A",
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
-FONT_BOLD_PATH = str(DATA_DIR / "font_bold.ttf")
-FONT_REGULAR_PATH = str(DATA_DIR / "font_regular.ttf")
-CHANNEL_LOGO = str(DATA_DIR / "channel_logo.png")
-
-IMAGE_WIDTH = 1920
-IMAGE_HEIGHT = 1080
-TEXT_COLOR = "white"
+FONT_BOLD_PATH = DATA_DIR / "font_bold.ttf"
+FONT_REGULAR_PATH = DATA_DIR / "font_regular.ttf"
+CHANNEL_LOGO_PATH = DATA_DIR / "channel_logo.png"
 
 
+class BannerConfig(NamedTuple):
+    width: int = 1920
+    height: int = 1080
+    text_color: str = "white"
+    margin: int = 100
+    footer_margin: int = 50
+    footer_text: str = "@AndroidRepo"
+    logo_size: int = 100
+    footer_font_size: int = 54
+    min_font_size: int = 40
+    max_font_size: int = 180
+
+
+CONFIG = BannerConfig()
+
+
+@lru_cache(maxsize=32)
 def hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
     hex_color = hex_color.lstrip("#")
-    rgb_values = tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+    rgb_values = [int(hex_color[i : i + 2], 16) for i in (0, 2, 4)]
     return (rgb_values[0], rgb_values[1], rgb_values[2])
 
 
 def create_gradient_background(width: int, height: int, base_color: str) -> Image.Image:
-    image = Image.new("RGB", (width, height))
-
     base_rgb = hex_to_rgb(base_color)
-
     lighter_rgb = tuple(min(255, int(c * 1.3)) for c in base_rgb)
     darker_rgb = tuple(int(c * 0.6) for c in base_rgb)
 
+    gradient = Image.new("RGB", (width, height))
+    pixels = gradient.load()
+
+    if pixels is None:
+        return gradient
+
     for y in range(height):
         ratio = y / height
-
         if ratio < 0.5:
             factor = ratio * 2
             color = tuple(
@@ -69,47 +86,43 @@ def create_gradient_background(width: int, height: int, base_color: str) -> Imag
             )
 
         for x in range(width):
-            image.putpixel((x, y), color)
+            pixels[x, y] = color
 
-    return image
+    return gradient
 
 
 def add_channel_logo(
-    image: Image.Image, logo_path: str, position: tuple[int, int], size: int = 50
+    image: Image.Image, logo_path: Path, position: tuple[int, int], size: int = 50
 ) -> None:
     try:
-        logo = Image.open(logo_path)
-
-        logo = logo.convert("RGBA")
-
-        logo = logo.resize((size, size), Image.Resampling.LANCZOS)
-
-        image.paste(logo, position, logo)
-    except (OSError, ValueError):
+        with Image.open(logo_path) as logo:
+            logo = logo.convert("RGBA").resize((size, size), Image.Resampling.LANCZOS)
+            image.paste(logo, position, logo)
+    except (OSError, ValueError, FileNotFoundError):
         pass
 
 
-def get_font(font_path: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+@lru_cache(maxsize=8)
+def get_font(font_path: Path, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     try:
-        return ImageFont.truetype(font_path, size)
+        return ImageFont.truetype(str(font_path), size)
     except OSError:
-        return ImageFont.load_default()
+        return ImageFont.load_default(size)
 
 
 def wrap_text(
     text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont, max_width: int
 ) -> list[str]:
     words = text.split()
+    if not words:
+        return []
+
     lines = []
     current_line = ""
 
     for word in words:
-        test_line = current_line + (" " if current_line else "") + word
-        try:
-            bbox = font.getbbox(test_line)
-            text_width = bbox[2] - bbox[0]
-        except AttributeError:
-            text_width = len(test_line) * 10
+        test_line = f"{current_line} {word}" if current_line else word
+        text_width = get_text_width(test_line, font)
 
         if text_width <= max_width:
             current_line = test_line
@@ -125,85 +138,84 @@ def wrap_text(
     return lines
 
 
+def get_text_width(text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont) -> int:
+    try:
+        return int(font.getbbox(text)[2])
+    except (AttributeError, OSError):
+        return len(text) * 10
+
+
 def get_text_dimensions(
     text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont
 ) -> tuple[int, int]:
     try:
         bbox = font.getbbox(text)
         return int(bbox[2] - bbox[0]), int(bbox[3] - bbox[1])
-    except AttributeError:
+    except (AttributeError, OSError):
         return len(text) * 10, 20
 
 
 def generate_banner(title_text: str, output_filename: str) -> Path:
+    config = CONFIG
     bg_color = random.choice(MATERIAL_COLORS)
 
-    image = create_gradient_background(IMAGE_WIDTH, IMAGE_HEIGHT, bg_color)
+    image = create_gradient_background(config.width, config.height, bg_color)
     draw = ImageDraw.Draw(image)
 
-    margin = 100
-    max_title_width = IMAGE_WIDTH - (2 * margin)
-    max_title_height = IMAGE_HEIGHT - 400
+    max_title_width = config.width - (2 * config.margin)
+    max_title_height = config.height - 400
 
-    title_font_size = 180
-    title_font = get_font(FONT_BOLD_PATH, title_font_size)
+    title_font_size = config.max_font_size
+    title_lines = []
 
-    while title_font_size > 40:
+    while title_font_size > config.min_font_size:
         title_font = get_font(FONT_BOLD_PATH, title_font_size)
         title_lines = wrap_text(title_text, title_font, max_title_width)
 
-        total_height = 0
-        max_line_width = 0
+        if not title_lines:
+            break
 
-        for line in title_lines:
-            line_width, line_height = get_text_dimensions(line, title_font)
-            max_line_width = max(max_line_width, line_width)
-            total_height += line_height + 10
+        total_height = (
+            sum(get_text_dimensions(line, title_font)[1] + 10 for line in title_lines) - 10
+        )
+        max_line_width = max(get_text_dimensions(line, title_font)[0] for line in title_lines)
 
         if max_line_width <= max_title_width and total_height <= max_title_height:
             break
 
         title_font_size -= 10
 
+    if not title_lines:
+        title_font = get_font(FONT_BOLD_PATH, config.min_font_size)
+        title_lines = [title_text]
+
     line_height = get_text_dimensions("Ag", title_font)[1] + 10
     total_text_height = len(title_lines) * line_height - 10
-
-    start_y = (IMAGE_HEIGHT - total_text_height) / 2 - 30
+    start_y = (config.height - total_text_height) / 2 - 30
 
     for i, line in enumerate(title_lines):
         line_width = get_text_dimensions(line, title_font)[0]
-        line_x = (IMAGE_WIDTH - line_width) / 2
+        line_x = (config.width - line_width) / 2
         line_y = start_y + (i * line_height)
-        draw.text((line_x, line_y), line, fill=TEXT_COLOR, font=title_font)
+        draw.text((line_x, line_y), line, fill=config.text_color, font=title_font)
 
-    footer_font_size = 54
-    footer_font = get_font(FONT_REGULAR_PATH, footer_font_size)
-    footer_text = "@AndroidRepo"
+    footer_font = get_font(FONT_REGULAR_PATH, config.footer_font_size)
+    footer_width, footer_height = get_text_dimensions(config.footer_text, footer_font)
 
-    footer_width, footer_height = get_text_dimensions(footer_text, footer_font)
-
-    footer_margin = 50
     padding = 15
-    logo_size = 100
+    footer_y = config.height - footer_height - config.footer_margin
+    total_footer_width = footer_width + config.logo_size + padding
+    footer_x = max(config.width - config.footer_margin - total_footer_width, config.footer_margin)
 
-    footer_y = IMAGE_HEIGHT - footer_height - footer_margin
+    logo_x = footer_x + footer_width + padding
+    logo_y = footer_y + (footer_height - config.logo_size) // 2 + 5
 
-    footer_x = IMAGE_WIDTH - footer_margin - footer_width - logo_size - padding
-
-    if footer_x < footer_margin:
-        footer_x = footer_margin
-        logo_x = footer_x + footer_width + padding
-    else:
-        logo_x = footer_x + footer_width + padding
-
-    logo_y = footer_y + (footer_height - logo_size) // 2 + 5
-
-    draw.text((footer_x, footer_y), footer_text, fill=TEXT_COLOR, font=footer_font)
-    add_channel_logo(image, CHANNEL_LOGO, (int(logo_x), int(logo_y)), logo_size)
+    draw.text((footer_x, footer_y), config.footer_text, fill=config.text_color, font=footer_font)
+    add_channel_logo(image, CHANNEL_LOGO_PATH, (int(logo_x), int(logo_y)), config.logo_size)
 
     output_dir = DATA_DIR / "generated_banners"
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / output_filename
 
-    image.save(output_path)
+    image.save(output_path, optimize=True, quality=95)
     return output_path
