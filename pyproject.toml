@@ -16,6 +16,8 @@ dependencies = [
     "aiohttp[speedups]>=3.9.0",
     "openai>=1.86.0",
     "pillow>=11.2.1",
+    "aiosqlite>=0.21.0",
+    "sqlalchemy[asyncio]>=2.0.41",
 ]
 
 [dependency-groups]

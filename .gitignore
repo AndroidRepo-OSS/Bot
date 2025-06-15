@@ -196,3 +196,4 @@ cython_debug/
 
 config.env
 data/generated_banners/
+data/apps.db*

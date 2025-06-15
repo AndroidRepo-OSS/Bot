@@ -2,6 +2,7 @@
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
 import re
+from datetime import UTC, datetime
 from enum import Enum
 from io import BytesIO
 
@@ -21,6 +22,7 @@ from aiogram.types import (
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import Settings
+from bot.database import can_submit_app, submit_app
 from bot.utils.banner_generator import generate_banner
 from bot.utils.cache import repository_cache
 from bot.utils.github_client import GitHubClient
@@ -150,6 +152,12 @@ async def try_edit_message(
 
 @router.message(Command("post"))
 async def post_command_handler(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    banner_buffer = data.get("banner_buffer")
+    if banner_buffer:
+        banner_buffer.close()
+
+    await state.clear()
     await state.set_state(PostStates.waiting_for_github_url)
 
     await message.reply(
@@ -242,7 +250,7 @@ async def confirm_post_handler(
         callback.message,
         f"🔄 <b>Processing Repository</b>\n\n"
         f"<b>Repository:</b> {repo_name}\n"
-        f"<i>Please wait while we fetch and analyze the repository...</i>",
+        f"<i>Checking submission history and fetching repository data...</i>",
     )
 
     try:
@@ -255,12 +263,35 @@ async def confirm_post_handler(
                 settings.openai_base_url,
             )
 
+        repository = enhanced_data.repository
+
+        can_submit, last_submission_date = await can_submit_app(repository.full_name)
+
+        if not can_submit and last_submission_date:
+            if last_submission_date.tzinfo is None:
+                last_submission_date = last_submission_date.replace(tzinfo=UTC)
+
+            days_since_last = (datetime.now(tz=UTC) - last_submission_date).days
+            remaining_days = 90 - days_since_last
+
+            await try_edit_message(
+                callback.message,
+                f"🚫 <b>Repost Prevention</b>\n\n"
+                f"<b>Repository:</b> {repository.name}\n"
+                f"<b>Owner:</b> {repository.owner}\n\n"
+                f"❌ This app was already posted <b>{days_since_last} days ago</b>\n"
+                f"You need to wait <b>{remaining_days} more days</b> before reposting.\n\n"
+                f"<i>Our 3-month repost policy prevents channel spam.</i>",
+            )
+            await state.clear()
+            return
+
         await show_post_preview(callback.message, state, enhanced_data)
 
     except Exception as e:
         await try_edit_message(
             callback.message,
-            f"❌ <b>Error Processing Repository</b></b>\n\n"
+            f"❌ <b>Error Processing Repository</b>\n\n"
             f"<code>{github_url}</code>\n\n"
             f"<b>Error:</b> <code>{str(e)[:200]}...</code>",
         )
@@ -309,26 +340,27 @@ async def show_post_preview(
         try:
             await send_banner_preview(message, banner_buffer, post_text, preview_header)
         except Exception:
-            await show_text_only_preview(message, preview_header, post_text, repository)
+            error_text = (
+                "❌ <b>Banner Error</b>\n\n"
+                f"Could not generate or display banner for {repository.name}.\n"
+                "This is required to publish to the channel.\n\n"
+                "Please try:\n"
+                "• Use /post again to retry\n"
+                "• Check if the repository name is valid"
+            )
+            await message.answer(error_text)
+            await state.clear()
     else:
-        await show_text_only_preview(message, preview_header, post_text, repository)
-
-
-async def show_text_only_preview(
-    message: Message, preview_header: str, post_text: str, repository: GitHubRepository
-) -> None:
-    full_text = (
-        f"{preview_header}\n"
-        f"━━━━━━━━━━━━━━━━\n"
-        f"{post_text}\n"
-        f"━━━━━━━━━━━━━━━━\n\n"
-        "<i>Text preview ready. You can edit content, regenerate, or publish.</i>"
-    )
-
-    try:
-        await try_edit_message(message, full_text, create_keyboard(KeyboardType.PREVIEW))
-    except TelegramBadRequest:
-        await message.answer(full_text, reply_markup=create_keyboard(KeyboardType.PREVIEW))
+        error_text = (
+            "❌ <b>Banner Generation Failed</b>\n\n"
+            f"Could not generate banner for {repository.name}.\n"
+            "A banner is required to publish to the channel.\n\n"
+            "Please try:\n"
+            "• Use /post again to retry\n"
+            "• Check if the repository name is valid"
+        )
+        await message.answer(error_text)
+        await state.clear()
 
 
 @router.callback_query(PostCallback.filter(F.action == PostAction.PUBLISH))
@@ -350,35 +382,42 @@ async def publish_post_handler(
     if not post_text or not enhanced_data:
         return
 
+    if not banner_buffer:
+        error_text = (
+            "❌ <b>No Banner Available</b>\n\n"
+            "Cannot publish post without a banner.\n"
+            "Please regenerate the post to create a new banner."
+        )
+        try:
+            await try_edit_message(callback.message, error_text)
+        except TelegramBadRequest:
+            await callback.message.answer(error_text)
+        return
+
     settings = Settings()  # type: ignore
 
     try:
         repository = enhanced_data.repository
 
-        if banner_buffer:
-            banner_input = BufferedInputFile(
-                banner_buffer.getvalue(),
-                filename=f"{repository.name.lower().replace(' ', '_')}_banner.png",
-            )
-        else:
-            banner_buffer = generate_banner(repository.name)
-            banner_input = BufferedInputFile(
-                banner_buffer.getvalue(),
-                filename=f"{repository.name.lower().replace(' ', '_')}_banner.png",
-            )
+        banner_input = BufferedInputFile(
+            banner_buffer.getvalue(),
+            filename=f"{repository.name.lower().replace(' ', '_')}_banner.png",
+        )
 
-        await callback.bot.send_photo(
+        sent_message = await callback.bot.send_photo(
             chat_id=settings.channel_id, photo=banner_input, caption=post_text
         )
+
+        await submit_app(repository, sent_message.message_id)
 
         if banner_buffer:
             banner_buffer.close()
 
         success_text = (
             "✅ <b>Post Published Successfully!</b>\n\n"
-            f"Repository: {repository.name}\n"
-            f"Author: {repository.owner}\n\n"
-            "The post has been sent to the configured channel."
+            f"<b>Repository:</b> {repository.name}\n"
+            f"<b>Author:</b> {repository.owner}\n\n"
+            "<i>The post has been sent to the configured channel and saved to database.</i>"
         )
 
         try:
@@ -857,23 +896,6 @@ async def back_to_edit_menu_handler(
 async def send_banner_preview(
     message: Message, banner_buffer: BytesIO, post_text: str, preview_header: str
 ) -> None:
-    banner_input = BufferedInputFile(banner_buffer.getvalue(), filename="banner.png")
-
-    if message.photo:
-        await message.delete()
-        await message.answer(preview_header)
-        await message.answer_photo(
-            photo=banner_input,
-            caption=post_text,
-            reply_markup=create_keyboard(KeyboardType.PREVIEW),
-        )
-    else:
-        await try_edit_message(message, preview_header)
-        await message.answer_photo(
-            photo=banner_input,
-            caption=post_text,
-            reply_markup=create_keyboard(KeyboardType.PREVIEW),
-        )
     banner_input = BufferedInputFile(banner_buffer.getvalue(), filename="banner.png")
 
     if message.photo:

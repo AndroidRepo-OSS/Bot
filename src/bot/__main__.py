@@ -11,6 +11,7 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from .config import Settings
+from .database import db_manager
 from .handlers.post import router as post_router
 from .handlers.start import router as start_router
 
@@ -27,6 +28,9 @@ async def main() -> None:
     dp = Dispatcher(storage=storage)
     settings = Settings()  # type: ignore
 
+    await db_manager.init_database()
+    logger.info("Database initialized")
+
     defaults = DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True)
     bot = Bot(token=settings.bot_token.get_secret_value(), default=defaults)
 
@@ -38,6 +42,8 @@ async def main() -> None:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
         await bot.session.close()
+        await db_manager.close_database()
+        logger.info("Database connection closed")
 
 
 if __name__ == "__main__":
