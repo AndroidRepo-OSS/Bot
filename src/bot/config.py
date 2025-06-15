@@ -23,6 +23,10 @@ class Settings(BaseSettings):
         min_length=1,
     )
 
+    channel_id: int = Field(
+        default=-1001258691467, description="Telegram channel ID where posts will be sent"
+    )
+
     openai_api_key: SecretStr = Field(description="OpenAI API key for content enhancement")
 
     openai_base_url: str = Field(

@@ -414,7 +414,7 @@ async def _show_post_preview(
 async def publish_post_handler(
     callback: CallbackQuery, state: FSMContext, callback_data: PostCallback
 ) -> None:
-    if isinstance(callback.message, InaccessibleMessage):
+    if isinstance(callback.message, InaccessibleMessage) or not callback.bot:
         return
 
     data = await state.get_data()
@@ -424,18 +424,34 @@ async def publish_post_handler(
     if not callback.message or not post_text or not enhanced_data:
         return
 
-    await callback.message.edit_text(
-        f"✅ <b>Done!</b>\n\n"
-        f"Repository: {enhanced_data.repository.name}\n"
-        f"Author: {enhanced_data.repository.owner}\n\n"
-        f"Your post is ready. Copy and share it below:\n\n"
-        f"━━━━━━━━━━━━━━━━\n"
-        f"{post_text}\n"
-        f"━━━━━━━━━━━━━━━━"
-    )
+    settings = Settings()  # type: ignore
+
+    try:
+        await callback.bot.send_message(chat_id=settings.channel_id, text=post_text)
+
+        await callback.message.edit_text(
+            f"✅ <b>Post Published Successfully!</b>\n\n"
+            f"Repository: {enhanced_data.repository.name}\n"
+            f"Author: {enhanced_data.repository.owner}\n\n"
+            f"The post has been sent to the configured channel."
+        )
+
+        await callback.answer("Post published to channel successfully!")
+
+    except Exception as e:
+        logger.exception("Failed to publish post to channel: %s", e)
+
+        await callback.message.edit_text(
+            f"❌ <b>Failed to Publish Post</b>\n\n"
+            f"Repository: {enhanced_data.repository.name}\n"
+            f"Author: {enhanced_data.repository.owner}\n\n"
+            f"Error: {e!s}\n\n"
+            f"Please check the channel ID configuration and bot permissions."
+        )
+
+        await callback.answer("Failed to publish post. Check logs for details.", show_alert=True)
 
     await state.clear()
-    await callback.answer("Post published successfully!")
 
 
 @router.callback_query(PostCallback.filter(F.action == PostAction.EDIT))
