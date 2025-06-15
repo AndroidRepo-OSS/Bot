@@ -19,8 +19,9 @@ from bot.utils.github_client import GitHubClient
 from bot.utils.models import AIGeneratedContent, EnhancedRepositoryData, GitHubRepository
 
 logger = logging.getLogger(__name__)
-
 router = Router(name="post")
+
+GITHUB_URL_PATTERN = re.compile(r"^https?://github\.com/[\w.-]+/[\w.-]+/?$")
 
 
 class PostAction(Enum):
@@ -45,6 +46,14 @@ class EditAction(Enum):
     BACK_TO_MENU = "back_to_menu"
 
 
+class KeyboardType(Enum):
+    CONFIRMATION = "confirmation"
+    WARNING = "warning"
+    PREVIEW = "preview"
+    EDIT = "edit"
+    BACK_TO_EDIT = "back_to_edit"
+
+
 class PostCallback(CallbackData, prefix="post"):
     action: PostAction
 
@@ -54,75 +63,57 @@ class EditCallback(CallbackData, prefix="edit"):
     field: EditField | None = None
 
 
-GITHUB_URL_PATTERN = re.compile(r"^https?://github\.com/[\w.-]+/[\w.-]+/?$")
-
-INVALID_URL_MESSAGE = (
-    "❌ <b>Invalid Input</b>\n\n"
-    "Please send a valid GitHub repository URL as text.\n\n"
-    "<i>Example: https://github.com/user/repository</i>"
-)
-
-POST_CANCELLED_MESSAGE = (
-    "❌ <b>Post Creation Cancelled</b>\n\n"
-    "The post creation has been cancelled successfully.\n\n"
-    "You can start again anytime with /post command."
-)
-
-
-def create_confirmation_keyboard() -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Confirm", callback_data=PostCallback(action=PostAction.CONFIRM))
-    builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
-    builder.adjust(2)
-    return builder.as_markup()
-
-
-def create_warning_keyboard() -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.button(
-        text="✅ Continue Anyway", callback_data=PostCallback(action=PostAction.FORCE_CONTINUE)
-    )
-    builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
-    builder.adjust(2)
-    return builder.as_markup()
-
-
-def create_preview_keyboard() -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Publish Post", callback_data=PostCallback(action=PostAction.PUBLISH))
-    builder.button(text="✏️ Edit Post", callback_data=PostCallback(action=PostAction.EDIT))
-    builder.button(text="🔄 Regenerate", callback_data=PostCallback(action=PostAction.REGENERATE))
-    builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
-    builder.adjust(2, 2)
-    return builder.as_markup()
-
-
-def create_edit_keyboard() -> InlineKeyboardMarkup:
+def create_keyboard(keyboard_type: KeyboardType) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
-    edit_fields = [
-        ("📝 Edit Description", EditField.DESCRIPTION),
-        ("🏷️ Edit Tags", EditField.TAGS),
-        ("⭐ Edit Features", EditField.FEATURES),
-        ("🔗 Edit Links", EditField.LINKS),
-    ]
+    if keyboard_type == KeyboardType.CONFIRMATION:
+        builder.button(text="✅ Confirm", callback_data=PostCallback(action=PostAction.CONFIRM))
+        builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
+        builder.adjust(2)
 
-    for text, field in edit_fields:
-        builder.button(text=text, callback_data=EditCallback(action=EditAction.FIELD, field=field))
+    elif keyboard_type == KeyboardType.WARNING:
+        builder.button(
+            text="✅ Continue Anyway", callback_data=PostCallback(action=PostAction.FORCE_CONTINUE)
+        )
+        builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
+        builder.adjust(2)
 
-    builder.button(
-        text="🔙 Back to Preview", callback_data=PostCallback(action=PostAction.BACK_TO_PREVIEW)
-    )
-    builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
-    builder.adjust(2, 2, 2)
-    return builder.as_markup()
+    elif keyboard_type == KeyboardType.PREVIEW:
+        builder.button(
+            text="✅ Publish Post", callback_data=PostCallback(action=PostAction.PUBLISH)
+        )
+        builder.button(text="✏️ Edit Post", callback_data=PostCallback(action=PostAction.EDIT))
+        builder.button(
+            text="🔄 Regenerate", callback_data=PostCallback(action=PostAction.REGENERATE)
+        )
+        builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
+        builder.adjust(2, 2)
 
+    elif keyboard_type == KeyboardType.EDIT:
+        edit_fields = [
+            ("📝 Edit Description", EditField.DESCRIPTION),
+            ("🏷️ Edit Tags", EditField.TAGS),
+            ("⭐ Edit Features", EditField.FEATURES),
+            ("🔗 Edit Links", EditField.LINKS),
+        ]
 
-def create_back_to_edit_keyboard() -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.button(
-        text="🔙 Back to Edit Menu", callback_data=EditCallback(action=EditAction.BACK_TO_MENU)
-    )
+        for text, field in edit_fields:
+            builder.button(
+                text=text, callback_data=EditCallback(action=EditAction.FIELD, field=field)
+            )
+
+        builder.button(
+            text="🔙 Back to Preview",
+            callback_data=PostCallback(action=PostAction.BACK_TO_PREVIEW),
+        )
+        builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
+        builder.adjust(2, 2, 2)
+
+    elif keyboard_type == KeyboardType.BACK_TO_EDIT:
+        builder.button(
+            text="🔙 Back to Edit Menu", callback_data=EditCallback(action=EditAction.BACK_TO_MENU)
+        )
+
     return builder.as_markup()
 
 
@@ -183,7 +174,6 @@ async def post_command_handler(message: Message, state: FSMContext) -> None:
 
     await message.reply(
         "📱 <b>Android Repository Post Creator</b>\n\n"
-        "Please send me the GitHub repository URL you want to create a post for.\n\n"
         "<i>Example: https://github.com/user/repository</i>\n\n"
         "💡 Use /cancel to cancel the post creation at any time."
     )
@@ -204,23 +194,26 @@ async def cancel_command_handler(message: Message, state: FSMContext) -> None:
         return
 
     await state.clear()
-    await message.reply(POST_CANCELLED_MESSAGE)
+    await message.reply(
+        "❌ <b>Post Creation Cancelled</b>\n\n"
+        "The post creation has been cancelled successfully.\n\n"
+        "You can start again anytime with /post command."
+    )
 
 
 @router.message(PostStates.waiting_for_github_url, F.text)
 async def github_url_handler(message: Message, state: FSMContext) -> None:
     if not message.text:
-        await message.reply(INVALID_URL_MESSAGE)
+        await message.reply(
+            "❌ <b>Invalid Input</b>\n\n"
+            "<i>Example: https://github.com/user/repository</i>\n\n"
+            "💡 Use /cancel to cancel the post creation."
+        )
         return
 
     url = message.text.strip()
-
     if not GITHUB_URL_PATTERN.match(url):
-        await message.reply(
-            "❌ <b>Invalid GitHub URL</b>\n\n"
-            "Please provide a valid GitHub repository URL.\n\n"
-            "<i>Example: https://github.com/user/repository</i>"
-        )
+        await message.reply("<i>Example: https://github.com/user/repository</i>")
         return
 
     await state.update_data(github_url=url)
@@ -230,7 +223,15 @@ async def github_url_handler(message: Message, state: FSMContext) -> None:
         f"📋 <b>Post Preview</b>\n\n"
         f"<b>Repository:</b> <code>{url}</code>\n\n"
         f"Do you want to proceed with creating the post?",
-        reply_markup=create_confirmation_keyboard(),
+        reply_markup=create_keyboard(KeyboardType.CONFIRMATION),
+    )
+
+
+@router.message(PostStates.waiting_for_github_url)
+async def invalid_github_url_handler(message: Message) -> None:
+    await message.reply(
+        "❌ <b>Invalid Input</b>\n\n<i>Example: https://github.com/user/repository</i>"
+        "\n\n💡 Use /cancel to cancel the post creation."
     )
 
 
@@ -285,7 +286,9 @@ async def confirm_post_handler(
                 f"Do you still want to continue?"
             )
 
-            await callback.message.edit_reply_markup(reply_markup=create_warning_keyboard())
+            await callback.message.edit_reply_markup(
+                reply_markup=create_keyboard(KeyboardType.WARNING)
+            )
             await state.update_data(enhanced_data=enhanced_data)
             return
 
@@ -306,7 +309,6 @@ async def confirm_post_handler(
             f"• GitHub API rate limits\n"
             f"• OpenAI API issues\n"
             f"• Network connectivity problems\n\n"
-            f"Please try again later or check the repository URL."
         )
         await state.clear()
 
@@ -355,7 +357,7 @@ async def _show_post_preview(
         f"━━━━━━━━━━━━━━━━\n\n"
         f"<i>Review your post above. You can edit it, regenerate it, "
         f"or publish it to the channel.</i>",
-        reply_markup=create_preview_keyboard(),
+        reply_markup=create_keyboard(KeyboardType.PREVIEW),
     )
 
 
@@ -413,7 +415,7 @@ async def edit_post_handler(
         f"• <b>Features:</b> Key features list\n"
         f"• <b>Links:</b> Additional important links\n\n"
         f"<i>Select an option below to customize your post:</i>",
-        reply_markup=create_edit_keyboard(),
+        reply_markup=create_keyboard(KeyboardType.EDIT),
     )
 
     await callback.answer("Edit mode activated!")
@@ -603,7 +605,7 @@ async def _handle_description_edit(
         f"• Focus on user benefits\n"
         f"• Explain what the app/tool does\n"
         f"• Avoid technical jargon",
-        reply_markup=create_back_to_edit_keyboard(),
+        reply_markup=create_keyboard(KeyboardType.BACK_TO_EDIT),
     )
 
 
@@ -632,7 +634,7 @@ async def _handle_tags_edit(
         f"• 5-7 tags maximum\n"
         f"• Focus on functionality and category\n"
         f"• Avoid generic tags like 'android' or 'app'",
-        reply_markup=create_back_to_edit_keyboard(),
+        reply_markup=create_keyboard(KeyboardType.BACK_TO_EDIT),
     )
 
 
@@ -666,7 +668,7 @@ async def _handle_features_edit(
         f"• Focus on user benefits\n"
         f"• Be specific and clear\n"
         f"• Highlight unique selling points",
-        reply_markup=create_back_to_edit_keyboard(),
+        reply_markup=create_keyboard(KeyboardType.BACK_TO_EDIT),
     )
 
 
@@ -691,7 +693,6 @@ async def _handle_links_edit(
         f"<b>Current Links:</b>\n"
         f"{links_text}\n\n"
         f"Send me new links in this format:\n"
-        f"<code>Title: URL</code>\n\n"
         f"<b>Example:</b>\n"
         f"Download App: https://play.google.com/store/apps/details?id=com.app\n"
         f"Official Website: https://www.example.com\n"
@@ -701,7 +702,7 @@ async def _handle_links_edit(
         f"• Include download links\n"
         f"• Add documentation if available\n"
         f"• Verify all URLs work",
-        reply_markup=create_back_to_edit_keyboard(),
+        reply_markup=create_keyboard(KeyboardType.BACK_TO_EDIT),
     )
 
 
@@ -759,13 +760,13 @@ async def handle_post_edit(message: Message, state: FSMContext) -> None:
         return
 
     try:
-        if editing_field == "description":
+        if editing_field == EditField.DESCRIPTION:
             _update_description(enhanced_data, message.text)
-        elif editing_field == "tags":
+        elif editing_field == EditField.TAGS:
             _update_tags(enhanced_data, message.text)
-        elif editing_field == "features":
+        elif editing_field == EditField.FEATURES:
             _update_features(enhanced_data, message.text)
-        elif editing_field == "links":
+        elif editing_field == EditField.LINKS:
             _update_links(enhanced_data, message.text)
 
         await state.update_data(enhanced_data=enhanced_data)
@@ -774,7 +775,7 @@ async def handle_post_edit(message: Message, state: FSMContext) -> None:
         await state.update_data(post_text=new_post_text)
 
         await message.reply(
-            f"✅ <b>{editing_field.title()} Updated Successfully!</b>\n\n"
+            f"✅ <b>{editing_field} Updated Successfully!</b>\n\n"
             f"Your changes have been applied to the post.\n\n"
             f"<i>Returning to preview...</i>"
         )
@@ -784,7 +785,7 @@ async def handle_post_edit(message: Message, state: FSMContext) -> None:
     except Exception as e:
         logger.error("Error updating post %s: %s", editing_field, e)
         await message.reply(
-            f"❌ <b>Error Updating {editing_field.title()}</b>\n\n"
+            f"❌ <b>Error Updating {editing_field}</b>\n\n"
             f"Failed to update the {editing_field}. Please try again or go back to preview.\n\n"
             f"Error: <code>{e!r}</code>"
         )
@@ -800,7 +801,11 @@ async def cancel_edit_handler(message: Message, state: FSMContext) -> None:
         await message.reply("✅ Edit cancelled. Returned to post preview.")
     else:
         await state.clear()
-        await message.reply(POST_CANCELLED_MESSAGE)
+        await message.reply(
+            "❌ <b>Post Creation Cancelled</b>\n\n"
+            "The post creation has been cancelled successfully.\n\n"
+            "You can start again anytime with /post command."
+        )
 
 
 @router.callback_query(EditCallback.filter(F.action == EditAction.BACK_TO_MENU))
@@ -818,8 +823,3 @@ async def back_to_edit_menu_handler(
 
     await edit_post_handler(callback, state, PostCallback(action=PostAction.EDIT))
     await callback.answer("Returned to edit menu!")
-
-
-@router.message(PostStates.waiting_for_github_url)
-async def invalid_github_url_handler(message: Message) -> None:
-    await message.reply(f"{INVALID_URL_MESSAGE}\n\n💡 Use /cancel to cancel the post creation.")
