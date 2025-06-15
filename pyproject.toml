@@ -14,7 +14,8 @@ dependencies = [
     "aiogram[fast]>=3.20.0.post0",
     "pydantic-settings>=2.0.0",
     "aiohttp[speedups]>=3.9.0",
-    "openai>=1.58.1",
+    "openai>=1.86.0",
+    "pillow>=11.2.1",
 ]
 
 [dependency-groups]

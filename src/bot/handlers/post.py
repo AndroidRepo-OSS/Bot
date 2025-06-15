@@ -4,6 +4,7 @@
 import logging
 import re
 from enum import Enum
+from pathlib import Path
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
@@ -11,10 +12,17 @@ from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InaccessibleMessage, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    CallbackQuery,
+    FSInputFile,
+    InaccessibleMessage,
+    InlineKeyboardMarkup,
+    Message,
+)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import Settings
+from bot.utils.banner_generator import generate_banner
 from bot.utils.cache import repository_cache
 from bot.utils.github_client import GitHubClient
 from bot.utils.models import AIGeneratedContent, EnhancedRepositoryData, GitHubRepository
@@ -23,41 +31,27 @@ logger = logging.getLogger(__name__)
 router = Router(name="post")
 
 GITHUB_URL_PATTERN = re.compile(r"^https?://github\.com/[\w.-]+/[\w.-]+/?$")
+ANDROID_INDICATORS = frozenset([
+    "android",
+    "kotlin",
+    "java",
+    "gradle",
+    "apk",
+    "jetpack",
+    "compose",
+    "material",
+])
 
 
 class PostStates(StatesGroup):
-    """
-    Finite state machine states for the post creation workflow in the bot.
-
-    This class defines all the states used during the process of creating,
-    editing, previewing, and confirming a post. Each state represents a
-    specific step or field in the workflow, allowing for granular control
-    over user interactions.
-    """
-
     waiting_for_github_url = State()
-    """State when the bot is waiting for the user to provide a GitHub repository URL."""
-
     waiting_for_confirmation = State()
-    """State when the bot is waiting for the user to confirm the final post before publishing."""
-
     previewing_post = State()
-    """State when the user is previewing the generated post with all its details."""
-
     editing_post = State()
-    """State when the user is in the main editing mode, choosing which field to modify."""
-
     editing_description = State()
-    """State when the user is editing the description field of the post."""
-
     editing_tags = State()
-    """State when the user is editing the tags field of the post."""
-
     editing_features = State()
-    """State when the user is editing the features field of the post."""
-
     editing_links = State()
-    """State when the user is editing the links field of the post."""
 
 
 class PostAction(Enum):
@@ -102,51 +96,48 @@ class EditCallback(CallbackData, prefix="edit"):
 def create_keyboard(keyboard_type: KeyboardType) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
-    if keyboard_type == KeyboardType.CONFIRMATION:
-        builder.button(text="✅ Proceed", callback_data=PostCallback(action=PostAction.CONFIRM))
-        builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
-        builder.adjust(2)
+    keyboard_configs = {
+        KeyboardType.CONFIRMATION: [
+            ("✅ Proceed", PostCallback(action=PostAction.CONFIRM)),
+            ("❌ Cancel", PostCallback(action=PostAction.CANCEL)),
+        ],
+        KeyboardType.WARNING: [
+            ("✅ Continue", PostCallback(action=PostAction.FORCE_CONTINUE)),
+            ("❌ Cancel", PostCallback(action=PostAction.CANCEL)),
+        ],
+        KeyboardType.PREVIEW: [
+            ("✅ Publish", PostCallback(action=PostAction.PUBLISH)),
+            ("✏️ Edit", PostCallback(action=PostAction.EDIT)),
+            ("🔄 Regenerate", PostCallback(action=PostAction.REGENERATE)),
+            ("❌ Cancel", PostCallback(action=PostAction.CANCEL)),
+        ],
+        KeyboardType.EDIT: [
+            ("📝 Description", EditCallback(action=EditAction.FIELD, field=EditField.DESCRIPTION)),
+            ("🏷️ Tags", EditCallback(action=EditAction.FIELD, field=EditField.TAGS)),
+            ("⭐ Features", EditCallback(action=EditAction.FIELD, field=EditField.FEATURES)),
+            ("🔗 Links", EditCallback(action=EditAction.FIELD, field=EditField.LINKS)),
+            ("🔙 Back", PostCallback(action=PostAction.BACK_TO_PREVIEW)),
+            ("❌ Cancel", PostCallback(action=PostAction.CANCEL)),
+        ],
+        KeyboardType.BACK_TO_EDIT: [
+            ("🔙 Back", EditCallback(action=EditAction.BACK_TO_MENU)),
+        ],
+    }
 
-    elif keyboard_type == KeyboardType.WARNING:
-        builder.button(
-            text="✅ Continue",
-            callback_data=PostCallback(action=PostAction.FORCE_CONTINUE),
-        )
-        builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
-        builder.adjust(2)
+    buttons = keyboard_configs.get(keyboard_type, [])
+    for text, callback_data in buttons:
+        builder.button(text=text, callback_data=callback_data)
 
-    elif keyboard_type == KeyboardType.PREVIEW:
-        builder.button(text="✅ Publish", callback_data=PostCallback(action=PostAction.PUBLISH))
-        builder.button(text="✏️ Edit", callback_data=PostCallback(action=PostAction.EDIT))
-        builder.button(
-            text="🔄 Regenerate",
-            callback_data=PostCallback(action=PostAction.REGENERATE),
-        )
-        builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
-        builder.adjust(2, 2)
+    adjust_configs = {
+        KeyboardType.CONFIRMATION: [2],
+        KeyboardType.WARNING: [2],
+        KeyboardType.PREVIEW: [2, 2],
+        KeyboardType.EDIT: [2, 2, 2],
+        KeyboardType.BACK_TO_EDIT: [1],
+    }
 
-    elif keyboard_type == KeyboardType.EDIT:
-        edit_fields = [
-            ("📝 Description", EditField.DESCRIPTION),
-            ("🏷️ Tags", EditField.TAGS),
-            ("⭐ Features", EditField.FEATURES),
-            ("🔗 Links", EditField.LINKS),
-        ]
-
-        for text, field in edit_fields:
-            builder.button(
-                text=text, callback_data=EditCallback(action=EditAction.FIELD, field=field)
-            )
-
-        builder.button(
-            text="🔙 Back",
-            callback_data=PostCallback(action=PostAction.BACK_TO_PREVIEW),
-        )
-        builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
-        builder.adjust(2, 2, 2)
-
-    elif keyboard_type == KeyboardType.BACK_TO_EDIT:
-        builder.button(text="🔙 Back", callback_data=EditCallback(action=EditAction.BACK_TO_MENU))
+    if adjust := adjust_configs.get(keyboard_type):
+        builder.adjust(*adjust)
 
     return builder.as_markup()
 
@@ -154,17 +145,6 @@ def create_keyboard(keyboard_type: KeyboardType) -> InlineKeyboardMarkup:
 def _is_android_related(
     repository: GitHubRepository, ai_content: AIGeneratedContent | None
 ) -> bool:
-    android_indicators = [
-        "android",
-        "kotlin",
-        "java",
-        "gradle",
-        "apk",
-        "jetpack",
-        "compose",
-        "material",
-    ]
-
     text_sources = [
         " ".join(repository.topics).lower(),
         (repository.description or "").lower(),
@@ -176,7 +156,7 @@ def _is_android_related(
     ]
 
     combined_text = " ".join(text_sources)
-    return any(indicator in combined_text for indicator in android_indicators)
+    return any(indicator in combined_text for indicator in ANDROID_INDICATORS)
 
 
 def _create_progress_message(step: int, total_steps: int, step_name: str, repo_name: str) -> str:
@@ -200,6 +180,32 @@ async def _update_progress(
         await message.edit_text(progress_text)
     except Exception as e:
         logger.warning("Failed to update progress message: %s", e)
+
+
+async def _safe_edit_or_send_message(
+    message: Message, text: str, reply_markup: InlineKeyboardMarkup | None = None
+) -> Message:
+    try:
+        if message.photo:
+            await message.edit_caption(caption=text, reply_markup=reply_markup)
+            return message
+
+        await message.edit_text(text, reply_markup=reply_markup)
+        return message
+    except TelegramBadRequest as e:
+        if "message is not modified" in str(e).lower():
+            return message
+        logger.debug("Failed to edit message, sending new one: %s", e)
+        return await message.answer(text, reply_markup=reply_markup)
+
+
+def _cleanup_banner(banner_path: str | None) -> None:
+    if banner_path and Path(banner_path).exists():
+        try:
+            Path(banner_path).unlink()
+            logger.info("Banner file deleted: %s", banner_path)
+        except OSError as e:
+            logger.warning("Failed to delete banner file %s: %s", banner_path, e)
 
 
 @router.message(Command("post"))
@@ -227,6 +233,8 @@ async def cancel_command_handler(message: Message, state: FSMContext) -> None:
         )
         return
 
+    data = await state.get_data()
+    _cleanup_banner(data.get("banner_path"))
     await state.clear()
 
     await message.reply(
@@ -278,13 +286,12 @@ async def invalid_github_url_handler(message: Message) -> None:
 async def confirm_post_handler(
     callback: CallbackQuery, state: FSMContext, callback_data: PostCallback
 ) -> None:
-    if isinstance(callback.message, InaccessibleMessage):
+    if isinstance(callback.message, InaccessibleMessage) or not callback.message:
         return
 
     data = await state.get_data()
     github_url = data.get("github_url")
-
-    if not callback.message or not github_url:
+    if not github_url:
         return
 
     repo_name = github_url.split("/")[-1]
@@ -308,17 +315,14 @@ async def confirm_post_handler(
                 settings.openai_base_url,
             )
 
-        repository = enhanced_data.repository
-        ai_content = enhanced_data.ai_content
-
         await _update_progress(
             callback.message, 3, total_steps, "Generating post content", repo_name
         )
 
-        if not _is_android_related(repository, ai_content):
+        if not _is_android_related(enhanced_data.repository, enhanced_data.ai_content):
             await callback.message.edit_text(
                 f"⚠️ <b>Non-Android Repository Detected</b>\n\n"
-                f"<b>Repository:</b> {repository.name}\n"
+                f"<b>Repository:</b> {enhanced_data.repository.name}\n"
                 f"<b>Warning:</b> This repository doesn't appear to be Android-related.\n\n"
                 f"The Android Repository channel focuses on Android apps, tools, and utilities. "
                 f"This project may not be suitable for the channel.\n\n"
@@ -334,20 +338,14 @@ async def confirm_post_handler(
         await _update_progress(
             callback.message, 4, total_steps, "Finalizing post preview", repo_name
         )
-
         await _show_post_preview(callback.message, state, enhanced_data)
 
     except Exception as e:
         logger.error("Error processing repository %s: %s", github_url, e)
         await callback.message.edit_text(
-            f"❌ <b>Error Processing Repository</b>\n\n"
-            f"Failed to process: <code>{github_url}</code>\n\n"
-            f"<b>Error:</b> <code>{str(e)[:200]}...</code>\n\n"
-            f"This could be due to:\n"
-            f"• Repository is private or doesn't exist\n"
-            f"• GitHub API rate limits\n"
-            f"• OpenAI API issues\n"
-            f"• Network connectivity problems\n\n"
+            f"❌ <b>Error Processing Repository</b></b>\n\n"
+            f"<code>{github_url}</code>\n\n"
+            f"<b>Error:</b> <code>{str(e)[:200]}...</code>"
         )
         await state.clear()
 
@@ -378,76 +376,136 @@ async def _show_post_preview(
     ai_content = enhanced_data.ai_content
 
     post_text = _format_enhanced_post(repository, ai_content)
-
-    await state.update_data(enhanced_data=enhanced_data, post_text=post_text)
-    await state.set_state(PostStates.previewing_post)
-
     android_status = (
         "✅ Android-related" if _is_android_related(repository, ai_content) else "⚠️ Non-Android"
     )
 
-    preview_text = (
+    banner_generated = False
+    banner_path = None
+
+    try:
+        banner_filename = f"{repository.name.lower().replace(' ', '_')}_banner.png"
+        banner_path = generate_banner(repository.name, banner_filename)
+        banner_generated = True
+        logger.info("Banner generated successfully: %s", banner_path)
+    except Exception as e:
+        logger.error("Error generating banner for preview: %s", e)
+
+    await state.update_data(
+        enhanced_data=enhanced_data,
+        post_text=post_text,
+        banner_path=str(banner_path) if banner_path else None,
+        banner_generated=banner_generated,
+    )
+    await state.set_state(PostStates.previewing_post)
+
+    banner_status = "✅ Generated successfully" if banner_generated else "❌ Generation failed"
+    preview_header = (
         f"📋 <b>Post Preview</b>\n\n"
         f"<b>Repository:</b> {repository.name}\n"
         f"<b>Author:</b> {repository.owner}\n"
-        f"<b>Status:</b> {android_status}\n\n"
+        f"<b>Status:</b> {android_status}\n"
+        f"<b>Banner:</b> {banner_status}\n\n"
+    )
+
+    if banner_generated and banner_path:
+        preview_header += (
+            "<i>📸 Preview below shows exactly how your post will appear when published.</i>\n"
+            "<i>You can edit content, regenerate everything, or publish to channel.</i>"
+        )
+
+        try:
+            await _send_banner_preview(message, banner_path, post_text, preview_header)
+        except Exception as e:
+            logger.error("Failed to show banner preview: %s", e)
+            await _show_text_only_preview(message, preview_header, post_text, repository)
+    else:
+        await _show_text_only_preview(message, preview_header, post_text, repository)
+
+
+async def _show_text_only_preview(
+    message: Message, preview_header: str, post_text: str, repository: GitHubRepository
+) -> None:
+    full_text = (
+        f"{preview_header}\n"
         f"━━━━━━━━━━━━━━━━\n"
         f"{post_text}\n"
         f"━━━━━━━━━━━━━━━━\n\n"
-        f"<i>Review your post above. You can edit it, regenerate it, "
-        f"or publish it to the channel.</i>"
+        "<i>Text preview ready. You can edit content, regenerate, or publish.</i>"
     )
 
     try:
-        await message.edit_text(
-            preview_text,
-            reply_markup=create_keyboard(KeyboardType.PREVIEW),
-        )
+        await _safe_edit_or_send_message(message, full_text, create_keyboard(KeyboardType.PREVIEW))
     except TelegramBadRequest:
-        await message.answer(
-            preview_text,
-            reply_markup=create_keyboard(KeyboardType.PREVIEW),
-        )
+        await message.answer(full_text, reply_markup=create_keyboard(KeyboardType.PREVIEW))
 
 
 @router.callback_query(PostCallback.filter(F.action == PostAction.PUBLISH))
 async def publish_post_handler(
     callback: CallbackQuery, state: FSMContext, callback_data: PostCallback
 ) -> None:
-    if isinstance(callback.message, InaccessibleMessage) or not callback.bot:
+    if (
+        isinstance(callback.message, InaccessibleMessage)
+        or not callback.bot
+        or not callback.message
+    ):
         return
 
     data = await state.get_data()
     post_text = data.get("post_text")
     enhanced_data = data.get("enhanced_data")
+    banner_path = data.get("banner_path")
 
-    if not callback.message or not post_text or not enhanced_data:
+    if not post_text or not enhanced_data:
         return
 
     settings = Settings()  # type: ignore
 
     try:
-        await callback.bot.send_message(chat_id=settings.channel_id, text=post_text)
+        repository = enhanced_data.repository
 
-        await callback.message.edit_text(
-            f"✅ <b>Post Published Successfully!</b>\n\n"
-            f"Repository: {enhanced_data.repository.name}\n"
-            f"Author: {enhanced_data.repository.owner}\n\n"
-            f"The post has been sent to the configured channel."
+        if banner_path and Path(banner_path).exists():
+            banner_input = FSInputFile(banner_path)
+        else:
+            banner_filename = f"{repository.name.lower().replace(' ', '_')}_banner.png"
+            banner_path = generate_banner(repository.name, banner_filename)
+            banner_input = FSInputFile(banner_path)
+
+        await callback.bot.send_photo(
+            chat_id=settings.channel_id, photo=banner_input, caption=post_text
         )
+
+        _cleanup_banner(str(banner_path) if banner_path else None)
+
+        success_text = (
+            "✅ <b>Post Published Successfully!</b>\n\n"
+            f"Repository: {repository.name}\n"
+            f"Author: {repository.owner}\n\n"
+            "The post has been sent to the configured channel."
+        )
+
+        try:
+            await _safe_edit_or_send_message(callback.message, success_text)
+        except TelegramBadRequest:
+            await callback.message.answer(success_text)
 
         await callback.answer("Post published to channel successfully!")
 
     except Exception as e:
         logger.exception("Failed to publish post to channel: %s", e)
 
-        await callback.message.edit_text(
-            f"❌ <b>Failed to Publish Post</b>\n\n"
+        error_text = (
+            "❌ <b>Failed to Publish Post</b>\n\n"
             f"Repository: {enhanced_data.repository.name}\n"
             f"Author: {enhanced_data.repository.owner}\n\n"
             f"Error: {e!s}\n\n"
-            f"Please check the channel ID configuration and bot permissions."
+            "Please check the channel ID configuration and bot permissions."
         )
+
+        try:
+            await _safe_edit_or_send_message(callback.message, error_text)
+        except TelegramBadRequest:
+            await callback.message.answer(error_text)
 
         await callback.answer("Failed to publish post. Check logs for details.", show_alert=True)
 
@@ -469,16 +527,22 @@ async def edit_post_handler(
 
     await state.set_state(PostStates.editing_post)
 
-    await callback.message.edit_text(
+    edit_text = (
         f"✏️ <b>Edit Post</b>\n"
         f"Repository: {enhanced_data.repository.name}\n\n"
         f"Select a field to update:\n"
         f"• Description\n"
         f"• Tags\n"
         f"• Features\n"
-        f"• Links",
-        reply_markup=create_keyboard(KeyboardType.EDIT),
+        f"• Links"
     )
+
+    try:
+        await _safe_edit_or_send_message(
+            callback.message, edit_text, create_keyboard(KeyboardType.EDIT)
+        )
+    except TelegramBadRequest:
+        await callback.message.answer(edit_text, reply_markup=create_keyboard(KeyboardType.EDIT))
 
     await callback.answer("Edit mode activated!")
 
@@ -498,13 +562,19 @@ async def regenerate_post_handler(
 
     repository_cache.delete(github_url)
 
-    await callback.message.edit_text(
+    regenerate_text = (
         "🔄 <b>Regenerating</b>\nClearing cache and generating new content.\n<i>Please wait...</i>"
     )
 
+    try:
+        await _safe_edit_or_send_message(callback.message, regenerate_text)
+    except TelegramBadRequest:
+        await callback.message.answer(regenerate_text)
+
     await state.set_state(PostStates.waiting_for_confirmation)
 
-    await confirm_post_handler(callback, state)
+    fake_callback_data = PostCallback(action=PostAction.CONFIRM)
+    await confirm_post_handler(callback, state, fake_callback_data)
 
 
 @router.callback_query(PostCallback.filter(F.action == PostAction.BACK_TO_PREVIEW))
@@ -516,11 +586,20 @@ async def back_to_preview_handler(
 
     data = await state.get_data()
     enhanced_data = data.get("enhanced_data")
+    post_text = data.get("post_text")
 
-    if not callback.message or not enhanced_data:
+    if not callback.message or not enhanced_data or not post_text:
         return
 
-    await _show_post_preview(callback.message, state, enhanced_data)
+    await state.set_state(PostStates.previewing_post)
+
+    try:
+        await callback.message.edit_caption(
+            caption=post_text, reply_markup=create_keyboard(KeyboardType.PREVIEW)
+        )
+    except TelegramBadRequest:
+        await _show_post_preview(callback.message, state, enhanced_data)
+
     await callback.answer("Returned to preview!")
 
 
@@ -528,19 +607,23 @@ async def back_to_preview_handler(
 async def cancel_callback_handler(
     callback: CallbackQuery, state: FSMContext, callback_data: PostCallback
 ) -> None:
-    if isinstance(callback.message, InaccessibleMessage):
+    if isinstance(callback.message, InaccessibleMessage) or not callback.message:
         return
-
-    if not callback.message:
-        return
-
-    await callback.message.edit_text(
-        "❌ <b>Post Creation Cancelled</b>\n\nYou can start again anytime with /post command."
-    )
 
     current_state = await state.get_state()
     if current_state:
+        data = await state.get_data()
+        _cleanup_banner(data.get("banner_path"))
         await state.clear()
+
+    cancel_text = (
+        "❌ <b>Post Creation Cancelled</b>\n\nYou can start again anytime with /post command."
+    )
+
+    try:
+        await _safe_edit_or_send_message(callback.message, cancel_text)
+    except TelegramBadRequest:
+        await callback.message.answer(cancel_text)
 
     await callback.answer("Post cancelled!")
 
@@ -566,9 +649,8 @@ def _format_enhanced_post(
 
     if ai_content and ai_content.key_features:
         post_text += "<b>Key Features:</b>\n"
-        for feature in ai_content.key_features:
-            post_text += f"• {feature}\n"
-        post_text += "\n"
+        post_text += "\n".join(f"• {feature}" for feature in ai_content.key_features)
+        post_text += "\n\n"
 
     links = [f'• <a href="{repository.url}">GitHub Repository</a>']
 
@@ -581,9 +663,8 @@ def _format_enhanced_post(
 
     if links:
         post_text += "<b>Links:</b>\n"
-        for link in links:
-            post_text += f"{link}\n"
-        post_text += "\n"
+        post_text += "\n".join(links)
+        post_text += "\n\n"
 
     post_text += f"<b>Author:</b> <code>{repository.owner}</code>\n"
 
@@ -620,13 +701,16 @@ def _get_post_tags(
 async def edit_field_handler(
     callback: CallbackQuery, state: FSMContext, callback_data: EditCallback
 ) -> None:
-    if isinstance(callback.message, InaccessibleMessage):
+    if (
+        isinstance(callback.message, InaccessibleMessage)
+        or not callback.message
+        or not callback_data.field
+    ):
         return
 
     data = await state.get_data()
     enhanced_data = data.get("enhanced_data")
-
-    if not callback.message or not enhanced_data or not callback_data.field:
+    if not enhanced_data:
         return
 
     field_state_mapping = {
@@ -636,8 +720,7 @@ async def edit_field_handler(
         EditField.LINKS: PostStates.editing_links,
     }
 
-    new_state = field_state_mapping.get(callback_data.field)
-    if new_state:
+    if new_state := field_state_mapping.get(callback_data.field):
         await state.set_state(new_state)
         await state.update_data(editing_field=callback_data.field.value)
 
@@ -648,24 +731,21 @@ async def edit_field_handler(
         EditField.LINKS: _handle_links_edit,
     }
 
-    handler = field_handlers.get(callback_data.field)
-    if handler:
+    if handler := field_handlers.get(callback_data.field):
         await handler(callback, enhanced_data)
+
     await callback.answer(f"Edit {callback_data.field.value} mode activated!")
 
 
 async def _handle_description_edit(
     callback: CallbackQuery, enhanced_data: EnhancedRepositoryData
 ) -> None:
-    if isinstance(callback.message, InaccessibleMessage):
-        return
-
-    if not callback.message:
+    if isinstance(callback.message, InaccessibleMessage) or not callback.message:
         return
 
     current_description = _get_post_description(enhanced_data.repository, enhanced_data.ai_content)
 
-    await callback.message.edit_text(
+    description_edit_text = (
         f"📝 <b>Edit Description</b>\n\n"
         f"<b>Current Description:</b>\n"
         f"<i>{current_description or 'No description available'}</i>\n\n"
@@ -674,9 +754,17 @@ async def _handle_description_edit(
         f"• Keep it 2-3 sentences\n"
         f"• Focus on user benefits\n"
         f"• Explain what the app/tool does\n"
-        f"• Avoid technical jargon",
-        reply_markup=create_keyboard(KeyboardType.BACK_TO_EDIT),
+        f"• Avoid technical jargon"
     )
+
+    try:
+        await _safe_edit_or_send_message(
+            callback.message, description_edit_text, create_keyboard(KeyboardType.BACK_TO_EDIT)
+        )
+    except TelegramBadRequest:
+        await callback.message.answer(
+            description_edit_text, reply_markup=create_keyboard(KeyboardType.BACK_TO_EDIT)
+        )
 
 
 async def _handle_tags_edit(
@@ -693,7 +781,7 @@ async def _handle_tags_edit(
         " ".join(f"#{tag}" for tag in current_tags) if current_tags else "No tags available"
     )
 
-    await callback.message.edit_text(
+    tags_edit_text = (
         f"🏷️ <b>Edit Tags</b>\n\n"
         f"<b>Current Tags:</b>\n"
         f"{current_tags_text}\n\n"
@@ -703,9 +791,17 @@ async def _handle_tags_edit(
         f"• Use underscores for multi-word tags (media_player)\n"
         f"• 5-7 tags maximum\n"
         f"• Focus on functionality and category\n"
-        f"• Avoid generic tags like 'android' or 'app'",
-        reply_markup=create_keyboard(KeyboardType.BACK_TO_EDIT),
+        f"• Avoid generic tags like 'android' or 'app'"
     )
+
+    try:
+        await _safe_edit_or_send_message(
+            callback.message, tags_edit_text, create_keyboard(KeyboardType.BACK_TO_EDIT)
+        )
+    except TelegramBadRequest:
+        await callback.message.answer(
+            tags_edit_text, reply_markup=create_keyboard(KeyboardType.BACK_TO_EDIT)
+        )
 
 
 async def _handle_features_edit(
@@ -724,7 +820,7 @@ async def _handle_features_edit(
         else "No features available"
     )
 
-    await callback.message.edit_text(
+    features_edit_text = (
         f"⭐ <b>Edit Key Features</b>\n\n"
         f"<b>Current Features:</b>\n"
         f"{features_text}\n\n"
@@ -737,9 +833,17 @@ async def _handle_features_edit(
         f"• 3-4 features maximum\n"
         f"• Focus on user benefits\n"
         f"• Be specific and clear\n"
-        f"• Highlight unique selling points",
-        reply_markup=create_keyboard(KeyboardType.BACK_TO_EDIT),
+        f"• Highlight unique selling points"
     )
+
+    try:
+        await _safe_edit_or_send_message(
+            callback.message, features_edit_text, create_keyboard(KeyboardType.BACK_TO_EDIT)
+        )
+    except TelegramBadRequest:
+        await callback.message.answer(
+            features_edit_text, reply_markup=create_keyboard(KeyboardType.BACK_TO_EDIT)
+        )
 
 
 async def _handle_links_edit(
@@ -758,7 +862,7 @@ async def _handle_links_edit(
         else "No additional links available"
     )
 
-    await callback.message.edit_text(
+    links_edit_text = (
         f"🔗 <b>Edit Important Links</b>\n\n"
         f"<b>Current Links:</b>\n"
         f"{links_text}\n\n"
@@ -771,21 +875,47 @@ async def _handle_links_edit(
         f"• 2-3 links maximum\n"
         f"• Include download links\n"
         f"• Add documentation if available\n"
-        f"• Verify all URLs work",
-        reply_markup=create_keyboard(KeyboardType.BACK_TO_EDIT),
+        f"• Verify all URLs work"
     )
+
+    try:
+        await _safe_edit_or_send_message(
+            callback.message, links_edit_text, create_keyboard(KeyboardType.BACK_TO_EDIT)
+        )
+    except TelegramBadRequest:
+        await callback.message.answer(
+            links_edit_text, reply_markup=create_keyboard(KeyboardType.BACK_TO_EDIT)
+        )
+
+
+def _update_enhanced_data(
+    enhanced_data: EnhancedRepositoryData, field: str, new_text: str
+) -> None:
+    update_functions = {
+        "description": _update_description,
+        "tags": _update_tags,
+        "features": _update_features,
+        "links": _update_links,
+    }
+
+    if update_func := update_functions.get(field):
+        update_func(enhanced_data, new_text)
 
 
 def _update_description(enhanced_data: EnhancedRepositoryData, new_text: str) -> None:
+    text = new_text.strip()
     if enhanced_data.ai_content:
-        enhanced_data.ai_content.enhanced_description = new_text.strip()
+        enhanced_data.ai_content.enhanced_description = text
     else:
-        enhanced_data.repository.description = new_text.strip()
+        enhanced_data.repository.description = text
 
 
 def _update_tags(enhanced_data: EnhancedRepositoryData, new_text: str) -> None:
-    tags = re.split(r"[,\s]+", new_text.strip())
-    tags = [tag.strip().lower().replace(" ", "_") for tag in tags if tag.strip()]
+    tags = [
+        tag.strip().lower().replace(" ", "_")
+        for tag in re.split(r"[,\s]+", new_text.strip())
+        if tag.strip()
+    ]
 
     if enhanced_data.ai_content:
         enhanced_data.ai_content.relevant_tags = tags[:7]
@@ -815,10 +945,9 @@ def _update_links(enhanced_data: EnhancedRepositoryData, new_text: str) -> None:
         enhanced_data.ai_content.important_links = links[:3]
 
 
-@router.message(PostStates.editing_description, F.text)
-async def handle_description_edit(message: Message, state: FSMContext) -> None:
+async def _handle_text_edit(message: Message, state: FSMContext, field_name: str) -> None:
     if not message.text:
-        await message.reply("❗ Please send the new description or /cancel to abort.")
+        await message.reply(f"❗ Please send the new {field_name} or /cancel to abort.")
         return
 
     data = await state.get_data()
@@ -830,73 +959,30 @@ async def handle_description_edit(message: Message, state: FSMContext) -> None:
         return
 
     try:
-        _update_description(enhanced_data, message.text)
-        await _finalize_field_edit(message, state, enhanced_data, "description")
+        _update_enhanced_data(enhanced_data, field_name, message.text)
+        await _finalize_field_edit(message, state, enhanced_data, field_name)
     except Exception as e:
-        await _handle_edit_error(message, e, "description")
+        await _handle_edit_error(message, e, field_name)
+
+
+@router.message(PostStates.editing_description, F.text)
+async def handle_description_edit(message: Message, state: FSMContext) -> None:
+    await _handle_text_edit(message, state, "description")
 
 
 @router.message(PostStates.editing_tags, F.text)
 async def handle_tags_edit(message: Message, state: FSMContext) -> None:
-    if not message.text:
-        await message.reply("❗ Please send new tags or /cancel to abort.")
-        return
-
-    data = await state.get_data()
-    enhanced_data = data.get("enhanced_data")
-
-    if not enhanced_data:
-        await message.reply("❌ Edit session expired. Please start over with /post")
-        await state.clear()
-        return
-
-    try:
-        _update_tags(enhanced_data, message.text)
-        await _finalize_field_edit(message, state, enhanced_data, "tags")
-    except Exception as e:
-        await _handle_edit_error(message, e, "tags")
+    await _handle_text_edit(message, state, "tags")
 
 
 @router.message(PostStates.editing_features, F.text)
 async def handle_features_edit(message: Message, state: FSMContext) -> None:
-    if not message.text:
-        await message.reply("❗ Please send new features or /cancel to abort.")
-        return
-
-    data = await state.get_data()
-    enhanced_data = data.get("enhanced_data")
-
-    if not enhanced_data:
-        await message.reply("❌ Edit session expired. Please start over with /post")
-        await state.clear()
-        return
-
-    try:
-        _update_features(enhanced_data, message.text)
-        await _finalize_field_edit(message, state, enhanced_data, "features")
-    except Exception as e:
-        await _handle_edit_error(message, e, "features")
+    await _handle_text_edit(message, state, "features")
 
 
 @router.message(PostStates.editing_links, F.text)
 async def handle_links_edit(message: Message, state: FSMContext) -> None:
-    if not message.text:
-        await message.reply("❗ Please send new links or /cancel to abort.")
-        return
-
-    data = await state.get_data()
-    enhanced_data = data.get("enhanced_data")
-
-    if not enhanced_data:
-        await message.reply("❌ Edit session expired. Please start over with /post")
-        await state.clear()
-        return
-
-    try:
-        _update_links(enhanced_data, message.text)
-        await _finalize_field_edit(message, state, enhanced_data, "links")
-    except Exception as e:
-        await _handle_edit_error(message, e, "links")
+    await _handle_text_edit(message, state, "links")
 
 
 @router.message(PostStates.editing_description)
@@ -922,16 +1008,21 @@ async def handle_invalid_links_input(message: Message) -> None:
 async def _finalize_field_edit(
     message: Message, state: FSMContext, enhanced_data: EnhancedRepositoryData, field_name: str
 ) -> None:
+    data = await state.get_data()
+    _cleanup_banner(data.get("banner_path"))
+
     await state.update_data(enhanced_data=enhanced_data)
 
     new_post_text = _format_enhanced_post(enhanced_data.repository, enhanced_data.ai_content)
     await state.update_data(post_text=new_post_text)
+    await state.set_state(PostStates.previewing_post)
 
     await message.reply(
-        f"✅ <b>{field_name.title()} updated!</b>\nYour changes are saved. Returning to preview..."
+        f"✅ <b>{field_name.title()} updated!</b>\n"
+        f"Your changes have been saved. The preview has been updated with your new content.\n\n"
+        f"You can continue editing, publish the post, or make further changes.",
+        reply_markup=create_keyboard(KeyboardType.PREVIEW),
     )
-
-    await _show_post_preview(message, state, enhanced_data)
 
 
 async def _handle_edit_error(message: Message, error: Exception, field_name: str) -> None:
@@ -945,14 +1036,37 @@ async def _handle_edit_error(message: Message, error: Exception, field_name: str
 async def back_to_edit_menu_handler(
     callback: CallbackQuery, state: FSMContext, callback_data: EditCallback
 ) -> None:
-    if isinstance(callback.message, InaccessibleMessage):
+    if isinstance(callback.message, InaccessibleMessage) or not callback.message:
         return
 
     data = await state.get_data()
     enhanced_data = data.get("enhanced_data")
-
-    if not callback.message or not enhanced_data:
+    if not enhanced_data:
         return
 
     await edit_post_handler(callback, state, PostCallback(action=PostAction.EDIT))
     await callback.answer("Returned to edit menu!")
+
+
+async def _send_banner_preview(
+    message: Message, banner_path: str | Path, post_text: str, preview_header: str
+) -> None:
+    try:
+        if message.photo:
+            await message.delete()
+            await message.answer(preview_header)
+            await message.answer_photo(
+                photo=FSInputFile(banner_path),
+                caption=post_text,
+                reply_markup=create_keyboard(KeyboardType.PREVIEW),
+            )
+        else:
+            await _safe_edit_or_send_message(message, preview_header)
+            await message.answer_photo(
+                photo=FSInputFile(banner_path),
+                caption=post_text,
+                reply_markup=create_keyboard(KeyboardType.PREVIEW),
+            )
+    except Exception as e:
+        logger.error("Failed to send banner preview: %s", e)
+        raise
