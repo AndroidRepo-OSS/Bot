@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
+import contextlib
 import re
 from datetime import UTC, datetime
-from enum import Enum
+from enum import Enum, auto
 from io import BytesIO
 
 from aiogram import F, Router
@@ -50,31 +51,31 @@ class PostStates(StatesGroup):
 
 
 class PostAction(Enum):
-    CONFIRM = "confirm"
-    CANCEL = "cancel"
-    PUBLISH = "publish"
-    EDIT = "edit"
-    REGENERATE = "regenerate"
-    BACK_TO_PREVIEW = "back_to_preview"
+    CONFIRM = auto()
+    CANCEL = auto()
+    PUBLISH = auto()
+    EDIT = auto()
+    REGENERATE = auto()
+    BACK_TO_PREVIEW = auto()
 
 
 class EditField(Enum):
-    DESCRIPTION = "description"
-    TAGS = "tags"
-    FEATURES = "features"
-    LINKS = "links"
+    DESCRIPTION = auto()
+    TAGS = auto()
+    FEATURES = auto()
+    LINKS = auto()
 
 
 class EditAction(Enum):
-    FIELD = "field"
-    BACK_TO_MENU = "back_to_menu"
+    FIELD = auto()
+    BACK_TO_MENU = auto()
 
 
 class KeyboardType(Enum):
-    CONFIRMATION = "confirmation"
-    PREVIEW = "preview"
-    EDIT = "edit"
-    BACK_TO_EDIT = "back_to_edit"
+    CONFIRMATION = auto()
+    PREVIEW = auto()
+    EDIT = auto()
+    BACK_TO_EDIT = auto()
 
 
 class PostCallback(CallbackData, prefix="post"):
@@ -86,51 +87,53 @@ class EditCallback(CallbackData, prefix="edit"):
     field: EditField | None = None
 
 
+def get_field_name(field: EditField) -> str:
+    """Convert EditField enum to human-readable string."""
+    field_names = {
+        EditField.DESCRIPTION: "description",
+        EditField.TAGS: "tags",
+        EditField.FEATURES: "features",
+        EditField.LINKS: "links",
+    }
+    return field_names.get(field, "unknown")
+
+
 def create_keyboard(keyboard_type: KeyboardType) -> InlineKeyboardMarkup:
+    buttons = {
+        KeyboardType.CONFIRMATION: [
+            ("✅ Confirm", PostCallback(action=PostAction.CONFIRM)),
+            ("❌ Cancel", PostCallback(action=PostAction.CANCEL)),
+        ],
+        KeyboardType.PREVIEW: [
+            ("✅ Publish", PostCallback(action=PostAction.PUBLISH)),
+            ("✏️ Edit", PostCallback(action=PostAction.EDIT)),
+            ("🔄 Regenerate", PostCallback(action=PostAction.REGENERATE)),
+            ("❌ Cancel", PostCallback(action=PostAction.CANCEL)),
+        ],
+        KeyboardType.EDIT: [
+            ("📝 Description", EditCallback(action=EditAction.FIELD, field=EditField.DESCRIPTION)),
+            ("🏷️ Tags", EditCallback(action=EditAction.FIELD, field=EditField.TAGS)),
+            ("⭐ Features", EditCallback(action=EditAction.FIELD, field=EditField.FEATURES)),
+            ("🔗 Links", EditCallback(action=EditAction.FIELD, field=EditField.LINKS)),
+            ("🔙 Back", PostCallback(action=PostAction.BACK_TO_PREVIEW)),
+            ("❌ Cancel", PostCallback(action=PostAction.CANCEL)),
+        ],
+        KeyboardType.BACK_TO_EDIT: [
+            ("🔙 Back", EditCallback(action=EditAction.BACK_TO_MENU)),
+        ],
+    }
+
+    adjustments = {
+        KeyboardType.CONFIRMATION: (2,),
+        KeyboardType.PREVIEW: (2, 2),
+        KeyboardType.EDIT: (2, 2, 2),
+        KeyboardType.BACK_TO_EDIT: (1,),
+    }
+
     builder = InlineKeyboardBuilder()
-
-    match keyboard_type:
-        case KeyboardType.CONFIRMATION:
-            builder.button(
-                text="✅ Confirm", callback_data=PostCallback(action=PostAction.CONFIRM)
-            )
-            builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
-            builder.adjust(2)
-
-        case KeyboardType.PREVIEW:
-            buttons = [
-                ("✅ Publish", PostCallback(action=PostAction.PUBLISH)),
-                ("✏️ Edit", PostCallback(action=PostAction.EDIT)),
-                ("🔄 Regenerate", PostCallback(action=PostAction.REGENERATE)),
-                ("❌ Cancel", PostCallback(action=PostAction.CANCEL)),
-            ]
-            for text, data in buttons:
-                builder.button(text=text, callback_data=data)
-            builder.adjust(2, 2)
-
-        case KeyboardType.EDIT:
-            edit_fields = [
-                ("📝 Description", EditField.DESCRIPTION),
-                ("🏷️ Tags", EditField.TAGS),
-                ("⭐ Features", EditField.FEATURES),
-                ("🔗 Links", EditField.LINKS),
-            ]
-            for text, field in edit_fields:
-                builder.button(
-                    text=text, callback_data=EditCallback(action=EditAction.FIELD, field=field)
-                )
-            builder.button(
-                text="🔙 Back", callback_data=PostCallback(action=PostAction.BACK_TO_PREVIEW)
-            )
-            builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
-            builder.adjust(2, 2, 2)
-
-        case KeyboardType.BACK_TO_EDIT:
-            builder.button(
-                text="🔙 Back", callback_data=EditCallback(action=EditAction.BACK_TO_MENU)
-            )
-            builder.adjust(1)
-
+    for text, data in buttons[keyboard_type]:
+        builder.button(text=text, callback_data=data)
+    builder.adjust(*adjustments[keyboard_type])
     return builder.as_markup()
 
 
@@ -141,13 +144,12 @@ async def try_edit_message(
         if message.photo:
             await message.edit_caption(caption=text, reply_markup=markup)
             return
-
         await message.edit_text(text, reply_markup=markup)
     except TelegramBadRequest as e:
         if "message is not modified" in str(e).lower():
             return
-
-        await message.answer(text, reply_markup=markup)
+        with contextlib.suppress(TelegramBadRequest):
+            await message.answer(text, reply_markup=markup)
 
 
 @router.message(Command("post"))
@@ -180,13 +182,10 @@ async def cancel_command_handler(message: Message, state: FSMContext) -> None:
         )
         return
 
-    data = await state.get_data()
-    banner_buffer = data.get("banner_buffer")
-    if banner_buffer:
+    if banner_buffer := (await state.get_data()).get("banner_buffer"):
         banner_buffer.close()
 
     await state.clear()
-
     await message.reply(
         "❌ <b>Cancelled</b>\nYour post creation was cancelled.\nSend /post to start over."
     )
@@ -244,10 +243,8 @@ async def confirm_post_handler(
     if not github_url:
         return
 
-    repo_name = github_url.split("/")[-1]
-
     url_parts = github_url.rstrip("/").split("/")
-    owner = url_parts[-2]
+    owner, repo_name = url_parts[-2], url_parts[-1]
     repository_full_name = f"{owner}/{repo_name}"
 
     await try_edit_message(
@@ -313,9 +310,7 @@ async def show_post_preview(
     ai_content = enhanced_data.ai_content
 
     post_text = format_enhanced_post(repository, ai_content)
-
-    banner_generated = False
-    banner_buffer = None
+    banner_buffer = banner_generated = None
 
     try:
         banner_buffer = generate_banner(repository.name)
@@ -348,7 +343,7 @@ async def show_post_preview(
         try:
             await send_banner_preview(message, banner_buffer, post_text, preview_header)
         except Exception:
-            error_text = (
+            await message.answer(
                 "❌ <b>Banner Error</b>\n\n"
                 f"Could not generate or display banner for {repository.name}.\n"
                 "This is required to publish to the channel.\n\n"
@@ -356,10 +351,9 @@ async def show_post_preview(
                 "• Use /post again to retry\n"
                 "• Check if the repository name is valid"
             )
-            await message.answer(error_text)
             await state.clear()
     else:
-        error_text = (
+        await message.answer(
             "❌ <b>Banner Generation Failed</b>\n\n"
             f"Could not generate banner for {repository.name}.\n"
             "A banner is required to publish to the channel.\n\n"
@@ -367,7 +361,6 @@ async def show_post_preview(
             "• Use /post again to retry\n"
             "• Check if the repository name is valid"
         )
-        await message.answer(error_text)
         await state.clear()
 
 
@@ -383,9 +376,11 @@ async def publish_post_handler(
         return
 
     data = await state.get_data()
-    post_text = data.get("post_text")
-    enhanced_data = data.get("enhanced_data")
-    banner_buffer = data.get("banner_buffer")
+    post_text, enhanced_data, banner_buffer = (
+        data.get("post_text"),
+        data.get("enhanced_data"),
+        data.get("banner_buffer"),
+    )
 
     if not post_text or not enhanced_data:
         return
@@ -396,17 +391,13 @@ async def publish_post_handler(
             "Cannot publish post without a banner.\n"
             "Please regenerate the post to create a new banner."
         )
-        try:
-            await try_edit_message(callback.message, error_text)
-        except TelegramBadRequest:
-            await callback.message.answer(error_text)
+        await try_edit_message(callback.message, error_text)
         return
 
     settings = Settings()  # type: ignore
 
     try:
         repository = enhanced_data.repository
-
         banner_input = BufferedInputFile(
             banner_buffer.getvalue(),
             filename=f"{repository.name.lower().replace(' ', '_')}_banner.png",
@@ -418,8 +409,7 @@ async def publish_post_handler(
 
         await submit_app(repository, sent_message.message_id)
 
-        if banner_buffer:
-            banner_buffer.close()
+        banner_buffer.close()
 
         success_text = (
             "✅ <b>Post Published Successfully!</b>\n\n"
@@ -427,11 +417,7 @@ async def publish_post_handler(
             f"<b>Author:</b> {repository.owner}\n\n"
             "<i>The post has been sent to the configured channel and saved to database.</i>"
         )
-
-        try:
-            await try_edit_message(callback.message, success_text)
-        except TelegramBadRequest:
-            await callback.message.answer(success_text)
+        await try_edit_message(callback.message, success_text)
 
     except Exception as e:
         error_text = (
@@ -441,11 +427,7 @@ async def publish_post_handler(
             f"Error: {e!s}\n\n"
             "Please check the channel ID configuration and bot permissions."
         )
-
-        try:
-            await try_edit_message(callback.message, error_text)
-        except TelegramBadRequest:
-            await callback.message.answer(error_text)
+        await try_edit_message(callback.message, error_text)
 
     await state.clear()
 
@@ -475,11 +457,7 @@ async def edit_post_handler(
         f"• Links"
     )
 
-    try:
-        await try_edit_message(callback.message, edit_text, create_keyboard(KeyboardType.EDIT))
-    except TelegramBadRequest:
-        await callback.message.answer(edit_text, reply_markup=create_keyboard(KeyboardType.EDIT))
-
+    await try_edit_message(callback.message, edit_text, create_keyboard(KeyboardType.EDIT))
     await callback.answer("Edit mode activated!")
 
 
@@ -490,8 +468,7 @@ async def regenerate_post_handler(
     if isinstance(callback.message, InaccessibleMessage):
         return
 
-    data = await state.get_data()
-    github_url = data.get("github_url")
+    github_url = (await state.get_data()).get("github_url")
 
     if not callback.message or not github_url:
         return
@@ -502,15 +479,10 @@ async def regenerate_post_handler(
         "🔄 <b>Regenerating</b>\nClearing cache and generating new content.\n<i>Please wait...</i>"
     )
 
-    try:
-        await try_edit_message(callback.message, regenerate_text)
-    except TelegramBadRequest:
-        await callback.message.answer(regenerate_text)
+    await try_edit_message(callback.message, regenerate_text)
 
     await state.set_state(PostStates.waiting_for_confirmation)
-
-    fake_callback_data = PostCallback(action=PostAction.CONFIRM)
-    await confirm_post_handler(callback, state, fake_callback_data)
+    await confirm_post_handler(callback, state, PostCallback(action=PostAction.CONFIRM))
 
 
 @router.callback_query(PostCallback.filter(F.action == PostAction.BACK_TO_PREVIEW))
@@ -521,8 +493,7 @@ async def back_to_preview_handler(
         return
 
     data = await state.get_data()
-    enhanced_data = data.get("enhanced_data")
-    post_text = data.get("post_text")
+    enhanced_data, post_text = data.get("enhanced_data"), data.get("post_text")
 
     if not callback.message or not enhanced_data or not post_text:
         return
@@ -546,24 +517,16 @@ async def cancel_callback_handler(
     if isinstance(callback.message, InaccessibleMessage) or not callback.message:
         return
 
-    current_state = await state.get_state()
-    if current_state:
-        data = await state.get_data()
-        banner_buffer = data.get("banner_buffer")
-        if banner_buffer:
+    if await state.get_state():
+        if banner_buffer := (await state.get_data()).get("banner_buffer"):
             banner_buffer.close()
-
         await state.clear()
 
     cancel_text = (
         "❌ <b>Post Creation Cancelled</b>\n\nYou can start again anytime with /post command."
     )
 
-    try:
-        await try_edit_message(callback.message, cancel_text)
-    except TelegramBadRequest:
-        await callback.message.answer(cancel_text)
-
+    await try_edit_message(callback.message, cancel_text)
     await callback.answer("Post cancelled!")
 
 
@@ -645,10 +608,10 @@ def create_edit_message(field: EditField, enhanced_data: EnhancedRepositoryData)
 
     parts = [
         f"{title}\n",
-        f"<b>Current {field.value.title()}:</b>",
+        f"<b>Current {get_field_name(field).title()}:</b>",
         current_text,
         "",
-        f"Send me the new {field.value}{suffix}",
+        f"Send me the new {get_field_name(field)}{suffix}",
     ]
 
     if example:
@@ -668,10 +631,7 @@ async def handle_field_edit(
     edit_text = create_edit_message(field, enhanced_data)
     keyboard = create_keyboard(KeyboardType.BACK_TO_EDIT)
 
-    try:
-        await try_edit_message(callback.message, edit_text, keyboard)
-    except TelegramBadRequest:
-        await callback.message.answer(edit_text, reply_markup=keyboard)
+    await try_edit_message(callback.message, edit_text, keyboard)
 
 
 def format_enhanced_post(
@@ -724,11 +684,10 @@ def get_post_description(
 def get_post_tags(
     repository: GitHubRepository, ai_content: AIGeneratedContent | None
 ) -> list[str]:
-    return (
-        ai_content.relevant_tags[:5]
-        if ai_content and ai_content.relevant_tags
-        else repository.topics[:5]
+    tags = (
+        ai_content.relevant_tags if ai_content and ai_content.relevant_tags else repository.topics
     )
+    return tags[:7] if tags else []
 
 
 @router.callback_query(EditCallback.filter(F.action == EditAction.FIELD))
@@ -742,8 +701,7 @@ async def edit_field_handler(
     ):
         return
 
-    data = await state.get_data()
-    enhanced_data = data.get("enhanced_data")
+    enhanced_data = (await state.get_data()).get("enhanced_data")
     if not enhanced_data:
         return
 
@@ -756,130 +714,103 @@ async def edit_field_handler(
 
     if new_state := field_state_mapping.get(callback_data.field):
         await state.set_state(new_state)
-        await state.update_data(editing_field=callback_data.field.value)
-
-    match callback_data.field:
-        case EditField.DESCRIPTION:
-            await handle_field_edit(callback, EditField.DESCRIPTION, enhanced_data)
-        case EditField.TAGS:
-            await handle_field_edit(callback, EditField.TAGS, enhanced_data)
-        case EditField.FEATURES:
-            await handle_field_edit(callback, EditField.FEATURES, enhanced_data)
-        case EditField.LINKS:
-            await handle_field_edit(callback, EditField.LINKS, enhanced_data)
-
-    await callback.answer(f"Edit {callback_data.field.value} mode activated!")
+        await state.update_data(editing_field=get_field_name(callback_data.field))
+        await handle_field_edit(callback, callback_data.field, enhanced_data)
+        await callback.answer(f"Edit {get_field_name(callback_data.field)} mode activated!")
 
 
-def update_enhanced_data(
+def update_enhanced_data(  # noqa: C901
     enhanced_data: EnhancedRepositoryData, field: EditField, new_text: str
 ) -> None:
     match field:
         case EditField.DESCRIPTION:
-            update_description(enhanced_data, new_text)
+            text = new_text.strip()
+            if enhanced_data.ai_content:
+                enhanced_data.ai_content.enhanced_description = text
+            else:
+                enhanced_data.repository.description = text
+
         case EditField.TAGS:
-            update_tags(enhanced_data, new_text)
+            tags = [
+                tag.strip().lower().replace(" ", "_")
+                for tag in re.split(r"[,\s]+", new_text.strip())
+                if tag.strip()
+            ]
+
+            if enhanced_data.ai_content:
+                enhanced_data.ai_content.relevant_tags = tags[:7]
+            else:
+                enhanced_data.repository.topics = tags[:7]
+
         case EditField.FEATURES:
-            update_features(enhanced_data, new_text)
+            features = [
+                line.strip().lstrip("•").strip()
+                for line in new_text.replace(";", "\n").split("\n")
+                if line.strip()
+            ]
+
+            if enhanced_data.ai_content:
+                enhanced_data.ai_content.key_features = features[:4]
+
         case EditField.LINKS:
-            update_links(enhanced_data, new_text)
+            links = []
+            for line in new_text.strip().split("\n"):
+                if ":" in line and "http" in line:
+                    title, url = line.split(":", 1)
+                    links.append(
+                        ImportantLink(title=title.strip(), url=url.strip(), type="website")
+                    )
 
-
-def update_description(enhanced_data: EnhancedRepositoryData, new_text: str) -> None:
-    text = new_text.strip()
-    if enhanced_data.ai_content:
-        enhanced_data.ai_content.enhanced_description = text
-    else:
-        enhanced_data.repository.description = text
-
-
-def update_tags(enhanced_data: EnhancedRepositoryData, new_text: str) -> None:
-    tags = [
-        tag.strip().lower().replace(" ", "_")
-        for tag in re.split(r"[,\s]+", new_text.strip())
-        if tag.strip()
-    ]
-
-    if enhanced_data.ai_content:
-        enhanced_data.ai_content.relevant_tags = tags[:7]
-    else:
-        enhanced_data.repository.topics = tags[:7]
-
-
-def update_features(enhanced_data: EnhancedRepositoryData, new_text: str) -> None:
-    features = [
-        line.strip().lstrip("•").strip()
-        for line in new_text.replace(";", "\n").split("\n")
-        if line.strip()
-    ]
-
-    if enhanced_data.ai_content:
-        enhanced_data.ai_content.key_features = features[:4]
-
-
-def update_links(enhanced_data: EnhancedRepositoryData, new_text: str) -> None:
-    links = []
-    for line in new_text.strip().split("\n"):
-        if ":" in line and "http" in line:
-            title, url = line.split(":", 1)
-            links.append(ImportantLink(title=title.strip(), url=url.strip(), type="website"))
-
-    if enhanced_data.ai_content:
-        enhanced_data.ai_content.important_links = links[:3]
+            if enhanced_data.ai_content:
+                enhanced_data.ai_content.important_links = links[:3]
 
 
 @router.message(PostStates.editing_description, F.text)
 @router.message(PostStates.editing_tags, F.text)
 @router.message(PostStates.editing_features, F.text)
 @router.message(PostStates.editing_links, F.text)
-async def handle_generic_edit(message: Message, state: FSMContext) -> None:
+async def handle_edit_state_input(message: Message, state: FSMContext) -> None:
     if not message.text:
         await message.reply("❗ Send the new value or /cancel to abort editing.")
         return
 
     data = await state.get_data()
-    enhanced_data = data.get("enhanced_data")
-    editing_field = data.get("editing_field")
+    enhanced_data, editing_field_str = data.get("enhanced_data"), data.get("editing_field")
 
-    if not enhanced_data or not editing_field:
+    if not enhanced_data or not editing_field_str:
         await message.reply("❌ Edit session expired. Please start over with /post")
         await state.clear()
         return
 
     try:
-        update_enhanced_data(enhanced_data, EditField(editing_field), message.text)
-        await finalize_field_edit(message, state, enhanced_data, EditField(editing_field))
+        editing_field = EditField(editing_field_str)
+        update_enhanced_data(enhanced_data, editing_field, message.text)
+        await finalize_field_edit(message, state, enhanced_data, editing_field)
+    except ValueError:
+        await message.reply(
+            "❌ <b>Invalid field for editing</b>\n"
+            "An internal error occurred. Please try again or /cancel."
+        )
     except Exception:
         await message.reply(
-            f"❌ <b>Error updating {editing_field.title()}</b>\n"
+            f"❌ <b>Error updating {editing_field_str.title()}</b>\n"
             "Something went wrong while updating this field. Please try again or /cancel."
         )
-
-
-@router.message(PostStates.editing_description)
-@router.message(PostStates.editing_tags)
-@router.message(PostStates.editing_features)
-@router.message(PostStates.editing_links)
-async def handle_invalid_edit_input(message: Message, state: FSMContext) -> None:
-    await message.reply("❗ Send the new value or /cancel to abort editing.")
 
 
 async def finalize_field_edit(
     message: Message, state: FSMContext, enhanced_data: EnhancedRepositoryData, field: EditField
 ) -> None:
-    data = await state.get_data()
-    banner_buffer = data.get("banner_buffer")
-    if banner_buffer:
+    if banner_buffer := (await state.get_data()).get("banner_buffer"):
         banner_buffer.close()
 
     await state.update_data(enhanced_data=enhanced_data)
-
     new_post_text = format_enhanced_post(enhanced_data.repository, enhanced_data.ai_content)
     await state.update_data(post_text=new_post_text)
     await state.set_state(PostStates.previewing_post)
 
     await message.reply(
-        f"✅ <b>{field.value.title()} updated!</b>\n"
+        f"✅ <b>{get_field_name(field).title()} updated!</b>\n"
         f"Your changes have been saved. The preview has been updated with your new content.\n\n"
         f"You can continue editing, publish the post, or make further changes."
     )
@@ -892,9 +823,7 @@ async def back_to_edit_menu_handler(
     if isinstance(callback.message, InaccessibleMessage) or not callback.message:
         return
 
-    data = await state.get_data()
-    enhanced_data = data.get("enhanced_data")
-    if not enhanced_data:
+    if not (await state.get_data()).get("enhanced_data"):
         return
 
     await edit_post_handler(callback, state, PostCallback(action=PostAction.EDIT))
