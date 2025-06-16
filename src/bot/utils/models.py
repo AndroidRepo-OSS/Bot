@@ -21,6 +21,19 @@ class GitHubRepository(BaseModel):
     readme_content: str | None = Field(None, description="README content (truncated)")
 
 
+class GitLabRepository(BaseModel):
+    """Represents a GitLab repository with essential metadata."""
+
+    id: int = Field(..., description="GitLab repository ID (unique identifier)")
+    name: str = Field(..., description="Repository name")
+    full_name: str = Field(..., description="Full repository name (owner/repo)")
+    owner: str = Field(..., description="Repository owner")
+    description: str | None = Field(None, description="Repository description")
+    url: str = Field(..., description="Repository URL")
+    topics: list[str] = Field(default_factory=list, description="Repository topics/tags")
+    readme_content: str | None = Field(None, description="README content (truncated)")
+
+
 class ImportantLink(BaseModel):
     """Represents an important link with its metadata."""
 
@@ -54,5 +67,5 @@ class AIGeneratedContent(BaseModel):
 class EnhancedRepositoryData(BaseModel):
     """Repository data enhanced with AI-generated content."""
 
-    repository: GitHubRepository
+    repository: GitHubRepository | GitLabRepository
     ai_content: AIGeneratedContent | None = None

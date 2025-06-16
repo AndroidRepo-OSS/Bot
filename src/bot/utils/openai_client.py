@@ -15,11 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIClient:
-    def __init__(
-        self, api_key: str, model: str = "openai/gpt-4.1", base_url: str | None = None
-    ) -> None:
+    def __init__(self, api_key: str, base_url: str | None = None) -> None:
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-        self._model = model
+        self._model = "openai/gpt-4.1"
 
     async def __aenter__(self) -> OpenAIClient:
         return self
@@ -86,32 +84,77 @@ Guidelines:
         system_prompt = self._create_system_prompt()
         user_prompt = self._create_user_prompt(repo_name, description, readme_content, topics)
 
-        for attempt in range(max_retries):
-            try:
-                logger.info(
-                    "Requesting content enhancement from OpenAI for %s (attempt %d/%d)",
-                    repo_name,
-                    attempt + 1,
-                    max_retries,
-                )
+        original_model = self._model
+        fallback_model = "openai/gpt-4.1-mini"
 
-                response = await self._make_api_request(system_prompt, user_prompt)
-                return self._process_response(response)
+        models_to_try = [original_model]
+        if original_model != fallback_model:
+            models_to_try.append(fallback_model)
 
-            except ValidationError as e:
-                logger.error("Invalid data structure from OpenAI: %s", e)
-                if attempt == max_retries - 1:
-                    msg = f"OpenAI returned invalid data after {max_retries} attempts: {e}"
-                    raise ValueError(msg) from e
+        for model_index, model in enumerate(models_to_try):
+            self._model = model
+            model_name = "fallback" if model_index > 0 else "primary"
 
-            except Exception as e:
-                logger.error("OpenAI API error for %s (attempt %d): %s", repo_name, attempt + 1, e)
-                if attempt == max_retries - 1:
-                    raise
+            logger.info(
+                "Trying %s model %s for %s",
+                model_name,
+                model,
+                repo_name,
+            )
 
-            await asyncio.sleep(2**attempt)
+            for attempt in range(max_retries):
+                try:
+                    logger.info(
+                        "Requesting content enhancement from OpenAI for %s using %s model "
+                        "(attempt %d/%d)",
+                        repo_name,
+                        model_name,
+                        attempt + 1,
+                        max_retries,
+                    )
 
-        msg = f"Failed to enhance content for {repo_name} after {max_retries} attempts"
+                    response = await self._make_api_request(system_prompt, user_prompt)
+                    result = self._process_response(response)
+                    self._model = original_model
+                    return result
+
+                except ValidationError as e:
+                    logger.error(
+                        "Invalid data structure from OpenAI with %s model: %s", model_name, e
+                    )
+                    if attempt == max_retries - 1:
+                        if model_index < len(models_to_try) - 1:
+                            logger.info("Switching to fallback model after validation errors")
+                            break
+                        msg = (
+                            f"OpenAI returned invalid data after {max_retries} attempts "
+                            f"with all models: {e}"
+                        )
+                        self._model = original_model
+                        raise ValueError(msg) from e
+
+                except Exception as e:
+                    logger.error(
+                        "OpenAI API error for %s with %s model (attempt %d): %s",
+                        repo_name,
+                        model_name,
+                        attempt + 1,
+                        e,
+                    )
+                    if attempt == max_retries - 1:
+                        if model_index < len(models_to_try) - 1:
+                            logger.info("Switching to fallback model after API errors")
+                            break
+                        self._model = original_model
+                        raise
+
+                await asyncio.sleep(2**attempt)
+
+        self._model = original_model
+        msg = (
+            f"Failed to enhance content for {repo_name} after {max_retries} attempts "
+            "with all available models"
+        )
         raise RuntimeError(msg)
 
     async def _make_api_request(self, system_prompt: str, user_prompt: str):

@@ -26,21 +26,22 @@ from bot.config import Settings
 from bot.database import can_submit_app, submit_app
 from bot.utils.banner_generator import generate_banner
 from bot.utils.cache import repository_cache
-from bot.utils.github_client import GitHubClient
 from bot.utils.models import (
     AIGeneratedContent,
     EnhancedRepositoryData,
     GitHubRepository,
+    GitLabRepository,
     ImportantLink,
 )
+from bot.utils.repository_client import RepositoryClient
 
 router = Router(name="post")
 
-GITHUB_URL_PATTERN = re.compile(r"^https?://github\.com/[\w.-]+/[\w.-]+/?$")
+REPOSITORY_URL_PATTERN = re.compile(r"^https?://(github\.com|gitlab\.com)/[\w.-]+/[\w.-]+/?$")
 
 
 class PostStates(StatesGroup):
-    waiting_for_github_url = State()
+    waiting_for_repository_url = State()
     waiting_for_confirmation = State()
     previewing_post = State()
     editing_post = State()
@@ -152,7 +153,7 @@ async def try_edit_message(
 
 
 def format_enhanced_post(
-    repository: GitHubRepository, ai_content: AIGeneratedContent | None
+    repository: GitHubRepository | GitLabRepository, ai_content: AIGeneratedContent | None
 ) -> str:
     project_name = get_project_name(repository, ai_content)
     desc = (
@@ -172,10 +173,11 @@ def format_enhanced_post(
     if features:
         parts.append("✨ <b>Key Features:</b>\n" + "\n".join(f"• {f}" for f in features))
 
+    platform_name = "GitHub" if isinstance(repository, GitHubRepository) else "GitLab"
     links_list = (ai_content.important_links if ai_content and ai_content.important_links else [])[
         :3
     ]
-    link_items = [f'• <a href="{repository.url}">GitHub Repository</a>'] + [
+    link_items = [f'• <a href="{repository.url}">{platform_name} Repository</a>'] + [
         f'• <a href="{link.url}">{link.title}</a>' for link in links_list
     ]
     parts.append("🔗 <b>Links:</b>\n" + "\n".join(link_items))
@@ -190,7 +192,7 @@ def format_enhanced_post(
 
 
 def get_post_description(
-    repository: GitHubRepository, ai_content: AIGeneratedContent | None
+    repository: GitHubRepository | GitLabRepository, ai_content: AIGeneratedContent | None
 ) -> str | None:
     return (
         ai_content.enhanced_description
@@ -200,7 +202,7 @@ def get_post_description(
 
 
 def get_post_tags(
-    repository: GitHubRepository, ai_content: AIGeneratedContent | None
+    repository: GitHubRepository | GitLabRepository, ai_content: AIGeneratedContent | None
 ) -> list[str]:
     tags = (
         ai_content.relevant_tags if ai_content and ai_content.relevant_tags else repository.topics
@@ -353,13 +355,14 @@ async def post_command_handler(message: Message, state: FSMContext) -> None:
         banner_buffer.close()
 
     await state.clear()
-    await state.set_state(PostStates.waiting_for_github_url)
+    await state.set_state(PostStates.waiting_for_repository_url)
 
     await message.reply(
         "📱 <b>Create Repository Post</b>\n\n"
-        "Send a GitHub repository URL to generate a post.\n\n"
-        "<b>Example:</b>\n"
-        "<code>https://github.com/user/repository</code>\n\n"
+        "Send a GitHub or GitLab repository URL to generate a post.\n\n"
+        "<b>Examples:</b>\n"
+        "<code>https://github.com/user/repository</code>\n"
+        "<code>https://gitlab.com/user/repository</code>\n\n"
         "💡 Use /cancel to abort anytime."
     )
 
@@ -387,29 +390,31 @@ async def cancel_command_handler(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(PostStates.waiting_for_github_url, F.text)
-async def github_url_handler(message: Message, state: FSMContext) -> None:
+@router.message(PostStates.waiting_for_repository_url, F.text)
+async def repository_url_handler(message: Message, state: FSMContext) -> None:
     if not message.text:
         await message.reply(
             "❌ <b>Invalid Input</b>\n\n"
-            "Please send a valid GitHub repository URL.\n\n"
-            "<b>Example:</b>\n"
-            "<code>https://github.com/user/repository</code>"
+            "Please send a valid repository URL.\n\n"
+            "<b>Examples:</b>\n"
+            "<code>https://github.com/user/repository</code>\n"
+            "<code>https://gitlab.com/user/repository</code>"
         )
         return
 
     url = message.text.strip()
-    if not GITHUB_URL_PATTERN.match(url):
+    if not REPOSITORY_URL_PATTERN.match(url):
         await message.reply(
-            "❌ <b>Invalid GitHub URL</b>\n\n"
-            "Please provide a valid GitHub repository URL.\n\n"
-            "<b>Example:</b>\n"
-            "<code>https://github.com/user/repository</code>\n\n"
+            "❌ <b>Invalid Repository URL</b>\n\n"
+            "Please provide a valid repository URL from GitHub or GitLab.\n\n"
+            "<b>Examples:</b>\n"
+            "<code>https://github.com/user/repository</code>\n"
+            "<code>https://gitlab.com/user/repository</code>\n\n"
             "💡 Use /cancel to abort."
         )
         return
 
-    await state.update_data(github_url=url)
+    await state.update_data(repository_url=url)
     await state.set_state(PostStates.waiting_for_confirmation)
 
     await message.reply(
@@ -420,13 +425,14 @@ async def github_url_handler(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(PostStates.waiting_for_github_url)
-async def invalid_github_url_handler(message: Message) -> None:
+@router.message(PostStates.waiting_for_repository_url)
+async def invalid_repository_url_handler(message: Message) -> None:
     await message.reply(
         "❌ <b>Invalid Input</b>\n\n"
-        "Please send a valid GitHub URL.\n\n"
-        "<b>Example:</b>\n"
-        "<code>https://github.com/user/repository</code>\n\n"
+        "Please send a valid repository URL.\n\n"
+        "<b>Examples:</b>\n"
+        "<code>https://github.com/user/repository</code>\n"
+        "<code>https://gitlab.com/user/repository</code>\n\n"
         "💡 Use /cancel to abort."
     )
 
@@ -559,11 +565,11 @@ async def confirm_post_handler(
         return
 
     data = await state.get_data()
-    github_url = data.get("github_url")
-    if not github_url:
+    repository_url = data.get("repository_url")
+    if not repository_url:
         return
 
-    url_parts = github_url.rstrip("/").split("/")
+    url_parts = repository_url.rstrip("/").split("/")
     owner, repo_name = url_parts[-2], url_parts[-1]
 
     await try_edit_message(
@@ -577,11 +583,11 @@ async def confirm_post_handler(
     try:
         settings = Settings()  # type: ignore
 
-        async with GitHubClient() as client:
+        async with RepositoryClient() as client:
             enhanced_data = await client.get_enhanced_repository_data(
-                github_url,
+                repository_url,
                 settings.openai_api_key.get_secret_value(),
-                settings.openai_base_url,
+                openai_base_url=settings.openai_base_url,
             )
 
         can_submit, last_submission_date = await can_submit_app(enhanced_data.repository.id)
@@ -611,7 +617,7 @@ async def confirm_post_handler(
         await try_edit_message(
             callback.message,
             f"❌ <b>Processing Failed</b>\n\n"
-            f"<b>Repository:</b> <code>{github_url}</code>\n\n"
+            f"<b>Repository:</b> <code>{repository_url}</code>\n\n"
             f"<b>Error:</b> <code>{str(e)[:200]}...</code>\n\n"
             f"💡 Please try again with /post",
         )
@@ -728,12 +734,12 @@ async def regenerate_post_handler(
     if isinstance(callback.message, InaccessibleMessage):
         return
 
-    github_url = (await state.get_data()).get("github_url")
+    repository_url = (await state.get_data()).get("repository_url")
 
-    if not callback.message or not github_url:
+    if not callback.message or not repository_url:
         return
 
-    repository_cache.delete(github_url)
+    repository_cache.delete(repository_url)
 
     regenerate_text = (
         "🔄 <b>Regenerating Content</b>\n\n"
@@ -864,5 +870,7 @@ async def finalize_field_edit(
     )
 
 
-def get_project_name(repository: GitHubRepository, ai_content: AIGeneratedContent | None) -> str:
+def get_project_name(
+    repository: GitHubRepository | GitLabRepository, ai_content: AIGeneratedContent | None
+) -> str:
     return ai_content.project_name if ai_content and ai_content.project_name else repository.name
