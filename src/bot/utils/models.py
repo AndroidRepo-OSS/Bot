@@ -9,6 +9,9 @@ from pydantic import BaseModel, Field
 
 
 class GitHubRepository(BaseModel):
+    """Represents a GitHub repository with essential metadata."""
+
+    id: int = Field(..., description="GitHub repository ID (unique identifier)")
     name: str = Field(..., description="Repository name")
     full_name: str = Field(..., description="Full repository name (owner/repo)")
     owner: str = Field(..., description="Repository owner")

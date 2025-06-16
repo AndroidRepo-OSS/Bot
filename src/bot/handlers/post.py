@@ -4,7 +4,7 @@
 import contextlib
 import re
 from datetime import UTC, datetime
-from enum import Enum, auto
+from enum import Enum
 from io import BytesIO
 
 from aiogram import F, Router
@@ -51,31 +51,31 @@ class PostStates(StatesGroup):
 
 
 class PostAction(Enum):
-    CONFIRM = auto()
-    CANCEL = auto()
-    PUBLISH = auto()
-    EDIT = auto()
-    REGENERATE = auto()
-    BACK_TO_PREVIEW = auto()
+    CONFIRM = "confirm"
+    CANCEL = "cancel"
+    PUBLISH = "publish"
+    EDIT = "edit"
+    REGENERATE = "regenerate"
+    BACK_TO_PREVIEW = "back_to_preview"
 
 
 class EditField(Enum):
-    DESCRIPTION = auto()
-    TAGS = auto()
-    FEATURES = auto()
-    LINKS = auto()
+    DESCRIPTION = "description"
+    TAGS = "tags"
+    FEATURES = "features"
+    LINKS = "links"
 
 
 class EditAction(Enum):
-    FIELD = auto()
-    BACK_TO_MENU = auto()
+    FIELD = "field"
+    BACK_TO_MENU = "back_to_menu"
 
 
 class KeyboardType(Enum):
-    CONFIRMATION = auto()
-    PREVIEW = auto()
-    EDIT = auto()
-    BACK_TO_EDIT = auto()
+    CONFIRMATION = "confirmation"
+    PREVIEW = "preview"
+    EDIT = "edit"
+    BACK_TO_EDIT = "back_to_edit"
 
 
 class PostCallback(CallbackData, prefix="post"):
@@ -249,33 +249,6 @@ async def confirm_post_handler(
 
     await try_edit_message(
         callback.message,
-        f"🔄 <b>Checking Submission History</b>\n\n"
-        f"<b>Repository:</b> {repository_full_name}\n"
-        f"<i>Verifying if this app can be submitted...</i>",
-    )
-
-    can_submit, last_submission_date = await can_submit_app(repository_full_name)
-
-    if not can_submit and last_submission_date:
-        if last_submission_date.tzinfo is None:
-            last_submission_date = last_submission_date.replace(tzinfo=UTC)
-
-        days_since_last = (datetime.now(tz=UTC) - last_submission_date).days
-        remaining_days = 90 - days_since_last
-
-        await try_edit_message(
-            callback.message,
-            f"🚫 <b>Repost Prevention</b>\n\n"
-            f"<b>Repository:</b> {repository_full_name}\n\n"
-            f"❌ This app was already posted <b>{days_since_last} days ago</b>\n"
-            f"You need to wait <b>{remaining_days} more days</b> before reposting.\n\n"
-            f"<i>Our 3-month repost policy prevents channel spam.</i>",
-        )
-        await state.clear()
-        return
-
-    await try_edit_message(
-        callback.message,
         f"🔄 <b>Processing Repository</b>\n\n"
         f"<b>Repository:</b> {repository_full_name}\n"
         f"<i>Fetching repository data and generating enhanced content...</i>",
@@ -290,6 +263,26 @@ async def confirm_post_handler(
                 settings.openai_api_key.get_secret_value(),
                 settings.openai_base_url,
             )
+
+        can_submit, last_submission_date = await can_submit_app(enhanced_data.repository.id)
+
+        if not can_submit and last_submission_date:
+            if last_submission_date.tzinfo is None:
+                last_submission_date = last_submission_date.replace(tzinfo=UTC)
+
+            days_since_last = (datetime.now(tz=UTC) - last_submission_date).days
+            remaining_days = 90 - days_since_last
+
+            await try_edit_message(
+                callback.message,
+                f"🚫 <b>Repost Prevention</b>\n\n"
+                f"<b>Repository:</b> {repository_full_name}\n\n"
+                f"❌ This app was already posted <b>{days_since_last} days ago</b>\n"
+                f"You need to wait <b>{remaining_days} more days</b> before reposting.\n\n"
+                f"<i>Our 3-month repost policy prevents channel spam.</i>",
+            )
+            await state.clear()
+            return
 
         await show_post_preview(callback.message, state, enhanced_data)
 

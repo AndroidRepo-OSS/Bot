@@ -16,8 +16,10 @@ from .models import AppSubmission
 def _update_submission_data(
     submission: AppSubmission, repository: GitHubRepository, channel_message_id: int | None = None
 ) -> None:
+    submission.github_repo_id = repository.id
     submission.repository_name = repository.name
     submission.repository_owner = repository.owner
+    submission.repository_full_name = repository.full_name
     submission.repository_url = repository.url
     submission.description = repository.description
     submission.submitted_at = datetime.now(UTC)
@@ -25,13 +27,13 @@ def _update_submission_data(
         submission.channel_message_id = channel_message_id
 
 
-async def can_submit_app(repository_full_name: str) -> tuple[bool, datetime | None]:
+async def can_submit_app(github_repo_id: int) -> tuple[bool, datetime | None]:
     db = db_manager.get_database()
 
     async for session in db.get_session():
         stmt = (
             select(AppSubmission)
-            .where(AppSubmission.repository_full_name == repository_full_name)
+            .where(AppSubmission.github_repo_id == github_repo_id)
             .order_by(AppSubmission.submitted_at.desc())
         )
 
@@ -58,15 +60,14 @@ async def submit_app(
     db = db_manager.get_database()
 
     async for session in db.get_session():
-        stmt = select(AppSubmission).where(
-            AppSubmission.repository_full_name == repository.full_name
-        )
+        stmt = select(AppSubmission).where(AppSubmission.github_repo_id == repository.id)
         existing_submission = (await session.execute(stmt)).scalar_one_or_none()
 
         if existing_submission:
             _update_submission_data(existing_submission, repository, channel_message_id)
         else:
             existing_submission = AppSubmission(
+                github_repo_id=repository.id,
                 repository_full_name=repository.full_name,
                 channel_message_id=channel_message_id,
             )

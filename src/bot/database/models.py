@@ -18,8 +18,9 @@ class AppSubmission(Base):
     __tablename__ = "app_submissions"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    github_repo_id: Mapped[int] = mapped_column(nullable=False, unique=True, index=True)
     repository_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    repository_full_name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    repository_full_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     repository_owner: Mapped[str] = mapped_column(String(100), nullable=False)
     repository_url: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -30,6 +31,6 @@ class AppSubmission(Base):
 
     def __repr__(self) -> str:
         return (
-            f"<AppSubmission(id={self.id}, repo='{self.repository_full_name}', "
-            f"submitted_at='{self.submitted_at}')>"
+            f"<AppSubmission(id={self.id}, github_id={self.github_repo_id}, "
+            f"repo='{self.repository_full_name}', submitted_at='{self.submitted_at}')>"
         )

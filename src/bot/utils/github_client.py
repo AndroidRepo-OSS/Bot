@@ -68,6 +68,7 @@ class GitHubClient:
         readme_content = await self._fetch_readme(owner, repo)
 
         return GitHubRepository(
+            id=data["id"],
             name=data["name"],
             full_name=data["full_name"],
             owner=data["owner"]["login"],
