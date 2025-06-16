@@ -12,8 +12,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from .config import Settings
 from .database import db_manager
-from .handlers.post import router as post_router
-from .handlers.start import router as start_router
+from .modules.posts import router as posts_router
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -34,7 +33,7 @@ async def main() -> None:
     defaults = DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True)
     bot = Bot(token=settings.bot_token.get_secret_value(), default=defaults)
 
-    dp.include_routers(start_router, post_router)
+    dp.include_routers(posts_router)
 
     logger.info("Starting bot...")
 

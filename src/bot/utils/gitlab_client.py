@@ -21,14 +21,15 @@ GITLAB_API_BASE = "https://gitlab.com/api/v4"
 class GitLabClient:
     def __init__(self, session: aiohttp.ClientSession | None = None) -> None:
         self._session = session
+        self._owns_session = session is None
 
     async def __aenter__(self) -> GitLabClient:
-        if self._session is None:
+        if self._owns_session:
             self._session = aiohttp.ClientSession()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        if self._session:
+        if self._owns_session and self._session:
             await self._session.close()
 
     @staticmethod

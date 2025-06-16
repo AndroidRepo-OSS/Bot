@@ -93,6 +93,24 @@ class RepositoryClient:
         except (InvalidRepositoryURLError, UnsupportedPlatformError):
             return False
 
+    async def get_basic_repository_data(self, repository_url: str):
+        _validate_repository_url(repository_url)
+
+        if not self._session:
+            msg = "Client session not initialized. Use 'async with RepositoryClient()' pattern."
+            raise RuntimeError(msg)
+
+        platform = Platform.from_url(repository_url)
+
+        if platform == Platform.GITHUB:
+            async with GitHubClient(self._session) as client:
+                owner, repo = client._parse_github_url(repository_url)
+                return await client._get_repository_data(owner, repo)
+        else:
+            async with GitLabClient(self._session) as client:
+                owner, repo = client._parse_gitlab_url(repository_url)
+                return await client._get_repository_data(owner, repo)
+
     async def get_enhanced_repository_data(
         self, repository_url: str, openai_api_key: str, *, openai_base_url: str | None = None
     ) -> EnhancedRepositoryData:
