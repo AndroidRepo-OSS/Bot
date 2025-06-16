@@ -4,12 +4,11 @@
 from __future__ import annotations
 
 import random
-from collections.abc import Generator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
-from typing import NamedTuple
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -43,7 +42,8 @@ FONT_REGULAR_PATH = DATA_DIR / "font_regular.ttf"
 CHANNEL_LOGO_PATH = DATA_DIR / "channel_logo.png"
 
 
-class BannerConfig(NamedTuple):
+@dataclass(slots=True, frozen=True)
+class BannerConfig:
     width: int = 1920
     height: int = 1080
     text_color: str = "white"
@@ -56,20 +56,6 @@ class BannerConfig(NamedTuple):
     max_font_size: int = 180
 
 
-CONFIG = BannerConfig()
-
-
-@contextmanager
-def managed_image(*args, **kwargs) -> Generator[Image.Image]:
-    img = None
-    try:
-        img = Image.new(*args, **kwargs)
-        yield img
-    finally:
-        if img:
-            img.close()
-
-
 @lru_cache(maxsize=32)
 def hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
     hex_color = hex_color.lstrip("#")
@@ -77,31 +63,39 @@ def hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
     return (rgb_values[0], rgb_values[1], rgb_values[2])
 
 
-def create_gradient_background(width: int, height: int, base_color: str) -> Image.Image:
+@lru_cache(maxsize=16)
+def calculate_gradient_colors(base_color: str, height: int) -> list[tuple[int, int, int]]:
     base_rgb = hex_to_rgb(base_color)
     lighter_rgb = tuple(min(255, int(c * 1.3)) for c in base_rgb)
     darker_rgb = tuple(int(c * 0.6) for c in base_rgb)
 
+    colors = []
+    for y in range(height):
+        ratio = y / height
+        if ratio < 0.5:
+            factor = ratio * 2
+            color = tuple(
+                int(lighter_rgb[i] * (1 - factor) + base_rgb[i] * factor) for i in range(3)
+            )
+        else:
+            factor = (ratio - 0.5) * 2
+            color = tuple(
+                int(base_rgb[i] * (1 - factor) + darker_rgb[i] * factor) for i in range(3)
+            )
+        colors.append(color)
+    return colors
+
+
+def create_gradient_background(width: int, height: int, base_color: str) -> Image.Image:
     gradient = Image.new("RGB", (width, height))
     try:
         pixels = gradient.load()
-
         if pixels is None:
             return gradient
 
-        for y in range(height):
-            ratio = y / height
-            if ratio < 0.5:
-                factor = ratio * 2
-                color = tuple(
-                    int(lighter_rgb[i] * (1 - factor) + base_rgb[i] * factor) for i in range(3)
-                )
-            else:
-                factor = (ratio - 0.5) * 2
-                color = tuple(
-                    int(base_rgb[i] * (1 - factor) + darker_rgb[i] * factor) for i in range(3)
-                )
+        colors = calculate_gradient_colors(base_color, height)
 
+        for y, color in enumerate(colors):
             for x in range(width):
                 pixels[x, y] = color
 
@@ -133,9 +127,26 @@ def get_font(font_path: Path, size: int) -> ImageFont.FreeTypeFont | ImageFont.I
         return ImageFont.load_default(size)
 
 
-def wrap_text(
-    text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont, max_width: int
-) -> list[str]:
+@lru_cache(maxsize=128)
+def get_text_width(text: str, font_path: str, font_size: int) -> int:
+    font = get_font(Path(font_path), font_size)
+    try:
+        return int(font.getbbox(text)[2])
+    except (AttributeError, OSError):
+        return len(text) * 10
+
+
+@lru_cache(maxsize=128)
+def get_text_dimensions(text: str, font_path: str, font_size: int) -> tuple[int, int]:
+    font = get_font(Path(font_path), font_size)
+    try:
+        bbox = font.getbbox(text)
+        return int(bbox[2] - bbox[0]), int(bbox[3] - bbox[1])
+    except (AttributeError, OSError):
+        return len(text) * 10, 20
+
+
+def wrap_text(text: str, max_width: int, font_path: str, font_size: int) -> list[str]:
     words = text.split()
     if not words:
         return []
@@ -145,7 +156,7 @@ def wrap_text(
 
     for word in words:
         test_line = f"{current_line} {word}" if current_line else word
-        text_width = get_text_width(test_line, font)
+        text_width = get_text_width(test_line, font_path, font_size)
 
         if text_width <= max_width:
             current_line = test_line
@@ -161,49 +172,39 @@ def wrap_text(
     return lines
 
 
-def get_text_width(text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont) -> int:
-    try:
-        return int(font.getbbox(text)[2])
-    except (AttributeError, OSError):
-        return len(text) * 10
+def _generate_banner_core(title_text: str) -> Image.Image:
+    config = BannerConfig()
 
-
-def get_text_dimensions(
-    text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont
-) -> tuple[int, int]:
-    try:
-        bbox = font.getbbox(text)
-        return int(bbox[2] - bbox[0]), int(bbox[3] - bbox[1])
-    except (AttributeError, OSError):
-        return len(text) * 10, 20
-
-
-def generate_banner(title_text: str) -> BytesIO:
-    config = CONFIG
     bg_color = random.choice(MATERIAL_COLORS)
+    image = create_gradient_background(config.width, config.height, bg_color)
 
-    image = None
     try:
-        image = create_gradient_background(config.width, config.height, bg_color)
         draw = ImageDraw.Draw(image)
-
         max_title_width = config.width - (2 * config.margin)
         max_title_height = config.height - 400
 
         title_font_size = config.max_font_size
         title_lines = []
+        font_path_str = str(FONT_BOLD_PATH)
 
         while title_font_size > config.min_font_size:
             title_font = get_font(FONT_BOLD_PATH, title_font_size)
-            title_lines = wrap_text(title_text, title_font, max_title_width)
+            title_lines = wrap_text(title_text, max_title_width, font_path_str, title_font_size)
 
             if not title_lines:
                 break
 
             total_height = (
-                sum(get_text_dimensions(line, title_font)[1] + 10 for line in title_lines) - 10
+                sum(
+                    get_text_dimensions(line, font_path_str, title_font_size)[1] + 10
+                    for line in title_lines
+                )
+                - 10
             )
-            max_line_width = max(get_text_dimensions(line, title_font)[0] for line in title_lines)
+            max_line_width = max(
+                get_text_dimensions(line, font_path_str, title_font_size)[0]
+                for line in title_lines
+            )
 
             if max_line_width <= max_title_width and total_height <= max_title_height:
                 break
@@ -214,18 +215,20 @@ def generate_banner(title_text: str) -> BytesIO:
             title_font = get_font(FONT_BOLD_PATH, config.min_font_size)
             title_lines = [title_text]
 
-        line_height = get_text_dimensions("Ag", title_font)[1] + 10
+        line_height = get_text_dimensions("Ag", font_path_str, title_font_size)[1] + 10
         total_text_height = len(title_lines) * line_height - 10
         start_y = (config.height - total_text_height) / 2 - 30
 
         for i, line in enumerate(title_lines):
-            line_width = get_text_dimensions(line, title_font)[0]
+            line_width = get_text_dimensions(line, font_path_str, title_font_size)[0]
             line_x = (config.width - line_width) / 2
             line_y = start_y + (i * line_height)
             draw.text((line_x, line_y), line, fill=config.text_color, font=title_font)
 
         footer_font = get_font(FONT_REGULAR_PATH, config.footer_font_size)
-        footer_width, footer_height = get_text_dimensions(config.footer_text, footer_font)
+        footer_width, footer_height = get_text_dimensions(
+            config.footer_text, str(FONT_REGULAR_PATH), config.footer_font_size
+        )
 
         padding = 15
         footer_y = config.height - footer_height - config.footer_margin
@@ -242,18 +245,26 @@ def generate_banner(title_text: str) -> BytesIO:
         )
         add_channel_logo(image, CHANNEL_LOGO_PATH, (int(logo_x), int(logo_y)), config.logo_size)
 
+        return image
+    except Exception:
+        image.close()
+        raise
+
+
+def generate_banner(title_text: str) -> BytesIO:
+    image = _generate_banner_core(title_text)
+
+    try:
         buffer = BytesIO()
         image.save(buffer, format="PNG", optimize=True, quality=95)
         buffer.seek(0)
         return buffer
-
     finally:
-        if image:
-            image.close()
+        image.close()
 
 
 @contextmanager
-def banner_context(title_text: str, output_filename: str | None = None):
+def banner_context(title_text: str):
     banner_buffer = None
     try:
         banner_buffer = generate_banner(title_text)
@@ -264,73 +275,10 @@ def banner_context(title_text: str, output_filename: str | None = None):
 
 
 def generate_banner_file(title_text: str, output_filename: str) -> Path:
-    config = CONFIG
-    bg_color = random.choice(MATERIAL_COLORS)
+    image = _generate_banner_core(title_text)
 
-    image = None
     try:
-        image = create_gradient_background(config.width, config.height, bg_color)
-        draw = ImageDraw.Draw(image)
-
-        max_title_width = config.width - (2 * config.margin)
-        max_title_height = config.height - 400
-
-        title_font_size = config.max_font_size
-        title_lines = []
-
-        while title_font_size > config.min_font_size:
-            title_font = get_font(FONT_BOLD_PATH, title_font_size)
-            title_lines = wrap_text(title_text, title_font, max_title_width)
-
-            if not title_lines:
-                break
-
-            total_height = (
-                sum(get_text_dimensions(line, title_font)[1] + 10 for line in title_lines) - 10
-            )
-            max_line_width = max(get_text_dimensions(line, title_font)[0] for line in title_lines)
-
-            if max_line_width <= max_title_width and total_height <= max_title_height:
-                break
-
-            title_font_size -= 10
-
-        if not title_lines:
-            title_font = get_font(FONT_BOLD_PATH, config.min_font_size)
-            title_lines = [title_text]
-
-        line_height = get_text_dimensions("Ag", title_font)[1] + 10
-        total_text_height = len(title_lines) * line_height - 10
-        start_y = (config.height - total_text_height) / 2 - 30
-
-        for i, line in enumerate(title_lines):
-            line_width = get_text_dimensions(line, title_font)[0]
-            line_x = (config.width - line_width) / 2
-            line_y = start_y + (i * line_height)
-            draw.text((line_x, line_y), line, fill=config.text_color, font=title_font)
-
-        footer_font = get_font(FONT_REGULAR_PATH, config.footer_font_size)
-        footer_width, footer_height = get_text_dimensions(config.footer_text, footer_font)
-
-        padding = 15
-        footer_y = config.height - footer_height - config.footer_margin
-        total_footer_width = footer_width + config.logo_size + padding
-        footer_x = max(
-            config.width - config.footer_margin - total_footer_width, config.footer_margin
-        )
-
-        logo_x = footer_x + footer_width + padding
-        logo_y = footer_y + (footer_height - config.logo_size) // 2 + 5
-
-        draw.text(
-            (footer_x, footer_y), config.footer_text, fill=config.text_color, font=footer_font
-        )
-        add_channel_logo(image, CHANNEL_LOGO_PATH, (int(logo_x), int(logo_y)), config.logo_size)
-
         image.save(output_filename, format="PNG", optimize=True, quality=95)
-
         return Path(output_filename)
-
     finally:
-        if image:
-            image.close()
+        image.close()
