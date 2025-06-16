@@ -6,12 +6,23 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 
 from bot.utils.models import GitHubRepository
 
 from .connection import db_manager
 from .models import AppSubmission
+
+
+def _update_submission_data(
+    submission: AppSubmission, repository: GitHubRepository, channel_message_id: int | None = None
+) -> None:
+    submission.repository_name = repository.name
+    submission.repository_owner = repository.owner
+    submission.repository_url = repository.url
+    submission.description = repository.description
+    submission.submitted_at = datetime.now(UTC)
+    if channel_message_id is not None:
+        submission.channel_message_id = channel_message_id
 
 
 async def can_submit_app(repository_full_name: str) -> tuple[bool, datetime | None]:
@@ -24,22 +35,19 @@ async def can_submit_app(repository_full_name: str) -> tuple[bool, datetime | No
             .order_by(AppSubmission.submitted_at.desc())
         )
 
-        result = await session.execute(stmt)
-        last_submission = result.scalar_one_or_none()
+        last_submission = (await session.execute(stmt)).scalar_one_or_none()
 
         if last_submission is None:
             return True, None
-
-        three_months_ago = datetime.now(UTC) - timedelta(days=90)
 
         submitted_at = last_submission.submitted_at
         if submitted_at.tzinfo is None:
             submitted_at = submitted_at.replace(tzinfo=UTC)
 
-        if submitted_at >= three_months_ago:
-            return False, submitted_at
+        three_months_ago = datetime.now(UTC) - timedelta(days=90)
+        can_submit = submitted_at < three_months_ago
 
-        return True, submitted_at
+        return can_submit, submitted_at
 
     return True, None
 
@@ -50,26 +58,24 @@ async def submit_app(
     db = db_manager.get_database()
 
     async for session in db.get_session():
-        app_submission = AppSubmission(
-            repository_name=repository.name,
-            repository_full_name=repository.full_name,
-            repository_owner=repository.owner,
-            repository_url=repository.url,
-            description=repository.description,
-            channel_message_id=channel_message_id,
-            submitted_at=datetime.now(UTC),
+        stmt = select(AppSubmission).where(
+            AppSubmission.repository_full_name == repository.full_name
         )
+        existing_submission = (await session.execute(stmt)).scalar_one_or_none()
 
-        session.add(app_submission)
+        if existing_submission:
+            _update_submission_data(existing_submission, repository, channel_message_id)
+        else:
+            existing_submission = AppSubmission(
+                repository_full_name=repository.full_name,
+                channel_message_id=channel_message_id,
+            )
+            _update_submission_data(existing_submission, repository, channel_message_id)
+            session.add(existing_submission)
 
-        try:
-            await session.commit()
-            await session.refresh(app_submission)
-            return app_submission
-        except IntegrityError as e:
-            await session.rollback()
-            error_msg = f"App '{repository.full_name}' already exists in database"
-            raise ValueError(error_msg) from e
+        await session.commit()
+        await session.refresh(existing_submission)
+        return existing_submission
 
     msg = "Failed to submit app"
     raise RuntimeError(msg)
