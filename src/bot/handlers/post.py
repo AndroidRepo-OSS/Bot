@@ -88,7 +88,6 @@ class EditCallback(CallbackData, prefix="edit"):
 
 
 def get_field_name(field: EditField) -> str:
-    """Convert EditField enum to human-readable string."""
     field_names = {
         EditField.DESCRIPTION: "description",
         EditField.TAGS: "tags",
@@ -163,10 +162,11 @@ async def post_command_handler(message: Message, state: FSMContext) -> None:
     await state.set_state(PostStates.waiting_for_github_url)
 
     await message.reply(
-        "📱 <b>Repository Post Creator</b>\n"
+        "📱 <b>Create Repository Post</b>\n\n"
         "Send a GitHub repository URL to generate a post.\n\n"
-        "Example: https://github.com/user/repository\n"
-        "Use /cancel to abort."
+        "<b>Example:</b>\n"
+        "<code>https://github.com/user/repository</code>\n\n"
+        "💡 Use /cancel to abort anytime."
     )
 
 
@@ -176,9 +176,9 @@ async def cancel_command_handler(message: Message, state: FSMContext) -> None:
     current_state = await state.get_state()
     if current_state is None:
         await message.reply(
-            "❌ <b>No active session</b>\n"
-            "You don't have any post creation in progress.\n"
-            "Send /post to begin."
+            "❌ <b>No Active Session</b>\n\n"
+            "You don't have any post creation in progress.\n\n"
+            "💡 Use /post to start creating a new post."
         )
         return
 
@@ -187,7 +187,9 @@ async def cancel_command_handler(message: Message, state: FSMContext) -> None:
 
     await state.clear()
     await message.reply(
-        "❌ <b>Cancelled</b>\nYour post creation was cancelled.\nSend /post to start over."
+        "❌ <b>Session Cancelled</b>\n\n"
+        "Your post creation has been cancelled.\n\n"
+        "💡 Use /post to start over."
     )
 
 
@@ -195,9 +197,10 @@ async def cancel_command_handler(message: Message, state: FSMContext) -> None:
 async def github_url_handler(message: Message, state: FSMContext) -> None:
     if not message.text:
         await message.reply(
-            "❌ <b>Invalid input</b>\n"
-            "Send a valid GitHub repository URL.\n"
-            "Example: https://github.com/user/repository"
+            "❌ <b>Invalid Input</b>\n\n"
+            "Please send a valid GitHub repository URL.\n\n"
+            "<b>Example:</b>\n"
+            "<code>https://github.com/user/repository</code>"
         )
         return
 
@@ -206,8 +209,9 @@ async def github_url_handler(message: Message, state: FSMContext) -> None:
         await message.reply(
             "❌ <b>Invalid GitHub URL</b>\n\n"
             "Please provide a valid GitHub repository URL.\n\n"
-            "<i>Example: https://github.com/user/repository</i>\n\n"
-            "💡 Use /cancel to cancel the post creation."
+            "<b>Example:</b>\n"
+            "<code>https://github.com/user/repository</code>\n\n"
+            "💡 Use /cancel to abort."
         )
         return
 
@@ -215,9 +219,9 @@ async def github_url_handler(message: Message, state: FSMContext) -> None:
     await state.set_state(PostStates.waiting_for_confirmation)
 
     await message.reply(
-        f"📋 <b>Post Preview</b>\n\n"
-        f"<b>Repository:</b> <code>{url}</code>\n\n"
-        f"Do you want to proceed with creating the post?",
+        f"✅ <b>Repository Detected</b>\n\n"
+        f"<b>URL:</b> <code>{url}</code>\n\n"
+        f"Ready to create the post?",
         reply_markup=create_keyboard(KeyboardType.CONFIRMATION),
     )
 
@@ -225,9 +229,11 @@ async def github_url_handler(message: Message, state: FSMContext) -> None:
 @router.message(PostStates.waiting_for_github_url)
 async def invalid_github_url_handler(message: Message) -> None:
     await message.reply(
-        "❌ <b>Invalid input</b>\n"
-        "Send a valid GitHub URL or /cancel to abort.\n"
-        "Example: https://github.com/user/repository"
+        "❌ <b>Invalid Input</b>\n\n"
+        "Please send a valid GitHub URL.\n\n"
+        "<b>Example:</b>\n"
+        "<code>https://github.com/user/repository</code>\n\n"
+        "💡 Use /cancel to abort."
     )
 
 
@@ -245,13 +251,13 @@ async def confirm_post_handler(
 
     url_parts = github_url.rstrip("/").split("/")
     owner, repo_name = url_parts[-2], url_parts[-1]
-    repository_full_name = f"{owner}/{repo_name}"
 
     await try_edit_message(
         callback.message,
         f"🔄 <b>Processing Repository</b>\n\n"
-        f"<b>Repository:</b> {repository_full_name}\n"
-        f"<i>Fetching repository data and generating enhanced content...</i>",
+        f"<b>Repository:</b> {repo_name}\n"
+        f"<b>Author:</b> {owner}\n\n"
+        f"<i>Fetching data and generating content...</i>",
     )
 
     try:
@@ -275,11 +281,12 @@ async def confirm_post_handler(
 
             await try_edit_message(
                 callback.message,
-                f"🚫 <b>Repost Prevention</b>\n\n"
-                f"<b>Repository:</b> {repository_full_name}\n\n"
-                f"❌ This app was already posted <b>{days_since_last} days ago</b>\n"
-                f"You need to wait <b>{remaining_days} more days</b> before reposting.\n\n"
-                f"<i>Our 3-month repost policy prevents channel spam.</i>",
+                f"🚫 <b>Repost Not Allowed</b>\n\n"
+                f"<b>Repository:</b> {repo_name}\n"
+                f"<b>Author:</b> {owner}\n\n"
+                f"This app was posted <b>{days_since_last} days ago</b>.\n"
+                f"Please wait <b>{remaining_days} more days</b> to repost.\n\n"
+                f"<i>3-month policy prevents channel spam.</i>",
             )
             await state.clear()
             return
@@ -289,11 +296,34 @@ async def confirm_post_handler(
     except Exception as e:
         await try_edit_message(
             callback.message,
-            f"❌ <b>Error Processing Repository</b>\n\n"
-            f"<code>{github_url}</code>\n\n"
-            f"<b>Error:</b> <code>{str(e)[:200]}...</code>",
+            f"❌ <b>Processing Failed</b>\n\n"
+            f"<b>Repository:</b> <code>{github_url}</code>\n\n"
+            f"<b>Error:</b> <code>{str(e)[:200]}...</code>\n\n"
+            f"💡 Please try again with /post",
         )
         await state.clear()
+
+
+async def send_banner_preview(
+    message: Message, banner_buffer: BytesIO, post_text: str, preview_header: str
+) -> None:
+    banner_input = BufferedInputFile(banner_buffer.getvalue(), filename="banner.png")
+
+    if message.photo:
+        await message.delete()
+        await message.answer(preview_header)
+        await message.answer_photo(
+            photo=banner_input,
+            caption=post_text,
+            reply_markup=create_keyboard(KeyboardType.PREVIEW),
+        )
+    else:
+        await try_edit_message(message, preview_header)
+        await message.answer_photo(
+            photo=banner_input,
+            caption=post_text,
+            reply_markup=create_keyboard(KeyboardType.PREVIEW),
+        )
 
 
 async def show_post_preview(
@@ -319,7 +349,7 @@ async def show_post_preview(
     )
     await state.set_state(PostStates.previewing_post)
 
-    banner_status = "✅ Generated successfully" if banner_generated else "❌ Generation failed"
+    banner_status = "✅ Ready" if banner_generated else "❌ Failed"
     preview_header = (
         f"📋 <b>Post Preview</b>\n\n"
         f"<b>Repository:</b> {repository.name}\n"
@@ -329,8 +359,8 @@ async def show_post_preview(
 
     if banner_generated and banner_buffer:
         preview_header += (
-            "<i>📸 Preview below shows exactly how your post will appear when published.</i>\n"
-            "<i>You can edit content, regenerate everything, or publish to channel.</i>"
+            "<i>Preview shows how your post will appear when published.</i>\n"
+            "<i>You can edit content, regenerate, or publish to channel.</i>"
         )
 
         try:
@@ -338,21 +368,21 @@ async def show_post_preview(
         except Exception:
             await message.answer(
                 "❌ <b>Banner Error</b>\n\n"
-                f"Could not generate or display banner for {repository.name}.\n"
-                "This is required to publish to the channel.\n\n"
-                "Please try:\n"
-                "• Use /post again to retry\n"
-                "• Check if the repository name is valid"
+                f"Could not generate banner for <b>{repository.name}</b>.\n\n"
+                "<b>Next steps:</b>\n"
+                "• Try /post again to retry\n"
+                "• Check repository name validity\n\n"
+                "<i>Banner is required for channel publishing.</i>"
             )
             await state.clear()
     else:
         await message.answer(
             "❌ <b>Banner Generation Failed</b>\n\n"
-            f"Could not generate banner for {repository.name}.\n"
-            "A banner is required to publish to the channel.\n\n"
-            "Please try:\n"
-            "• Use /post again to retry\n"
-            "• Check if the repository name is valid"
+            f"Could not create banner for <b>{repository.name}</b>.\n\n"
+            "<b>Next steps:</b>\n"
+            "• Try /post again to retry\n"
+            "• Check repository name validity\n\n"
+            "<i>Banner is required for channel publishing.</i>"
         )
         await state.clear()
 
@@ -380,9 +410,9 @@ async def publish_post_handler(
 
     if not banner_buffer:
         error_text = (
-            "❌ <b>No Banner Available</b>\n\n"
-            "Cannot publish post without a banner.\n"
-            "Please regenerate the post to create a new banner."
+            "❌ <b>Banner Required</b>\n\n"
+            "Cannot publish without a banner.\n\n"
+            "💡 Try regenerating the post to create a new banner."
         )
         await try_edit_message(callback.message, error_text)
         return
@@ -408,17 +438,17 @@ async def publish_post_handler(
             "✅ <b>Post Published Successfully!</b>\n\n"
             f"<b>Repository:</b> {repository.name}\n"
             f"<b>Author:</b> {repository.owner}\n\n"
-            "<i>The post has been sent to the configured channel and saved to database.</i>"
+            "<i>Post sent to channel and saved to database.</i>"
         )
         await try_edit_message(callback.message, success_text)
 
     except Exception as e:
         error_text = (
-            "❌ <b>Failed to Publish Post</b>\n\n"
-            f"Repository: {enhanced_data.repository.name}\n"
-            f"Author: {enhanced_data.repository.owner}\n\n"
-            f"Error: {e!s}\n\n"
-            "Please check the channel ID configuration and bot permissions."
+            "❌ <b>Publishing Failed</b>\n\n"
+            f"<b>Repository:</b> {enhanced_data.repository.name}\n"
+            f"<b>Author:</b> {enhanced_data.repository.owner}\n\n"
+            f"<b>Error:</b> {e!s}\n\n"
+            "<i>Check channel ID and bot permissions.</i>"
         )
         await try_edit_message(callback.message, error_text)
 
@@ -441,9 +471,9 @@ async def edit_post_handler(
     await state.set_state(PostStates.editing_post)
 
     edit_text = (
-        f"✏️ <b>Edit Post</b>\n"
-        f"Repository: {enhanced_data.repository.name}\n\n"
-        f"Select a field to update:\n"
+        f"✏️ <b>Edit Post</b>\n\n"
+        f"<b>Repository:</b> {enhanced_data.repository.name}\n\n"
+        f"<b>Select field to update:</b>\n"
         f"• Description\n"
         f"• Tags\n"
         f"• Features\n"
@@ -451,7 +481,7 @@ async def edit_post_handler(
     )
 
     await try_edit_message(callback.message, edit_text, create_keyboard(KeyboardType.EDIT))
-    await callback.answer("Edit mode activated!")
+    await callback.answer("Edit mode activated")
 
 
 @router.callback_query(PostCallback.filter(F.action == PostAction.REGENERATE))
@@ -469,7 +499,9 @@ async def regenerate_post_handler(
     repository_cache.delete(github_url)
 
     regenerate_text = (
-        "🔄 <b>Regenerating</b>\nClearing cache and generating new content.\n<i>Please wait...</i>"
+        "🔄 <b>Regenerating Content</b>\n\n"
+        "Clearing cache and generating new content.\n\n"
+        "<i>Please wait...</i>"
     )
 
     await try_edit_message(callback.message, regenerate_text)
@@ -500,7 +532,7 @@ async def back_to_preview_handler(
     except TelegramBadRequest:
         await show_post_preview(callback.message, state, enhanced_data)
 
-    await callback.answer("Returned to preview!")
+    await callback.answer("Returned to preview")
 
 
 @router.callback_query(PostCallback.filter(F.action == PostAction.CANCEL))
@@ -515,12 +547,10 @@ async def cancel_callback_handler(
             banner_buffer.close()
         await state.clear()
 
-    cancel_text = (
-        "❌ <b>Post Creation Cancelled</b>\n\nYou can start again anytime with /post command."
-    )
+    cancel_text = "❌ <b>Post Creation Cancelled</b>\n\nYou can start again anytime with /post."
 
     await try_edit_message(callback.message, cancel_text)
-    await callback.answer("Post cancelled!")
+    await callback.answer("Post cancelled")
 
 
 def create_edit_message(field: EditField, enhanced_data: EnhancedRepositoryData) -> str:
@@ -534,7 +564,7 @@ def create_edit_message(field: EditField, enhanced_data: EnhancedRepositoryData)
             tips = [
                 "Keep it 2-3 sentences",
                 "Focus on user benefits",
-                "Explain what the app/tool does",
+                "Explain what the app does",
                 "Avoid technical jargon",
             ]
             example = None
@@ -548,12 +578,12 @@ def create_edit_message(field: EditField, enhanced_data: EnhancedRepositoryData)
                 else "No tags available"
             )
             tips = [
-                "Use underscores for multi-word tags (media_player)",
-                "5-7 tags maximum",
+                "Use underscores for multi-word tags",
+                "Maximum 5-7 tags",
                 "Focus on functionality and category",
-                "Avoid generic tags like 'android' or 'app'",
+                "Avoid generic tags",
             ]
-            example = "media player video audio streaming"
+            example = "media_player video audio streaming"
 
         case EditField.FEATURES:
             title = "⭐ Edit Key Features"
@@ -566,7 +596,7 @@ def create_edit_message(field: EditField, enhanced_data: EnhancedRepositoryData)
                 else "No features available"
             )
             tips = [
-                "3-4 features maximum",
+                "Maximum 3-4 features",
                 "Focus on user benefits",
                 "Be specific and clear",
                 "Highlight unique selling points",
@@ -586,15 +616,14 @@ def create_edit_message(field: EditField, enhanced_data: EnhancedRepositoryData)
                 else "No additional links available"
             )
             tips = [
-                "2-3 links maximum",
+                "Maximum 2-3 links",
                 "Include download links",
                 "Add documentation if available",
                 "Verify all URLs work",
             ]
             example = (
                 "Download App: https://play.google.com/store/apps/details?id=com.app\n"
-                "Official Website: https://www.example.com\n"
-                "User Guide: https://guide.example.com"
+                "Official Website: https://www.example.com"
             )
 
     suffix = " in this format:" if field == EditField.LINKS else "."
@@ -604,7 +633,7 @@ def create_edit_message(field: EditField, enhanced_data: EnhancedRepositoryData)
         f"<b>Current {get_field_name(field).title()}:</b>",
         current_text,
         "",
-        f"Send me the new {get_field_name(field)}{suffix}",
+        f"Send the new {get_field_name(field)}{suffix}",
     ]
 
     if example:
@@ -709,7 +738,7 @@ async def edit_field_handler(
         await state.set_state(new_state)
         await state.update_data(editing_field=get_field_name(callback_data.field))
         await handle_field_edit(callback, callback_data.field, enhanced_data)
-        await callback.answer(f"Edit {get_field_name(callback_data.field)} mode activated!")
+        await callback.answer(f"Edit {get_field_name(callback_data.field)} mode activated")
 
 
 def update_enhanced_data(  # noqa: C901
@@ -764,14 +793,16 @@ def update_enhanced_data(  # noqa: C901
 @router.message(PostStates.editing_links, F.text)
 async def handle_edit_state_input(message: Message, state: FSMContext) -> None:
     if not message.text:
-        await message.reply("❗ Send the new value or /cancel to abort editing.")
+        await message.reply("❗ <b>Invalid Input</b>\n\nSend the new value or /cancel to abort.")
         return
 
     data = await state.get_data()
     enhanced_data, editing_field_str = data.get("enhanced_data"), data.get("editing_field")
 
     if not enhanced_data or not editing_field_str:
-        await message.reply("❌ Edit session expired. Please start over with /post")
+        await message.reply(
+            "❌ <b>Session Expired</b>\n\nEdit session expired. Please start over with /post."
+        )
         await state.clear()
         return
 
@@ -781,13 +812,12 @@ async def handle_edit_state_input(message: Message, state: FSMContext) -> None:
         await finalize_field_edit(message, state, enhanced_data, editing_field)
     except ValueError:
         await message.reply(
-            "❌ <b>Invalid field for editing</b>\n"
-            "An internal error occurred. Please try again or /cancel."
+            "❌ <b>Invalid Field</b>\n\nAn internal error occurred. Please try again or /cancel."
         )
     except Exception:
         await message.reply(
-            f"❌ <b>Error updating {editing_field_str.title()}</b>\n"
-            "Something went wrong while updating this field. Please try again or /cancel."
+            f"❌ <b>Update Failed</b>\n\n"
+            f"Could not update {editing_field_str}. Please try again or /cancel."
         )
 
 
@@ -803,9 +833,10 @@ async def finalize_field_edit(
     await state.set_state(PostStates.previewing_post)
 
     await message.reply(
-        f"✅ <b>{get_field_name(field).title()} updated!</b>\n"
-        f"Your changes have been saved. The preview has been updated with your new content.\n\n"
-        f"You can continue editing, publish the post, or make further changes."
+        f"✅ <b>{get_field_name(field).title()} Updated!</b>\n\n"
+        f"Your changes have been saved.\n"
+        f"The preview has been updated with your new content.\n\n"
+        f"💡 You can continue editing, publish, or make further changes."
     )
 
 
@@ -820,26 +851,4 @@ async def back_to_edit_menu_handler(
         return
 
     await edit_post_handler(callback, state, PostCallback(action=PostAction.EDIT))
-    await callback.answer("Returned to edit menu!")
-
-
-async def send_banner_preview(
-    message: Message, banner_buffer: BytesIO, post_text: str, preview_header: str
-) -> None:
-    banner_input = BufferedInputFile(banner_buffer.getvalue(), filename="banner.png")
-
-    if message.photo:
-        await message.delete()
-        await message.answer(preview_header)
-        await message.answer_photo(
-            photo=banner_input,
-            caption=post_text,
-            reply_markup=create_keyboard(KeyboardType.PREVIEW),
-        )
-    else:
-        await try_edit_message(message, preview_header)
-        await message.answer_photo(
-            photo=banner_input,
-            caption=post_text,
-            reply_markup=create_keyboard(KeyboardType.PREVIEW),
-        )
+    await callback.answer("Returned to edit menu")
