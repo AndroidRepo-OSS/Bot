@@ -151,6 +151,199 @@ async def try_edit_message(
             await message.answer(text, reply_markup=markup)
 
 
+def format_enhanced_post(
+    repository: GitHubRepository, ai_content: AIGeneratedContent | None
+) -> str:
+    desc = (
+        ai_content.enhanced_description
+        if ai_content and ai_content.enhanced_description
+        else repository.description or ""
+    )
+    tags = (
+        ai_content.relevant_tags if ai_content and ai_content.relevant_tags else repository.topics
+    )[:5]
+
+    parts = [f"<b>{repository.name}</b>"]
+    if desc:
+        parts.append(f"<i>{desc}</i>")
+
+    features = ai_content.key_features if ai_content and ai_content.key_features else []
+    if features:
+        parts.append("✨ <b>Key Features:</b>\n" + "\n".join(f"• {f}" for f in features))
+
+    links_list = (ai_content.important_links if ai_content and ai_content.important_links else [])[
+        :3
+    ]
+    link_items = [f'• <a href="{repository.url}">GitHub Repository</a>'] + [
+        f'• <a href="{link.url}">{link.title}</a>' for link in links_list
+    ]
+    parts.append("🔗 <b>Links:</b>\n" + "\n".join(link_items))
+
+    hashtags = " ".join(f"#{t}" for t in tags)
+    author_lines = [f"👤 <b>Author:</b> <code>{repository.owner}</code>"]
+    if hashtags:
+        author_lines.append(f"🏷️ <b>Tags:</b> {hashtags}")
+
+    parts.append("\n".join(author_lines))
+    return "\n\n".join(parts)
+
+
+def get_post_description(
+    repository: GitHubRepository, ai_content: AIGeneratedContent | None
+) -> str | None:
+    return (
+        ai_content.enhanced_description
+        if ai_content and ai_content.enhanced_description
+        else repository.description
+    )
+
+
+def get_post_tags(
+    repository: GitHubRepository, ai_content: AIGeneratedContent | None
+) -> list[str]:
+    tags = (
+        ai_content.relevant_tags if ai_content and ai_content.relevant_tags else repository.topics
+    )
+    return tags[:7] if tags else []
+
+
+def create_edit_message(field: EditField, enhanced_data: EnhancedRepositoryData) -> str:
+    match field:
+        case EditField.DESCRIPTION:
+            title = "📝 Edit Description"
+            current_value = get_post_description(
+                enhanced_data.repository, enhanced_data.ai_content
+            )
+            current_text = f"<i>{current_value or 'No description available'}</i>"
+            tips = [
+                "Keep it 2-3 sentences",
+                "Focus on user benefits",
+                "Explain what the app does",
+                "Avoid technical jargon",
+            ]
+            example = None
+
+        case EditField.TAGS:
+            title = "🏷️ Edit Tags"
+            current_value = get_post_tags(enhanced_data.repository, enhanced_data.ai_content)
+            current_text = (
+                " ".join(f"#{tag}" for tag in current_value)
+                if current_value
+                else "No tags available"
+            )
+            tips = [
+                "Use underscores for multi-word tags",
+                "Maximum 5-7 tags",
+                "Focus on functionality and category",
+                "Avoid generic tags",
+            ]
+            example = "media_player video audio streaming"
+
+        case EditField.FEATURES:
+            title = "⭐ Edit Key Features"
+            current_value = (
+                enhanced_data.ai_content.key_features if enhanced_data.ai_content else []
+            )
+            current_text = (
+                "\n".join(f"• {f}" for f in current_value)
+                if current_value
+                else "No features available"
+            )
+            tips = [
+                "Maximum 3-4 features",
+                "Focus on user benefits",
+                "Be specific and clear",
+                "Highlight unique selling points",
+            ]
+            example = (
+                "Supports all video formats\nCustom playback controls\nOffline viewing capability"
+            )
+
+        case EditField.LINKS:
+            title = "🔗 Edit Important Links"
+            current_value = (
+                enhanced_data.ai_content.important_links if enhanced_data.ai_content else []
+            )
+            current_text = (
+                "\n".join(f"• {link.title}: {link.url}" for link in current_value)
+                if current_value
+                else "No additional links available"
+            )
+            tips = [
+                "Maximum 2-3 links",
+                "Include download links",
+                "Add documentation if available",
+                "Verify all URLs work",
+            ]
+            example = (
+                "Download App: https://play.google.com/store/apps/details?id=com.app\n"
+                "Official Website: https://www.example.com"
+            )
+
+    suffix = " in this format:" if field == EditField.LINKS else "."
+
+    parts = [
+        f"{title}\n",
+        f"<b>Current {get_field_name(field).title()}:</b>",
+        current_text,
+        "",
+        f"Send the new {get_field_name(field)}{suffix}",
+    ]
+
+    if example:
+        parts.extend(["", "<b>Example:</b>", example])
+
+    parts.extend(["", "<b>Tips:</b>"] + [f"• {tip}" for tip in tips])
+
+    return "\n".join(parts)
+
+
+def update_enhanced_data(  # noqa: C901
+    enhanced_data: EnhancedRepositoryData, field: EditField, new_text: str
+) -> None:
+    match field:
+        case EditField.DESCRIPTION:
+            text = new_text.strip()
+            if enhanced_data.ai_content:
+                enhanced_data.ai_content.enhanced_description = text
+            else:
+                enhanced_data.repository.description = text
+
+        case EditField.TAGS:
+            tags = [
+                tag.strip().lower().replace(" ", "_")
+                for tag in re.split(r"[,\s]+", new_text.strip())
+                if tag.strip()
+            ]
+
+            if enhanced_data.ai_content:
+                enhanced_data.ai_content.relevant_tags = tags[:7]
+            else:
+                enhanced_data.repository.topics = tags[:7]
+
+        case EditField.FEATURES:
+            features = [
+                line.strip().lstrip("•").strip()
+                for line in new_text.replace(";", "\n").split("\n")
+                if line.strip()
+            ]
+
+            if enhanced_data.ai_content:
+                enhanced_data.ai_content.key_features = features[:4]
+
+        case EditField.LINKS:
+            links = []
+            for line in new_text.strip().split("\n"):
+                if ":" in line and "http" in line:
+                    title, url = line.split(":", 1)
+                    links.append(
+                        ImportantLink(title=title.strip(), url=url.strip(), type="website")
+                    )
+
+            if enhanced_data.ai_content:
+                enhanced_data.ai_content.important_links = links[:3]
+
+
 @router.message(Command("post"))
 async def post_command_handler(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
@@ -237,71 +430,38 @@ async def invalid_github_url_handler(message: Message) -> None:
     )
 
 
-@router.callback_query(PostCallback.filter(F.action == PostAction.CONFIRM))
-async def confirm_post_handler(
-    callback: CallbackQuery, state: FSMContext, callback_data: PostCallback
-) -> None:
-    if isinstance(callback.message, InaccessibleMessage) or not callback.message:
+@router.message(PostStates.editing_description, F.text)
+@router.message(PostStates.editing_tags, F.text)
+@router.message(PostStates.editing_features, F.text)
+@router.message(PostStates.editing_links, F.text)
+async def handle_edit_state_input(message: Message, state: FSMContext) -> None:
+    if not message.text:
+        await message.reply("❗ <b>Invalid Input</b>\n\nSend the new value or /cancel to abort.")
         return
 
     data = await state.get_data()
-    github_url = data.get("github_url")
-    if not github_url:
-        return
+    enhanced_data, editing_field_str = data.get("enhanced_data"), data.get("editing_field")
 
-    url_parts = github_url.rstrip("/").split("/")
-    owner, repo_name = url_parts[-2], url_parts[-1]
-
-    await try_edit_message(
-        callback.message,
-        f"🔄 <b>Processing Repository</b>\n\n"
-        f"<b>Repository:</b> {repo_name}\n"
-        f"<b>Author:</b> {owner}\n\n"
-        f"<i>Fetching data and generating content...</i>",
-    )
-
-    try:
-        settings = Settings()  # type: ignore
-
-        async with GitHubClient() as client:
-            enhanced_data = await client.get_enhanced_repository_data(
-                github_url,
-                settings.openai_api_key.get_secret_value(),
-                settings.openai_base_url,
-            )
-
-        can_submit, last_submission_date = await can_submit_app(enhanced_data.repository.id)
-
-        if not can_submit and last_submission_date:
-            if last_submission_date.tzinfo is None:
-                last_submission_date = last_submission_date.replace(tzinfo=UTC)
-
-            days_since_last = (datetime.now(tz=UTC) - last_submission_date).days
-            remaining_days = 90 - days_since_last
-
-            await try_edit_message(
-                callback.message,
-                f"🚫 <b>Repost Not Allowed</b>\n\n"
-                f"<b>Repository:</b> {repo_name}\n"
-                f"<b>Author:</b> {owner}\n\n"
-                f"This app was posted <b>{days_since_last} days ago</b>.\n"
-                f"Please wait <b>{remaining_days} more days</b> to repost.\n\n"
-                f"<i>3-month policy prevents channel spam.</i>",
-            )
-            await state.clear()
-            return
-
-        await show_post_preview(callback.message, state, enhanced_data)
-
-    except Exception as e:
-        await try_edit_message(
-            callback.message,
-            f"❌ <b>Processing Failed</b>\n\n"
-            f"<b>Repository:</b> <code>{github_url}</code>\n\n"
-            f"<b>Error:</b> <code>{str(e)[:200]}...</code>\n\n"
-            f"💡 Please try again with /post",
+    if not enhanced_data or not editing_field_str:
+        await message.reply(
+            "❌ <b>Session Expired</b>\n\nEdit session expired. Please start over with /post."
         )
         await state.clear()
+        return
+
+    try:
+        editing_field = EditField(editing_field_str)
+        update_enhanced_data(enhanced_data, editing_field, message.text)
+        await finalize_field_edit(message, state, enhanced_data, editing_field)
+    except ValueError:
+        await message.reply(
+            "❌ <b>Invalid Field</b>\n\nAn internal error occurred. Please try again or /cancel."
+        )
+    except Exception:
+        await message.reply(
+            f"❌ <b>Update Failed</b>\n\n"
+            f"Could not update {editing_field_str}. Please try again or /cancel."
+        )
 
 
 async def send_banner_preview(
@@ -383,6 +543,73 @@ async def show_post_preview(
             "• Try /post again to retry\n"
             "• Check repository name validity\n\n"
             "<i>Banner is required for channel publishing.</i>"
+        )
+        await state.clear()
+
+
+@router.callback_query(PostCallback.filter(F.action == PostAction.CONFIRM))
+async def confirm_post_handler(
+    callback: CallbackQuery, state: FSMContext, callback_data: PostCallback
+) -> None:
+    if isinstance(callback.message, InaccessibleMessage) or not callback.message:
+        return
+
+    data = await state.get_data()
+    github_url = data.get("github_url")
+    if not github_url:
+        return
+
+    url_parts = github_url.rstrip("/").split("/")
+    owner, repo_name = url_parts[-2], url_parts[-1]
+
+    await try_edit_message(
+        callback.message,
+        f"🔄 <b>Processing Repository</b>\n\n"
+        f"<b>Repository:</b> {repo_name}\n"
+        f"<b>Author:</b> {owner}\n\n"
+        f"<i>Fetching data and generating content...</i>",
+    )
+
+    try:
+        settings = Settings()  # type: ignore
+
+        async with GitHubClient() as client:
+            enhanced_data = await client.get_enhanced_repository_data(
+                github_url,
+                settings.openai_api_key.get_secret_value(),
+                settings.openai_base_url,
+            )
+
+        can_submit, last_submission_date = await can_submit_app(enhanced_data.repository.id)
+
+        if not can_submit and last_submission_date:
+            if last_submission_date.tzinfo is None:
+                last_submission_date = last_submission_date.replace(tzinfo=UTC)
+
+            days_since_last = (datetime.now(tz=UTC) - last_submission_date).days
+            remaining_days = 90 - days_since_last
+
+            await try_edit_message(
+                callback.message,
+                f"🚫 <b>Repost Not Allowed</b>\n\n"
+                f"<b>Repository:</b> {repo_name}\n"
+                f"<b>Author:</b> {owner}\n\n"
+                f"This app was posted <b>{days_since_last} days ago</b>.\n"
+                f"Please wait <b>{remaining_days} more days</b> to repost.\n\n"
+                f"<i>3-month policy prevents channel spam.</i>",
+            )
+            await state.clear()
+            return
+
+        await show_post_preview(callback.message, state, enhanced_data)
+
+    except Exception as e:
+        await try_edit_message(
+            callback.message,
+            f"❌ <b>Processing Failed</b>\n\n"
+            f"<b>Repository:</b> <code>{github_url}</code>\n\n"
+            f"<b>Error:</b> <code>{str(e)[:200]}...</code>\n\n"
+            f"💡 Please try again with /post",
         )
         await state.clear()
 
@@ -553,165 +780,6 @@ async def cancel_callback_handler(
     await callback.answer("Post cancelled")
 
 
-def create_edit_message(field: EditField, enhanced_data: EnhancedRepositoryData) -> str:
-    match field:
-        case EditField.DESCRIPTION:
-            title = "📝 Edit Description"
-            current_value = get_post_description(
-                enhanced_data.repository, enhanced_data.ai_content
-            )
-            current_text = f"<i>{current_value or 'No description available'}</i>"
-            tips = [
-                "Keep it 2-3 sentences",
-                "Focus on user benefits",
-                "Explain what the app does",
-                "Avoid technical jargon",
-            ]
-            example = None
-
-        case EditField.TAGS:
-            title = "🏷️ Edit Tags"
-            current_value = get_post_tags(enhanced_data.repository, enhanced_data.ai_content)
-            current_text = (
-                " ".join(f"#{tag}" for tag in current_value)
-                if current_value
-                else "No tags available"
-            )
-            tips = [
-                "Use underscores for multi-word tags",
-                "Maximum 5-7 tags",
-                "Focus on functionality and category",
-                "Avoid generic tags",
-            ]
-            example = "media_player video audio streaming"
-
-        case EditField.FEATURES:
-            title = "⭐ Edit Key Features"
-            current_value = (
-                enhanced_data.ai_content.key_features if enhanced_data.ai_content else []
-            )
-            current_text = (
-                "\n".join(f"• {f}" for f in current_value)
-                if current_value
-                else "No features available"
-            )
-            tips = [
-                "Maximum 3-4 features",
-                "Focus on user benefits",
-                "Be specific and clear",
-                "Highlight unique selling points",
-            ]
-            example = (
-                "Supports all video formats\nCustom playback controls\nOffline viewing capability"
-            )
-
-        case EditField.LINKS:
-            title = "🔗 Edit Important Links"
-            current_value = (
-                enhanced_data.ai_content.important_links if enhanced_data.ai_content else []
-            )
-            current_text = (
-                "\n".join(f"• {link.title}: {link.url}" for link in current_value)
-                if current_value
-                else "No additional links available"
-            )
-            tips = [
-                "Maximum 2-3 links",
-                "Include download links",
-                "Add documentation if available",
-                "Verify all URLs work",
-            ]
-            example = (
-                "Download App: https://play.google.com/store/apps/details?id=com.app\n"
-                "Official Website: https://www.example.com"
-            )
-
-    suffix = " in this format:" if field == EditField.LINKS else "."
-
-    parts = [
-        f"{title}\n",
-        f"<b>Current {get_field_name(field).title()}:</b>",
-        current_text,
-        "",
-        f"Send the new {get_field_name(field)}{suffix}",
-    ]
-
-    if example:
-        parts.extend(["", "<b>Example:</b>", example])
-
-    parts.extend(["", "<b>Tips:</b>"] + [f"• {tip}" for tip in tips])
-
-    return "\n".join(parts)
-
-
-async def handle_field_edit(
-    callback: CallbackQuery, field: EditField, enhanced_data: EnhancedRepositoryData
-) -> None:
-    if isinstance(callback.message, InaccessibleMessage) or not callback.message:
-        return
-
-    edit_text = create_edit_message(field, enhanced_data)
-    keyboard = create_keyboard(KeyboardType.BACK_TO_EDIT)
-
-    await try_edit_message(callback.message, edit_text, keyboard)
-
-
-def format_enhanced_post(
-    repository: GitHubRepository, ai_content: AIGeneratedContent | None
-) -> str:
-    desc = (
-        ai_content.enhanced_description
-        if ai_content and ai_content.enhanced_description
-        else repository.description or ""
-    )
-    tags = (
-        ai_content.relevant_tags if ai_content and ai_content.relevant_tags else repository.topics
-    )[:5]
-
-    parts = [f"<b>{repository.name}</b>"]
-    if desc:
-        parts.append(f"<i>{desc}</i>")
-
-    features = ai_content.key_features if ai_content and ai_content.key_features else []
-    if features:
-        parts.append("✨ <b>Key Features:</b>\n" + "\n".join(f"• {f}" for f in features))
-
-    links_list = (ai_content.important_links if ai_content and ai_content.important_links else [])[
-        :3
-    ]
-    link_items = [f'• <a href="{repository.url}">GitHub Repository</a>'] + [
-        f'• <a href="{link.url}">{link.title}</a>' for link in links_list
-    ]
-    parts.append("🔗 <b>Links:</b>\n" + "\n".join(link_items))
-
-    hashtags = " ".join(f"#{t}" for t in tags)
-    author_lines = [f"👤 <b>Author:</b> <code>{repository.owner}</code>"]
-    if hashtags:
-        author_lines.append(f"🏷️ <b>Tags:</b> {hashtags}")
-
-    parts.append("\n".join(author_lines))
-    return "\n\n".join(parts)
-
-
-def get_post_description(
-    repository: GitHubRepository, ai_content: AIGeneratedContent | None
-) -> str | None:
-    return (
-        ai_content.enhanced_description
-        if ai_content and ai_content.enhanced_description
-        else repository.description
-    )
-
-
-def get_post_tags(
-    repository: GitHubRepository, ai_content: AIGeneratedContent | None
-) -> list[str]:
-    tags = (
-        ai_content.relevant_tags if ai_content and ai_content.relevant_tags else repository.topics
-    )
-    return tags[:7] if tags else []
-
-
 @router.callback_query(EditCallback.filter(F.action == EditAction.FIELD))
 async def edit_field_handler(
     callback: CallbackQuery, state: FSMContext, callback_data: EditCallback
@@ -741,84 +809,30 @@ async def edit_field_handler(
         await callback.answer(f"Edit {get_field_name(callback_data.field)} mode activated")
 
 
-def update_enhanced_data(  # noqa: C901
-    enhanced_data: EnhancedRepositoryData, field: EditField, new_text: str
+@router.callback_query(EditCallback.filter(F.action == EditAction.BACK_TO_MENU))
+async def back_to_edit_menu_handler(
+    callback: CallbackQuery, state: FSMContext, callback_data: EditCallback
 ) -> None:
-    match field:
-        case EditField.DESCRIPTION:
-            text = new_text.strip()
-            if enhanced_data.ai_content:
-                enhanced_data.ai_content.enhanced_description = text
-            else:
-                enhanced_data.repository.description = text
-
-        case EditField.TAGS:
-            tags = [
-                tag.strip().lower().replace(" ", "_")
-                for tag in re.split(r"[,\s]+", new_text.strip())
-                if tag.strip()
-            ]
-
-            if enhanced_data.ai_content:
-                enhanced_data.ai_content.relevant_tags = tags[:7]
-            else:
-                enhanced_data.repository.topics = tags[:7]
-
-        case EditField.FEATURES:
-            features = [
-                line.strip().lstrip("•").strip()
-                for line in new_text.replace(";", "\n").split("\n")
-                if line.strip()
-            ]
-
-            if enhanced_data.ai_content:
-                enhanced_data.ai_content.key_features = features[:4]
-
-        case EditField.LINKS:
-            links = []
-            for line in new_text.strip().split("\n"):
-                if ":" in line and "http" in line:
-                    title, url = line.split(":", 1)
-                    links.append(
-                        ImportantLink(title=title.strip(), url=url.strip(), type="website")
-                    )
-
-            if enhanced_data.ai_content:
-                enhanced_data.ai_content.important_links = links[:3]
-
-
-@router.message(PostStates.editing_description, F.text)
-@router.message(PostStates.editing_tags, F.text)
-@router.message(PostStates.editing_features, F.text)
-@router.message(PostStates.editing_links, F.text)
-async def handle_edit_state_input(message: Message, state: FSMContext) -> None:
-    if not message.text:
-        await message.reply("❗ <b>Invalid Input</b>\n\nSend the new value or /cancel to abort.")
+    if isinstance(callback.message, InaccessibleMessage) or not callback.message:
         return
 
-    data = await state.get_data()
-    enhanced_data, editing_field_str = data.get("enhanced_data"), data.get("editing_field")
-
-    if not enhanced_data or not editing_field_str:
-        await message.reply(
-            "❌ <b>Session Expired</b>\n\nEdit session expired. Please start over with /post."
-        )
-        await state.clear()
+    if not (await state.get_data()).get("enhanced_data"):
         return
 
-    try:
-        editing_field = EditField(editing_field_str)
-        update_enhanced_data(enhanced_data, editing_field, message.text)
-        await finalize_field_edit(message, state, enhanced_data, editing_field)
-    except ValueError:
-        await message.reply(
-            "❌ <b>Invalid Field</b>\n\nAn internal error occurred. Please try again or /cancel."
-        )
-    except Exception:
-        await message.reply(
-            f"❌ <b>Update Failed</b>\n\n"
-            f"Could not update {editing_field_str}. Please try again or /cancel."
-        )
+    await edit_post_handler(callback, state, PostCallback(action=PostAction.EDIT))
+    await callback.answer("Returned to edit menu")
+
+
+async def handle_field_edit(
+    callback: CallbackQuery, field: EditField, enhanced_data: EnhancedRepositoryData
+) -> None:
+    if isinstance(callback.message, InaccessibleMessage) or not callback.message:
+        return
+
+    edit_text = create_edit_message(field, enhanced_data)
+    keyboard = create_keyboard(KeyboardType.BACK_TO_EDIT)
+
+    await try_edit_message(callback.message, edit_text, keyboard)
 
 
 async def finalize_field_edit(
@@ -838,17 +852,3 @@ async def finalize_field_edit(
         f"The preview has been updated with your new content.\n\n"
         f"💡 You can continue editing, publish, or make further changes."
     )
-
-
-@router.callback_query(EditCallback.filter(F.action == EditAction.BACK_TO_MENU))
-async def back_to_edit_menu_handler(
-    callback: CallbackQuery, state: FSMContext, callback_data: EditCallback
-) -> None:
-    if isinstance(callback.message, InaccessibleMessage) or not callback.message:
-        return
-
-    if not (await state.get_data()).get("enhanced_data"):
-        return
-
-    await edit_post_handler(callback, state, PostCallback(action=PostAction.EDIT))
-    await callback.answer("Returned to edit menu")
