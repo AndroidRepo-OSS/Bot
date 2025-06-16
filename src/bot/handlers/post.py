@@ -154,6 +154,7 @@ async def try_edit_message(
 def format_enhanced_post(
     repository: GitHubRepository, ai_content: AIGeneratedContent | None
 ) -> str:
+    project_name = get_project_name(repository, ai_content)
     desc = (
         ai_content.enhanced_description
         if ai_content and ai_content.enhanced_description
@@ -163,7 +164,7 @@ def format_enhanced_post(
         ai_content.relevant_tags if ai_content and ai_content.relevant_tags else repository.topics
     )[:5]
 
-    parts = [f"<b>{repository.name}</b>"]
+    parts = [f"<b>{project_name}</b>"]
     if desc:
         parts.append(f"<i>{desc}</i>")
 
@@ -496,7 +497,8 @@ async def show_post_preview(
     banner_buffer = banner_generated = None
 
     try:
-        banner_buffer = generate_banner(repository.name)
+        project_name = get_project_name(repository, ai_content)
+        banner_buffer = generate_banner(project_name)
         banner_generated = True
     except Exception:
         banner_generated = False
@@ -526,9 +528,10 @@ async def show_post_preview(
         try:
             await send_banner_preview(message, banner_buffer, post_text, preview_header)
         except Exception:
+            project_name = get_project_name(repository, ai_content)
             await message.answer(
                 "❌ <b>Banner Error</b>\n\n"
-                f"Could not generate banner for <b>{repository.name}</b>.\n\n"
+                f"Could not generate banner for <b>{project_name}</b>.\n\n"
                 "<b>Next steps:</b>\n"
                 "• Try /post again to retry\n"
                 "• Check repository name validity\n\n"
@@ -536,9 +539,10 @@ async def show_post_preview(
             )
             await state.clear()
     else:
+        project_name = get_project_name(repository, ai_content)
         await message.answer(
             "❌ <b>Banner Generation Failed</b>\n\n"
-            f"Could not create banner for <b>{repository.name}</b>.\n\n"
+            f"Could not create banner for <b>{project_name}</b>.\n\n"
             "<b>Next steps:</b>\n"
             "• Try /post again to retry\n"
             "• Check repository name validity\n\n"
@@ -648,9 +652,10 @@ async def publish_post_handler(
 
     try:
         repository = enhanced_data.repository
+        project_name = get_project_name(repository, enhanced_data.ai_content)
         banner_input = BufferedInputFile(
             banner_buffer.getvalue(),
-            filename=f"{repository.name.lower().replace(' ', '_')}_banner.png",
+            filename=f"{project_name.lower().replace(' ', '_')}_banner.png",
         )
 
         sent_message = await callback.bot.send_photo(
@@ -663,6 +668,7 @@ async def publish_post_handler(
 
         success_text = (
             "✅ <b>Post Published Successfully!</b>\n\n"
+            f"<b>Project:</b> {project_name}\n"
             f"<b>Repository:</b> {repository.name}\n"
             f"<b>Author:</b> {repository.owner}\n\n"
             "<i>Post sent to channel and saved to database.</i>"
@@ -670,8 +676,10 @@ async def publish_post_handler(
         await try_edit_message(callback.message, success_text)
 
     except Exception as e:
+        project_name = get_project_name(enhanced_data.repository, enhanced_data.ai_content)
         error_text = (
             "❌ <b>Publishing Failed</b>\n\n"
+            f"<b>Project:</b> {project_name}\n"
             f"<b>Repository:</b> {enhanced_data.repository.name}\n"
             f"<b>Author:</b> {enhanced_data.repository.owner}\n\n"
             f"<b>Error:</b> {e!s}\n\n"
@@ -697,8 +705,10 @@ async def edit_post_handler(
 
     await state.set_state(PostStates.editing_post)
 
+    project_name = get_project_name(enhanced_data.repository, enhanced_data.ai_content)
     edit_text = (
         f"✏️ <b>Edit Post</b>\n\n"
+        f"<b>Project:</b> {project_name}\n"
         f"<b>Repository:</b> {enhanced_data.repository.name}\n\n"
         f"<b>Select field to update:</b>\n"
         f"• Description\n"
@@ -852,3 +862,7 @@ async def finalize_field_edit(
         f"The preview has been updated with your new content.\n\n"
         f"💡 You can continue editing, publish, or make further changes."
     )
+
+
+def get_project_name(repository: GitHubRepository, ai_content: AIGeneratedContent | None) -> str:
+    return ai_content.project_name if ai_content and ai_content.project_name else repository.name

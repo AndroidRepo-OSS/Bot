@@ -34,6 +34,9 @@ class ImportantLink(BaseModel):
 class AIGeneratedContent(BaseModel):
     """AI-generated content for repository posts."""
 
+    project_name: str = Field(
+        ..., description="The actual project name (may differ from repository name)"
+    )
     enhanced_description: str = Field(
         ..., description="User-focused description explaining benefits and problems solved"
     )

@@ -38,6 +38,12 @@ Focus on:
 - Who would find it useful
 
 Guidelines:
+- project_name: The actual project/app name (not necessarily the repository name)
+  - Project Name Guidelines:
+    - Identify the actual project name from README, description, or documentation
+    - The project name may differ from the repository name (e.g., "Signal" vs "Signal-Android")
+    - Look for app names, display names, or branding mentioned in the documentation
+    - If uncertain, use the project/repository name as a fallback
 - enhanced_description: 2-3 sentences, user benefits focused
 - relevant_tags: 5-7 tags using underscores (e.g., "media_player")
 - key_features: 3-4 user-facing features
@@ -52,19 +58,19 @@ Guidelines:
         readme_content: str | None,
         topics: list[str],
     ) -> str:
-        parts = [f"Project: {project_name}"]
+        parts = [f"Repository Name: {project_name}"]
 
         if description:
-            parts.append(f"Description: {description}")
+            parts.append(f"Repository Description: {description}")
 
         if topics:
-            parts.append(f"Tags: {', '.join(topics)}")
+            parts.append(f"Repository Tags: {', '.join(topics)}")
 
         if readme_content:
             content = (
                 readme_content[:2000] + "..." if len(readme_content) > 2000 else readme_content
             )
-            parts.append(f"Documentation: {content}")
+            parts.append(f"Documentation/README: {content}")
 
         return "\n\n".join(parts)
 
