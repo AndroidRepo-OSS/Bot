@@ -3,6 +3,8 @@
 
 from aiogram import Router
 
+from bot.filters import SudoersFilter
+
 from .handlers import (
     back_to_edit_router,
     back_to_preview_router,
@@ -20,6 +22,8 @@ from .handlers import (
 )
 
 router = Router(name="posts")
+router.message.filter(SudoersFilter())
+router.callback_query.filter(SudoersFilter())
 
 router.include_routers(
     post_command_router,

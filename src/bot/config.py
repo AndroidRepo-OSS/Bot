@@ -28,7 +28,6 @@ class Settings(BaseSettings):
     )
 
     openai_api_key: SecretStr = Field(description="OpenAI API key for content enhancement")
-
     openai_base_url: str = Field(
         default="https://api.openai.com/v1", description="OpenAI API base URL"
     )
