@@ -19,6 +19,7 @@ from .handlers import (
     publish_router,
     regenerate_router,
     repository_url_router,
+    scheduled_router,
 )
 
 router = Router(name="posts")
@@ -39,4 +40,5 @@ router.include_routers(
     cancel_callback_router,
     edit_field_router,
     back_to_edit_router,
+    scheduled_router,
 )

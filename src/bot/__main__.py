@@ -13,6 +13,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from .config import Settings
 from .database import db_manager
 from .modules.posts import router as posts_router
+from .scheduler import PostScheduler
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -33,6 +34,10 @@ async def main() -> None:
     defaults = DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True)
     bot = Bot(token=settings.bot_token.get_secret_value(), default=defaults)
 
+    scheduler = PostScheduler(bot, settings)
+    await scheduler.start()
+    logger.info("Post scheduler started")
+
     dp.include_routers(posts_router)
 
     logger.info("Starting bot...")
@@ -40,6 +45,7 @@ async def main() -> None:
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
+        await scheduler.stop()
         await bot.session.close()
         await db_manager.close_database()
         logger.info("Database connection closed")

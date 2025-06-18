@@ -14,6 +14,7 @@ from .post_command import router as post_command_router
 from .publish import router as publish_router
 from .regenerate import router as regenerate_router
 from .repository_url import router as repository_url_router
+from .scheduled import router as scheduled_router
 
 __all__ = (
     "back_to_edit_router",
@@ -29,4 +30,5 @@ __all__ = (
     "publish_router",
     "regenerate_router",
     "repository_url_router",
+    "scheduled_router",
 )

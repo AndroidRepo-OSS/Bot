@@ -12,7 +12,7 @@ from .models import Base
 
 
 class DatabaseConnection:
-    def __init__(self, database_path: str | Path = "data/apps.db"):
+    def __init__(self, database_path: str | Path = "data/database.db"):
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
 

@@ -17,12 +17,12 @@ router = Router(name="regenerate_post")
 async def regenerate_post_handler(
     callback: CallbackQuery, state: FSMContext, callback_data: PostCallback
 ) -> None:
-    if isinstance(callback.message, InaccessibleMessage):
+    if isinstance(callback.message, InaccessibleMessage) or not callback.message:
         return
 
     repository_url = (await state.get_data()).get("repository_url")
 
-    if not callback.message or not repository_url:
+    if not repository_url:
         return
 
     repository_cache.delete(repository_url)

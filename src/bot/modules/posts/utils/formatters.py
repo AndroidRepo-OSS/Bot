@@ -93,15 +93,12 @@ def _format_links_section(repository: Repository, ai_content: AIGeneratedContent
 
 
 def _format_author_section(repository: Repository, ai_content: AIGeneratedContent | None) -> str:
-    author_line = f"👤 <b>Author:</b> <code>{repository.owner}</code>"
-
     tags = _get_tags_for_post(repository, ai_content)
     if tags:
         hashtags = " ".join(f"#{tag}" for tag in tags)
-        tags_line = f"🏷️ <b>Tags:</b> {hashtags}"
-        return f"{author_line}\n{tags_line}"
+        return f"🏷️ <b>Tags:</b> {hashtags}"
 
-    return author_line
+    return ""
 
 
 def _get_tags_for_post(repository: Repository, ai_content: AIGeneratedContent | None) -> list[str]:

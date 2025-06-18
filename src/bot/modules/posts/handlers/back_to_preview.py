@@ -15,13 +15,13 @@ router = Router(name="back_to_preview")
 async def back_to_preview_handler(
     callback: CallbackQuery, state: FSMContext, callback_data: PostCallback
 ) -> None:
-    if isinstance(callback.message, InaccessibleMessage):
+    if isinstance(callback.message, InaccessibleMessage) or not callback.message:
         return
 
     data = await state.get_data()
     enhanced_data, post_text = data.get("enhanced_data"), data.get("post_text")
 
-    if not callback.message or not enhanced_data or not post_text:
+    if not enhanced_data or not post_text:
         return
 
     await state.set_state(PostStates.previewing_post)

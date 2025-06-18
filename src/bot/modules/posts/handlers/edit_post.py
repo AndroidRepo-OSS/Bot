@@ -6,13 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InaccessibleMessage
 
 from bot.modules.posts.callbacks import PostAction, PostCallback
-from bot.modules.posts.utils import (
-    KeyboardType,
-    PostStates,
-    create_keyboard,
-    get_project_name,
-    try_edit_message,
-)
+from bot.modules.posts.utils import KeyboardType, PostStates, create_keyboard, try_edit_message
 
 router = Router(name="edit_post")
 
@@ -32,16 +26,13 @@ async def edit_post_handler(
 
     await state.set_state(PostStates.editing_post)
 
-    project_name = get_project_name(enhanced_data.repository, enhanced_data.ai_content)
     edit_text = (
-        f"✏️ <b>Edit Post</b>\n\n"
-        f"<b>Project:</b> {project_name}\n"
-        f"<b>Repository:</b> {enhanced_data.repository.name}\n\n"
-        f"<b>Select field to update:</b>\n"
-        f"• Description\n"
-        f"• Tags\n"
-        f"• Features\n"
-        f"• Links"
+        "✏️ <b>Edit Post</b>\n\n"
+        "<b>Select field to update:</b>\n"
+        "• Description\n"
+        "• Tags\n"
+        "• Features\n"
+        "• Links"
     )
 
     await try_edit_message(callback.message, edit_text, create_keyboard(KeyboardType.EDIT))
