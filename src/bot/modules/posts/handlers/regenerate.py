@@ -8,7 +8,6 @@ from aiogram.types import CallbackQuery, InaccessibleMessage
 from bot.modules.posts.callbacks import PostAction, PostCallback
 from bot.modules.posts.handlers.confirm_post import confirm_post_handler
 from bot.modules.posts.utils import PostStates, try_edit_message
-from bot.utils.cache import repository_cache
 
 router = Router(name="regenerate_post")
 
@@ -25,13 +24,7 @@ async def regenerate_post_handler(
     if not repository_url:
         return
 
-    repository_cache.delete(repository_url)
-
-    regenerate_text = (
-        "🔄 <b>Regenerating Content</b>\n\n"
-        "Clearing cache and generating new content.\n\n"
-        "<i>Please wait...</i>"
-    )
+    regenerate_text = "🔄 <b>Regenerating Content</b>\n\n<i>Please wait...</i>"
 
     await try_edit_message(callback.message, regenerate_text)
 

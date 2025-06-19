@@ -9,7 +9,6 @@ from urllib.parse import urlparse
 
 import aiohttp
 
-from .cache import repository_cache
 from .models import EnhancedRepositoryData, GitLabRepository
 from .openai_client import OpenAIClient
 
@@ -112,23 +111,16 @@ class GitLabClient:
     async def get_enhanced_repository_data(
         self, gitlab_url: str, openai_api_key: str, openai_base_url: str | None = None
     ) -> EnhancedRepositoryData:
-        if cached_data := repository_cache.get(gitlab_url):
-            logger.info("Using cached data for repository: %s", gitlab_url)
-            return cached_data
-
         owner, repo = self._parse_gitlab_url(gitlab_url)
         logger.info("Fetching GitLab repository data: %s/%s", owner, repo)
 
         repository = await self._get_repository_data(owner, repo)
         ai_content = await self._get_ai_content(repository, openai_api_key, openai_base_url)
 
-        enhanced_data = EnhancedRepositoryData(
+        return EnhancedRepositoryData(
             repository=repository,
             ai_content=ai_content,
         )
-
-        repository_cache.set(gitlab_url, enhanced_data)
-        return enhanced_data
 
     @staticmethod
     async def _get_ai_content(
