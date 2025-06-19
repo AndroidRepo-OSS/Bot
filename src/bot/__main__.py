@@ -10,7 +10,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from .config import Settings
+from .config import settings
 from .database import db_manager
 from .modules.posts import router as posts_router
 from .scheduler import PostScheduler
@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 async def main() -> None:
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
-    settings = Settings()  # type: ignore
 
     await db_manager.init_database()
     logger.info("Database initialized")

@@ -36,3 +36,6 @@ class Settings(BaseSettings):
     @property
     def bot_id(self) -> str:
         return self.bot_token.get_secret_value().split(":")[0]
+
+
+settings = Settings()  # type: ignore

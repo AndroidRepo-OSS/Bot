@@ -8,7 +8,7 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import BufferedInputFile, CallbackQuery, InaccessibleMessage
 
-from bot.config import Settings
+from bot.config import Settings, settings
 from bot.database import has_pending_scheduled_post, schedule_post, submit_app
 from bot.modules.posts.callbacks import PostAction, PostCallback
 from bot.modules.posts.utils import get_project_name, try_edit_message
@@ -60,8 +60,6 @@ async def _validate_settings_and_banner(
 ) -> Settings | None:
     if isinstance(callback.message, InaccessibleMessage) or not callback.message:
         return None
-
-    settings = Settings()  # type: ignore
 
     if not settings.channel_id:
         error_text = (

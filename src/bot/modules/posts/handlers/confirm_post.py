@@ -9,7 +9,7 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import BufferedInputFile, CallbackQuery, InaccessibleMessage, Message
 
-from bot.config import Settings
+from bot.config import settings
 from bot.database import can_submit_app
 from bot.modules.posts.callbacks import PostAction, PostCallback
 from bot.modules.posts.utils import (
@@ -67,7 +67,6 @@ async def confirm_post_handler(
                 "🤖 <b>Generating AI Content</b>\n\n<i>Creating enhanced content...</i>",
             )
 
-            settings = Settings()  # type: ignore
             enhanced_data = await client.get_enhanced_repository_data(
                 repository_url,
                 settings.openai_api_key.get_secret_value(),
