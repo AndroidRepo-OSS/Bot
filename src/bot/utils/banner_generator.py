@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import random
-from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
 from io import BytesIO
@@ -259,26 +258,5 @@ def generate_banner(title_text: str) -> BytesIO:
         image.save(buffer, format="PNG", optimize=True, quality=95)
         buffer.seek(0)
         return buffer
-    finally:
-        image.close()
-
-
-@contextmanager
-def banner_context(title_text: str):
-    banner_buffer = None
-    try:
-        banner_buffer = generate_banner(title_text)
-        yield banner_buffer
-    finally:
-        if banner_buffer:
-            banner_buffer.close()
-
-
-def generate_banner_file(title_text: str, output_filename: str) -> Path:
-    image = _generate_banner_core(title_text)
-
-    try:
-        image.save(output_filename, format="PNG", optimize=True, quality=95)
-        return Path(output_filename)
     finally:
         image.close()

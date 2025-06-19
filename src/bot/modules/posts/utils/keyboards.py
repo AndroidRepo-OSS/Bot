@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
+from enum import Enum
+
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -12,9 +14,14 @@ from bot.modules.posts.callbacks import (
     PostCallback,
 )
 
-from .models import KeyboardType
-
 ButtonConfig = tuple[str, PostCallback | EditCallback]
+
+
+class KeyboardType(Enum):
+    CONFIRMATION = "confirmation"
+    PREVIEW = "preview"
+    EDIT = "edit"
+    BACK_TO_EDIT = "back_to_edit"
 
 
 def create_keyboard(keyboard_type: KeyboardType) -> InlineKeyboardMarkup:

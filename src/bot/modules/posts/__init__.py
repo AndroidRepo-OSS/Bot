@@ -6,9 +6,7 @@ from aiogram import Router
 from bot.filters import SudoersFilter
 
 from .handlers import (
-    back_to_edit_router,
     back_to_preview_router,
-    cancel_callback_router,
     cancel_command_router,
     confirm_post_router,
     edit_field_router,
@@ -37,8 +35,6 @@ router.include_routers(
     edit_post_router,
     regenerate_router,
     back_to_preview_router,
-    cancel_callback_router,
     edit_field_router,
-    back_to_edit_router,
     scheduled_router,
 )

@@ -2,7 +2,6 @@
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
 import re
-from enum import Enum
 
 from aiogram.fsm.state import State, StatesGroup
 
@@ -18,10 +17,3 @@ class PostStates(StatesGroup):
     editing_tags = State()
     editing_features = State()
     editing_links = State()
-
-
-class KeyboardType(Enum):
-    CONFIRMATION = "confirmation"
-    PREVIEW = "preview"
-    EDIT = "edit"
-    BACK_TO_EDIT = "back_to_edit"

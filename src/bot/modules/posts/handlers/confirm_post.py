@@ -13,13 +13,13 @@ from bot.config import settings
 from bot.database import can_submit_app
 from bot.modules.posts.callbacks import PostAction, PostCallback
 from bot.modules.posts.utils import (
+    KeyboardType,
     PostStates,
+    create_keyboard,
     format_enhanced_post,
     get_project_name,
     try_edit_message,
 )
-from bot.modules.posts.utils.keyboards import create_keyboard
-from bot.modules.posts.utils.models import KeyboardType
 from bot.utils.banner_generator import generate_banner
 from bot.utils.repository_client import RepositoryClient
 

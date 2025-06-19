@@ -24,8 +24,5 @@ async def post_command_handler(message: Message, state: FSMContext) -> None:
     await message.reply(
         "📱 <b>Create Repository Post</b>\n\n"
         "Send a GitHub or GitLab repository URL to generate a post.\n\n"
-        "<b>Examples:</b>\n"
-        "<code>https://github.com/user/repository</code>\n"
-        "<code>https://gitlab.com/user/repository</code>\n\n"
         "💡 Use /cancel to abort anytime."
     )

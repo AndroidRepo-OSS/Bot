@@ -11,9 +11,10 @@ from bot.modules.posts.utils import (
     PostStates,
     create_keyboard,
     get_field_name,
+    get_post_description,
+    get_post_tags,
     try_edit_message,
 )
-from bot.modules.posts.utils.formatters import get_post_description, get_post_tags
 from bot.utils.models import EnhancedRepositoryData
 
 router = Router(name="edit_field")

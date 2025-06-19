@@ -1,9 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
-from .back_to_edit import router as back_to_edit_router
 from .back_to_preview import router as back_to_preview_router
-from .cancel_callback import router as cancel_callback_router
 from .cancel_command import router as cancel_command_router
 from .confirm_post import router as confirm_post_router
 from .edit_field import router as edit_field_router
@@ -17,9 +15,7 @@ from .repository_url import router as repository_url_router
 from .scheduled import router as scheduled_router
 
 __all__ = (
-    "back_to_edit_router",
     "back_to_preview_router",
-    "cancel_callback_router",
     "cancel_command_router",
     "confirm_post_router",
     "edit_field_router",

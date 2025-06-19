@@ -33,78 +33,93 @@ def get_post_description(
 
 def get_post_tags(repository: Repository, ai_content: AIGeneratedContent | None) -> list[str]:
     if ai_content and ai_content.relevant_tags:
-        tags = ai_content.relevant_tags
+        available_tags = ai_content.relevant_tags
     else:
-        tags = repository.topics
+        available_tags = repository.topics
 
-    return tags[:7] if tags else []
+    return available_tags or []
 
 
 def format_enhanced_post(repository: Repository, ai_content: AIGeneratedContent | None) -> str:
-    post_parts = []
+    post_sections = []
 
-    project_name = get_project_name(repository, ai_content)
-    post_parts.append(f"<b>{project_name}</b>")
+    title_section = _format_title_section(repository, ai_content)
+    post_sections.append(title_section)
 
-    description = _get_description_for_post(repository, ai_content)
-    if description:
-        post_parts.append(f"<i>{description}</i>")
+    description_section = _format_description_section(repository, ai_content)
+    if description_section:
+        post_sections.append(description_section)
 
     features_section = _format_features_section(ai_content)
     if features_section:
-        post_parts.append(features_section)
+        post_sections.append(features_section)
 
     links_section = _format_links_section(repository, ai_content)
-    post_parts.append(links_section)
+    post_sections.append(links_section)
 
-    author_section = _format_author_section(repository, ai_content)
-    post_parts.append(author_section)
+    tags_section = _format_tags_section(repository, ai_content)
+    if tags_section:
+        post_sections.append(tags_section)
 
-    return "\n\n".join(post_parts)
+    return "\n\n".join(post_sections)
 
 
-def _get_description_for_post(
+def _format_title_section(repository: Repository, ai_content: AIGeneratedContent | None) -> str:
+    project_name = get_project_name(repository, ai_content)
+    return f"<b>{project_name}</b>"
+
+
+def _format_description_section(
     repository: Repository, ai_content: AIGeneratedContent | None
 ) -> str:
     if ai_content and ai_content.enhanced_description:
-        return ai_content.enhanced_description
-    return repository.description or ""
+        description = ai_content.enhanced_description
+    else:
+        description = repository.description or ""
+
+    return f"<i>{description}</i>" if description else ""
 
 
 def _format_features_section(ai_content: AIGeneratedContent | None) -> str:
     if not ai_content or not ai_content.key_features:
         return ""
 
-    feature_list = "\n".join(f"• {feature}" for feature in ai_content.key_features)
-    return f"✨ <b>Key Features:</b>\n{feature_list}"
+    feature_items = "\n".join(f"• {feature}" for feature in ai_content.key_features)
+    return f"✨ <b>Key Features:</b>\n{feature_items}"
 
 
 def _format_links_section(repository: Repository, ai_content: AIGeneratedContent | None) -> str:
-    platform_name = "GitHub" if isinstance(repository, GitHubRepository) else "GitLab"
+    platform_name = _get_platform_name(repository)
 
     link_items = [f'• <a href="{repository.url}">{platform_name} Repository</a>']
 
     if ai_content and ai_content.important_links:
-        additional_links = ai_content.important_links[:3]
-        link_items.extend(f'• <a href="{link.url}">{link.title}</a>' for link in additional_links)
+        additional_link_items = [
+            f'• <a href="{link.url}">{link.title}</a>' for link in ai_content.important_links
+        ]
+        link_items.extend(additional_link_items)
 
     links_text = "\n".join(link_items)
     return f"🔗 <b>Links:</b>\n{links_text}"
 
 
-def _format_author_section(repository: Repository, ai_content: AIGeneratedContent | None) -> str:
-    tags = _get_tags_for_post(repository, ai_content)
-    if tags:
-        hashtags = " ".join(f"#{tag}" for tag in tags)
-        return f"🏷️ <b>Tags:</b> {hashtags}"
+def _get_platform_name(repository: Repository) -> str:
+    return "GitHub" if isinstance(repository, GitHubRepository) else "GitLab"
 
-    return ""
+
+def _format_tags_section(repository: Repository, ai_content: AIGeneratedContent | None) -> str:
+    available_tags = _get_tags_for_post(repository, ai_content)
+    if not available_tags:
+        return ""
+
+    hashtags = " ".join(f"#{tag}" for tag in available_tags)
+    return f"🏷️ <b>Tags:</b> {hashtags}"
 
 
 def _get_tags_for_post(repository: Repository, ai_content: AIGeneratedContent | None) -> list[str]:
     if ai_content and ai_content.relevant_tags:
-        tags = ai_content.relevant_tags
+        available_tags = ai_content.relevant_tags
     else:
-        tags = repository.topics
+        available_tags = repository.topics
 
-    return tags[:5] if tags else []
+    return available_tags or []

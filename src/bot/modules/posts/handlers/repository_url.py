@@ -20,10 +20,7 @@ async def repository_url_handler(message: Message, state: FSMContext) -> None:
     if not message.text:
         await message.reply(
             "❌ <b>Invalid Input</b>\n\n"
-            "Please send a valid repository URL.\n\n"
-            "<b>Examples:</b>\n"
-            "<code>https://github.com/user/repository</code>\n"
-            "<code>https://gitlab.com/user/repository</code>"
+            "Please provide a valid repository URL from GitHub or GitLab.\n\n"
         )
         return
 
@@ -32,9 +29,6 @@ async def repository_url_handler(message: Message, state: FSMContext) -> None:
         await message.reply(
             "❌ <b>Invalid Repository URL</b>\n\n"
             "Please provide a valid repository URL from GitHub or GitLab.\n\n"
-            "<b>Examples:</b>\n"
-            "<code>https://github.com/user/repository</code>\n"
-            "<code>https://gitlab.com/user/repository</code>\n\n"
             "💡 Use /cancel to abort."
         )
         return
