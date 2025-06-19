@@ -29,6 +29,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def ensure_timezone_aware(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt
+
+
 class PostScheduler:
     def __init__(self, bot: Bot, settings: Settings) -> None:
         self.bot = bot
@@ -70,6 +76,8 @@ class PostScheduler:
         slot: datetime,
         interval_minutes: int = 15,
     ) -> datetime:
+        slot = ensure_timezone_aware(slot)
+
         minute = (slot.minute // interval_minutes) * interval_minutes
         if slot.minute % interval_minutes:
             minute += interval_minutes
@@ -87,9 +95,11 @@ class PostScheduler:
         banner_filename: str,
     ) -> None:
         job_id = f"post_{post.id}_{post.repository_id}"
-        run_date = self._round_slot(post.scheduled_time)
 
-        if run_date != post.scheduled_time:
+        scheduled_time = ensure_timezone_aware(post.scheduled_time)
+        run_date = self._round_slot(scheduled_time)
+
+        if run_date != scheduled_time:
             await update_scheduled_post_time(post.id, run_date)
 
         self.scheduler.add_job(
@@ -154,7 +164,9 @@ class PostScheduler:
 
             for post in pending_posts:
                 job_id = f"post_{post.id}_{post.repository_id}"
-                run_date = self._round_slot(post.scheduled_time)
+
+                scheduled_time = ensure_timezone_aware(post.scheduled_time)
+                run_date = self._round_slot(scheduled_time)
 
                 self.scheduler.add_job(
                     self._publish_scheduled_post,
@@ -181,7 +193,9 @@ class PostScheduler:
     async def _handle_missed_post(self, post: ScheduledPost) -> None:
         try:
             current_time = datetime.now(UTC)
-            time_diff = current_time - post.scheduled_time
+
+            scheduled_time = ensure_timezone_aware(post.scheduled_time)
+            time_diff = current_time - scheduled_time
 
             if time_diff <= timedelta(hours=2):
                 logger.info(
