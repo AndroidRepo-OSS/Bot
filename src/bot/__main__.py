@@ -12,7 +12,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from .config import settings
 from .database import db_manager
-from .modules.posts import router as posts_router
+from .handlers.posts import router as posts_router
 from .scheduler import PostScheduler
 
 logging.basicConfig(

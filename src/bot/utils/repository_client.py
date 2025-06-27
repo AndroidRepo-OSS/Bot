@@ -4,12 +4,12 @@
 from __future__ import annotations
 
 import logging
-from enum import Enum
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 import aiohttp
 
+from .enums import Platform
 from .github_client import GitHubClient
 from .gitlab_client import GitLabClient
 from .models import EnhancedRepositoryData
@@ -28,22 +28,6 @@ class InvalidRepositoryURLError(ValueError):
     pass
 
 
-class Platform(Enum):
-    GITHUB = "github.com"
-    GITLAB = "gitlab.com"
-
-    @classmethod
-    def from_url(cls, url: str) -> Platform:
-        netloc = urlparse(url.strip()).netloc
-
-        for platform in cls:
-            if netloc == platform.value:
-                return platform
-
-        msg = f"Unsupported platform: {netloc}"
-        raise UnsupportedPlatformError(msg)
-
-
 def _validate_repository_url(url: str) -> None:
     try:
         parsed = urlparse(url.strip())
@@ -52,9 +36,10 @@ def _validate_repository_url(url: str) -> None:
             msg = "URL must have a valid domain"
             raise InvalidRepositoryURLError(msg)
 
-        if parsed.netloc not in {platform.value for platform in Platform}:
-            msg = f"Unsupported platform: {parsed.netloc}"
-            raise UnsupportedPlatformError(msg)
+        try:
+            Platform.from_url(url)
+        except ValueError as e:
+            raise UnsupportedPlatformError(str(e)) from e
 
         path_parts = [part for part in parsed.path.strip("/").split("/") if part]
         if len(path_parts) < 2:
@@ -93,37 +78,32 @@ class RepositoryClient:
         except (InvalidRepositoryURLError, UnsupportedPlatformError):
             return False
 
-    async def get_basic_repository_data(self, repository_url: str):
-        _validate_repository_url(repository_url)
-
+    def _get_client(self, platform: Platform):
         if not self._session:
             msg = "Client session not initialized. Use 'async with RepositoryClient()' pattern."
             raise RuntimeError(msg)
 
+        client_map = {
+            Platform.GITHUB: GitHubClient,
+            Platform.GITLAB: GitLabClient,
+        }
+        return client_map[platform](self._session)
+
+    async def get_basic_repository_data(self, repository_url: str):
+        _validate_repository_url(repository_url)
         platform = Platform.from_url(repository_url)
 
-        if platform == Platform.GITHUB:
-            async with GitHubClient(self._session) as client:
-                owner, repo = client._parse_github_url(repository_url)
-                return await client._get_repository_data(owner, repo)
-        else:
-            async with GitLabClient(self._session) as client:
-                owner, repo = client._parse_gitlab_url(repository_url)
-                return await client._get_repository_data(owner, repo)
+        async with self._get_client(platform) as client:
+            owner, repo = client._parse_url(repository_url)
+            return await client._get_repository_data(owner, repo)
 
     async def get_enhanced_repository_data(
         self, repository_url: str, openai_api_key: str, *, openai_base_url: str | None = None
     ) -> EnhancedRepositoryData:
         _validate_repository_url(repository_url)
-
-        if not self._session:
-            msg = "Client session not initialized. Use 'async with RepositoryClient()' pattern."
-            raise RuntimeError(msg)
-
         platform = Platform.from_url(repository_url)
-        client_class = GitHubClient if platform == Platform.GITHUB else GitLabClient
 
-        async with client_class(self._session) as client:
+        async with self._get_client(platform) as client:
             return await client.get_enhanced_repository_data(
                 repository_url, openai_api_key, openai_base_url
             )
