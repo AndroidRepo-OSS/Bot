@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, select
 
-from bot.utils.models import GitHubRepository
+from bot.utils.models import GitHubRepository, GitLabRepository
 
 from .connection import db_manager
 from .models import AppSubmission, ScheduledPost
@@ -32,7 +32,9 @@ async def has_pending_scheduled_post(repository_id: int) -> bool:
 
 
 def _update_submission_data(
-    submission: AppSubmission, repository: GitHubRepository, channel_message_id: int | None = None
+    submission: AppSubmission,
+    repository: GitHubRepository | GitLabRepository,
+    channel_message_id: int | None = None,
 ) -> None:
     submission.repository_id = repository.id
     submission.repository_name = repository.name
@@ -73,7 +75,7 @@ async def can_submit_app(repository_id: int) -> tuple[bool, datetime | None]:
 
 
 async def submit_app(
-    repository: GitHubRepository, channel_message_id: int | None = None
+    repository: GitHubRepository | GitLabRepository, channel_message_id: int | None = None
 ) -> AppSubmission:
     db = db_manager.get_database()
 
@@ -101,7 +103,7 @@ async def submit_app(
 
 
 async def schedule_post(
-    repository: GitHubRepository,
+    repository: GitHubRepository | GitLabRepository,
     post_text: str,
     banner_buffer: BytesIO,
     banner_filename: str,

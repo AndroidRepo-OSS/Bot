@@ -8,8 +8,3 @@ class PostStates(StatesGroup):
     waiting_for_repository_url = State()
     waiting_for_confirmation = State()
     previewing_post = State()
-    editing_post = State()
-    editing_description = State()
-    editing_tags = State()
-    editing_features = State()
-    editing_links = State()
