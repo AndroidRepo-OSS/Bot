@@ -202,13 +202,31 @@ async def get_last_post_time() -> datetime | None:
         )
         last_app = (await session.execute(app_stmt)).scalar_one_or_none()
 
+        scheduled_stmt = (
+            select(ScheduledPost).order_by(ScheduledPost.scheduled_time.desc()).limit(1)
+        )
+        last_scheduled = (await session.execute(scheduled_stmt)).scalar_one_or_none()
+
+        last_times = []
+
         if last_app:
             app_time = last_app.submitted_at
             if app_time.tzinfo is None:
                 app_time = app_time.replace(tzinfo=UTC)
             else:
                 app_time = app_time.astimezone(UTC)
-            return app_time
+            last_times.append(app_time)
+
+        if last_scheduled:
+            scheduled_time = last_scheduled.scheduled_time
+            if scheduled_time.tzinfo is None:
+                scheduled_time = scheduled_time.replace(tzinfo=UTC)
+            else:
+                scheduled_time = scheduled_time.astimezone(UTC)
+            last_times.append(scheduled_time)
+
+        if last_times:
+            return max(last_times)
 
         return None
 
@@ -234,11 +252,7 @@ async def get_next_available_slot_with_lock(base_time: datetime | None = None) -
             else:
                 last_post_time = last_post_time.astimezone(UTC)
 
-            time_since_last = base_time - last_post_time
-            if time_since_last >= timedelta(hours=1):
-                return base_time
-
-            next_slot = last_post_time + timedelta(hours=1)
+            next_slot = max(base_time, last_post_time + timedelta(hours=1))
 
             max_attempts = 24
             attempts = 0
@@ -291,3 +305,24 @@ async def update_scheduled_post_time(post_id: int, new_scheduled_time: datetime)
         if scheduled_post:
             scheduled_post.scheduled_time = new_scheduled_time
             await session.commit()
+
+
+async def delete_scheduled_post(post_id: int) -> bool:
+    async for session in database.get_session():
+        try:
+            stmt = select(ScheduledPost).where(ScheduledPost.id == post_id)
+            result = await session.execute(stmt)
+            scheduled_post = result.scalar_one_or_none()
+
+            if scheduled_post:
+                await session.delete(scheduled_post)
+                await session.commit()
+                return True
+            return False
+        except Exception as e:
+            await session.rollback()
+            logger.error("Failed to delete scheduled post %d: %s", post_id, e)
+            raise
+
+    msg = "Failed to delete scheduled post"
+    raise RuntimeError(msg)

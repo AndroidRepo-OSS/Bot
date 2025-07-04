@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
+import base64
 import logging
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
@@ -40,14 +41,23 @@ class PostScheduler:
         self.bot = bot
         self.settings = settings
 
-        data_store = SQLAlchemyDataStore("sqlite:///data/scheduler_jobs.db")
+        data_store = SQLAlchemyDataStore(
+            "sqlite:///data/scheduler_jobs.db", start_from_scratch=False
+        )
         event_broker = LocalEventBroker()
         self.scheduler = AsyncScheduler(data_store, event_broker)
         self._started: bool = False
 
     async def __aenter__(self) -> Self:
         await self.scheduler.__aenter__()
-        await self.start()
+        if not self._started:
+            await self.scheduler.add_schedule(
+                self._cleanup_old_posts, IntervalTrigger(hours=24), id="cleanup_old_posts"
+            )
+            await self.scheduler.add_schedule(
+                self._database_maintenance, IntervalTrigger(days=7), id="database_maintenance"
+            )
+            logger.info("Post scheduler started")
         self._started = True
         return self
 
@@ -61,16 +71,6 @@ class PostScheduler:
             await self.scheduler.__aexit__(exc_type, exc_val, exc_tb)
             self._started = False
             logger.info("Post scheduler stopped")
-
-    async def start(self) -> None:
-        if not self._started:
-            await self.scheduler.add_schedule(
-                self._cleanup_old_posts, IntervalTrigger(hours=24), id="cleanup_old_posts"
-            )
-            await self.scheduler.add_schedule(
-                self._database_maintenance, IntervalTrigger(days=7), id="database_maintenance"
-            )
-            logger.info("Post scheduler started")
 
     @staticmethod
     async def _cleanup_old_posts() -> None:
@@ -91,12 +91,6 @@ class PostScheduler:
             logger.info("Database maintenance completed")
         except Exception as e:
             logger.error("Failed to perform database maintenance: %s", e)
-
-    async def stop(self) -> None:
-        if self._started:
-            await self.scheduler.__aexit__(None, None, None)
-            self._started = False
-            logger.info("Post scheduler stopped")
 
     @staticmethod
     def round_slot(
@@ -140,15 +134,13 @@ class PostScheduler:
         if last_post_time:
             time_diff_hours = (scheduled_time - last_post_time).total_seconds() / 3600
             if time_diff_hours < 1.0:
-                min_allowed_time = last_post_time + timedelta(hours=1)
-                if scheduled_time < min_allowed_time:
-                    scheduled_time = min_allowed_time
-                    logger.info(
-                        "Adjusted scheduled time for post %d to maintain 1-hour interval. "
-                        "New time: %s",
-                        post.id,
-                        scheduled_time,
-                    )
+                scheduled_time = last_post_time + timedelta(hours=1)
+                logger.info(
+                    "Adjusted scheduled time for post %d to maintain 1-hour interval. "
+                    "New time: %s",
+                    post.id,
+                    scheduled_time,
+                )
 
         run_date = self.round_slot(scheduled_time)
 
@@ -156,53 +148,78 @@ class PostScheduler:
             await update_scheduled_post_time(post.id, run_date)
 
         try:
+            banner_data = banner_buffer.getvalue()
+            if not isinstance(banner_data, bytes):
+                banner_data = bytes(banner_data)
+
+            banner_b64 = base64.b64encode(banner_data).decode("utf-8")
+
             await self.scheduler.add_schedule(
-                self._publish_scheduled_post,
+                publish_scheduled_post,
                 DateTrigger(run_date),
-                args=[post.id, post_text, banner_buffer.getvalue(), banner_filename],
+                args=[
+                    int(post.id),
+                    str(post_text),
+                    banner_b64,
+                    str(banner_filename),
+                    str(self.settings.channel_id),
+                    str(self.bot.token),
+                ],
                 id=job_id,
                 metadata={"job_id": job_id, "scheduled_time": str(run_date)},
             )
-        except Exception as e:
-            logger.error("Failed to schedule post %d: %s", post.id, e)
-            msg = f"Failed to schedule post {post.id}"
-            raise RuntimeError(msg) from e
-
-        logger.info(
-            "Scheduled post for %s at %s (Job ID: %s)",
-            post.repository_full_name,
-            run_date,
-            job_id,
-        )
-
-    async def _publish_scheduled_post(
-        self, post_id: int, post_text: str, banner_data: bytes, banner_filename: str
-    ) -> None:
-        try:
-            banner_input = BufferedInputFile(banner_data, filename=banner_filename)
-
-            sent_message = await self.bot.send_photo(
-                chat_id=self.settings.channel_id,
-                photo=banner_input,
-                caption=post_text,
+            logger.info(
+                "Scheduled post for %s at %s (Job ID: %s)",
+                post.repository_full_name,
+                run_date,
+                job_id,
             )
-
-            try:
-                await update_scheduled_post_as_published(post_id, sent_message.message_id)
-                logger.info("Successfully published scheduled post %s", post_id)
-            except Exception as db_error:
-                logger.error(
-                    "Published post %s to channel but failed to update database: %s",
-                    post_id,
-                    db_error,
-                )
-                logger.info("Post was sent with message_id: %s", sent_message.message_id)
-                raise
-
         except Exception as e:
-            logger.error("Failed to publish scheduled post %s: %s", post_id, e)
-            raise
+            logger.exception("Failed to schedule post %d: %s", post.id, e)
+            msg = f"Failed to schedule post {post.id}: {e!s}"
+            raise RuntimeError(msg) from e
 
     @staticmethod
     async def get_next_available_slot(base_time: datetime | None = None) -> datetime:
         return await get_next_available_slot_with_lock(base_time)
+
+
+async def publish_scheduled_post(
+    post_id: int,
+    post_text: str,
+    banner_b64: str,
+    banner_filename: str,
+    channel_id: str,
+    bot_token: str,
+) -> None:
+    logger = logging.getLogger(__name__)
+
+    try:
+        bot = Bot(token=bot_token)
+
+        banner_data = base64.b64decode(banner_b64)
+        banner_input = BufferedInputFile(banner_data, filename=banner_filename)
+
+        sent_message = await bot.send_photo(
+            chat_id=int(channel_id),
+            photo=banner_input,
+            caption=post_text,
+        )
+
+        try:
+            await update_scheduled_post_as_published(post_id, sent_message.message_id)
+            logger.info("Successfully published scheduled post %s", post_id)
+        except Exception as db_error:
+            logger.error(
+                "Published post %s to channel but failed to update database: %s",
+                post_id,
+                db_error,
+            )
+            logger.info("Post was sent with message_id: %s", sent_message.message_id)
+            raise
+        finally:
+            await bot.session.close()
+
+    except Exception as e:
+        logger.error("Failed to publish scheduled post %s: %s", post_id, e)
+        raise

@@ -19,7 +19,13 @@ from aiogram.types import (
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import Settings, settings
-from bot.database import can_submit_app, has_pending_scheduled_post, schedule_post, submit_app
+from bot.database import (
+    can_submit_app,
+    delete_scheduled_post,
+    has_pending_scheduled_post,
+    schedule_post,
+    submit_app,
+)
 from bot.database.operations import get_scheduled_posts_after_time
 from bot.filters.sudo import SudoersFilter
 from bot.scheduler import PostScheduler
@@ -31,7 +37,7 @@ from bot.utils.states import PostStates
 
 router = Router(name="posts")
 router.message.filter(SudoersFilter(), F.chat.type == ChatType.PRIVATE)
-router.callback_query.filter(SudoersFilter(), F.chat.type == ChatType.PRIVATE)
+router.callback_query.filter(SudoersFilter())
 
 
 def get_project_name(enhanced_data: EnhancedRepositoryData) -> str:
@@ -196,31 +202,38 @@ async def _handle_scheduling(
             "<i>To avoid spam, only one post per repository can be scheduled.</i>"
         )
 
-    next_slot = await scheduler.get_next_available_slot()
-    rounded_slot = scheduler.round_slot(next_slot)
-    job_id = f"post_{repository.id}_{int(rounded_slot.timestamp())}"
+    try:
+        next_slot = await scheduler.get_next_available_slot()
+        rounded_slot = scheduler.round_slot(next_slot)
+        job_id = f"post_{repository.id}_{int(rounded_slot.timestamp())}"
 
-    scheduled_post = await schedule_post(
-        repository=repository,
-        post_text=post_text,
-        banner_buffer=banner_buffer,
-        banner_filename=banner_filename,
-        scheduled_time=rounded_slot,
-        job_id=job_id,
-    )
+        scheduled_post = await schedule_post(
+            repository=repository,
+            post_text=post_text,
+            banner_buffer=banner_buffer,
+            banner_filename=banner_filename,
+            scheduled_time=rounded_slot,
+            job_id=job_id,
+        )
 
-    await scheduler.schedule_post(
-        post=scheduled_post,
-        post_text=post_text,
-        banner_buffer=banner_buffer,
-        banner_filename=banner_filename,
-    )
+        try:
+            await scheduler.schedule_post(
+                post=scheduled_post,
+                post_text=post_text,
+                banner_buffer=banner_buffer,
+                banner_filename=banner_filename,
+            )
+        except Exception as scheduler_error:
+            await delete_scheduled_post(scheduled_post.id)
+            raise scheduler_error
 
-    return (
-        "⏰ <b>Post Scheduled Successfully!</b>\n\n"
-        f"<b>Scheduled for:</b> {rounded_slot.strftime('%Y-%m-%d %H:%M UTC')}\n\n"
-        "<i>Post will be automatically published at the scheduled time.</i>"
-    )
+        return (
+            "⏰ <b>Post Scheduled Successfully!</b>\n\n"
+            f"<b>Scheduled for:</b> {rounded_slot.strftime('%Y-%m-%d %H:%M UTC')}\n\n"
+            "<i>Post will be automatically published at the scheduled time.</i>"
+        )
+    except Exception as e:
+        return f"❌ <b>Scheduling Failed</b>\n\n{e!s}"
 
 
 async def process_post_publication(
@@ -243,21 +256,26 @@ async def process_post_publication(
 
     current_time = datetime.now(UTC)
 
-    async with PostScheduler(callback.bot, settings) as scheduler:
-        next_slot = await scheduler.get_next_available_slot(current_time)
-        time_diff = (scheduler.round_slot(next_slot) - current_time).total_seconds()
+    try:
+        async with PostScheduler(callback.bot, settings) as scheduler:
+            next_slot = await scheduler.get_next_available_slot(current_time)
+            time_diff = (next_slot - current_time).total_seconds()
 
-        if time_diff <= 60:
-            result_text = await _handle_publication(
-                callback, settings, post_text, banner_buffer, banner_filename, repository
-            )
-        else:
-            result_text = await _handle_scheduling(
-                scheduler, repository, post_text, banner_buffer, banner_filename
-            )
+            if time_diff <= 60:
+                result_text = await _handle_publication(
+                    callback, settings, post_text, banner_buffer, banner_filename, repository
+                )
+            else:
+                result_text = await _handle_scheduling(
+                    scheduler, repository, post_text, banner_buffer, banner_filename
+                )
 
-    if result_text:
-        await callback.message.edit_caption(caption=result_text)
+        if result_text:
+            await callback.message.edit_caption(caption=result_text)
+    except Exception as e:
+        error_message = f"Failed to process publication: {e!s}"
+        await callback.message.edit_caption(caption=f"❌ <b>Error</b>\n\n{error_message}")
+        raise
 
 
 async def process_post_content(
