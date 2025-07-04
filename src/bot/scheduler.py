@@ -46,7 +46,9 @@ class PostScheduler:
         self._started: bool = False
 
     async def __aenter__(self) -> Self:
-        self._exit_stack = await self.scheduler.__aenter__()
+        await self.scheduler.__aenter__()
+        await self.start()
+        self._started = True
         return self
 
     async def __aexit__(
@@ -55,17 +57,20 @@ class PostScheduler:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        await self.scheduler.__aexit__(exc_type, exc_val, exc_tb)
+        if self._started:
+            await self.scheduler.__aexit__(exc_type, exc_val, exc_tb)
+            self._started = False
+            logger.info("Post scheduler stopped")
 
     async def start(self) -> None:
-        await self.scheduler.add_schedule(
-            self._cleanup_old_posts, IntervalTrigger(hours=24), id="cleanup_old_posts"
-        )
-        await self.scheduler.add_schedule(
-            self._database_maintenance, IntervalTrigger(days=7), id="database_maintenance"
-        )
-
-        logger.info("Post scheduler started")
+        if not self._started:
+            await self.scheduler.add_schedule(
+                self._cleanup_old_posts, IntervalTrigger(hours=24), id="cleanup_old_posts"
+            )
+            await self.scheduler.add_schedule(
+                self._database_maintenance, IntervalTrigger(days=7), id="database_maintenance"
+            )
+            logger.info("Post scheduler started")
 
     @staticmethod
     async def _cleanup_old_posts() -> None:
@@ -91,7 +96,7 @@ class PostScheduler:
         if self._started:
             await self.scheduler.__aexit__(None, None, None)
             self._started = False
-        logger.info("Post scheduler stopped")
+            logger.info("Post scheduler stopped")
 
     @staticmethod
     def round_slot(

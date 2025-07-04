@@ -27,25 +27,21 @@ async def main() -> None:
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
 
-    await database.create_tables()
-    logger.info("Database initialized")
+    async with database:
+        logger.info("Database initialized")
 
-    defaults = DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True)
-    bot = Bot(token=settings.bot_token.get_secret_value(), default=defaults)
+        defaults = DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True)
+        bot = Bot(token=settings.bot_token.get_secret_value(), default=defaults)
 
-    async with PostScheduler(bot, settings):
-        logger.info("Post scheduler started")
+        async with bot:
+            logger.info("Bot initialized")
 
-        dp.include_routers(posts_router)
+            async with PostScheduler(bot, settings):
+                dp.include_routers(posts_router)
 
-        logger.info("Starting bot...")
+                logger.info("Starting bot...")
 
-        try:
-            await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
-        finally:
-            await bot.session.close()
-            await database.close()
-            logger.info("Database connection closed")
+                await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
 
 if __name__ == "__main__":
