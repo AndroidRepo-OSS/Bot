@@ -15,6 +15,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from bot.config import Settings
 from bot.database import (
     cleanup_orphaned_scheduled_posts,
+    database,
     get_last_post_time,
     get_next_available_slot_with_lock,
     update_scheduled_post_as_published,
@@ -51,6 +52,13 @@ class PostScheduler:
             id="cleanup_old_posts",
             replace_existing=True,
         )
+        self.scheduler.add_job(
+            self._database_maintenance,
+            "interval",
+            days=7,
+            id="database_maintenance",
+            replace_existing=True,
+        )
         logger.info("Post scheduler started")
 
     @staticmethod
@@ -63,6 +71,15 @@ class PostScheduler:
 
         except Exception as e:
             logger.error("Failed to cleanup old posts: %s", e)
+
+    @staticmethod
+    async def _database_maintenance() -> None:
+        try:
+            await database.vacuum_if_needed()
+            await database.checkpoint_wal()
+            logger.info("Database maintenance completed")
+        except Exception as e:
+            logger.error("Failed to perform database maintenance: %s", e)
 
     async def stop(self) -> None:
         self.scheduler.shutdown()

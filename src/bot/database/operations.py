@@ -11,7 +11,7 @@ from sqlalchemy import delete, select
 
 from bot.utils.models import GitHubRepository, GitLabRepository
 
-from .connection import db_manager
+from .connection import database
 from .models import AppSubmission, ScheduledPost
 
 if TYPE_CHECKING:
@@ -21,9 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 async def has_pending_scheduled_post(repository_id: int) -> bool:
-    db = db_manager.get_database()
-
-    async for session in db.get_session():
+    async for session in database.get_session():
         stmt = select(ScheduledPost).where(
             ScheduledPost.repository_id == repository_id,
         )
@@ -50,9 +48,7 @@ def _update_submission_data(
 
 
 async def can_submit_app(repository_id: int) -> tuple[bool, datetime | None]:
-    db = db_manager.get_database()
-
-    async for session in db.get_session():
+    async for session in database.get_session():
         stmt = (
             select(AppSubmission)
             .where(AppSubmission.repository_id == repository_id)
@@ -79,9 +75,7 @@ async def can_submit_app(repository_id: int) -> tuple[bool, datetime | None]:
 async def submit_app(
     repository: GitHubRepository | GitLabRepository, channel_message_id: int | None = None
 ) -> AppSubmission:
-    db = db_manager.get_database()
-
-    async for session in db.get_session():
+    async for session in database.get_session():
         stmt = select(AppSubmission).where(AppSubmission.repository_id == repository.id)
         existing_submission = (await session.execute(stmt)).scalar_one_or_none()
 
@@ -112,9 +106,7 @@ async def schedule_post(
     scheduled_time: datetime,
     job_id: str,
 ) -> ScheduledPost:
-    db = db_manager.get_database()
-
-    async for session in db.get_session():
+    async for session in database.get_session():
         scheduled_post = ScheduledPost(
             repository_id=repository.id,
             repository_name=repository.name,
@@ -141,9 +133,7 @@ async def schedule_post(
 async def get_scheduled_posts_after_time(
     start_time: datetime, end_time: datetime
 ) -> list[ScheduledPost]:
-    db = db_manager.get_database()
-
-    async for session in db.get_session():
+    async for session in database.get_session():
         stmt = (
             select(ScheduledPost)
             .where(
@@ -161,9 +151,7 @@ async def get_scheduled_posts_after_time(
 
 
 async def update_scheduled_post_as_published(post_id: int, channel_message_id: int) -> None:
-    db = db_manager.get_database()
-
-    async for session in db.get_session():
+    async for session in database.get_session():
         try:
             stmt = select(ScheduledPost).where(ScheduledPost.id == post_id)
             scheduled_post = (await session.execute(stmt)).scalar_one_or_none()
@@ -210,9 +198,7 @@ async def update_scheduled_post_as_published(post_id: int, channel_message_id: i
 
 
 async def get_last_post_time() -> datetime | None:
-    db = db_manager.get_database()
-
-    async for session in db.get_session():
+    async for session in database.get_session():
         app_stmt = (
             select(AppSubmission)
             .where(AppSubmission.channel_message_id.isnot(None))
@@ -241,9 +227,7 @@ async def get_next_available_slot_with_lock(base_time: datetime | None = None) -
     if base_time.tzinfo is None:
         base_time = base_time.replace(tzinfo=UTC)
 
-    db = db_manager.get_database()
-
-    async for session in db.get_session():
+    async for session in database.get_session():
         async with session.begin():
             last_post_time = await get_last_post_time()
 
@@ -281,11 +265,9 @@ async def get_next_available_slot_with_lock(base_time: datetime | None = None) -
 
 
 async def cleanup_orphaned_scheduled_posts(days_old: int = 30) -> int:
-    db = db_manager.get_database()
-
     cutoff_date = datetime.now(UTC) - timedelta(days=days_old)
 
-    async for session in db.get_session():
+    async for session in database.get_session():
         stmt = select(ScheduledPost).where(
             ScheduledPost.scheduled_time < cutoff_date,
         )
@@ -307,9 +289,7 @@ async def cleanup_orphaned_scheduled_posts(days_old: int = 30) -> int:
 
 
 async def update_scheduled_post_time(post_id: int, new_scheduled_time: datetime) -> None:
-    db = db_manager.get_database()
-
-    async for session in db.get_session():
+    async for session in database.get_session():
         stmt = select(ScheduledPost).where(ScheduledPost.id == post_id)
         scheduled_post = (await session.execute(stmt)).scalar_one_or_none()
 

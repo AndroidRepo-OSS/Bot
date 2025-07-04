@@ -11,7 +11,7 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from .config import settings
-from .database import db_manager
+from .database import database
 from .handlers.posts import router as posts_router
 from .scheduler import PostScheduler
 
@@ -27,7 +27,7 @@ async def main() -> None:
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
 
-    await db_manager.init_database()
+    await database.create_tables()
     logger.info("Database initialized")
 
     defaults = DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True)
@@ -46,7 +46,7 @@ async def main() -> None:
     finally:
         await scheduler.stop()
         await bot.session.close()
-        await db_manager.close_database()
+        await database.close()
         logger.info("Database connection closed")
 
 
