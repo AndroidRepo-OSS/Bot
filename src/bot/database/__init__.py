@@ -5,7 +5,6 @@ from .connection import db_manager
 from .models import AppSubmission, ScheduledPost
 from .operations import (
     can_submit_app,
-    cleanup_old_published_posts,
     cleanup_orphaned_scheduled_posts,
     get_last_post_time,
     get_next_available_slot_with_lock,
@@ -22,7 +21,6 @@ __all__ = (
     "AppSubmission",
     "ScheduledPost",
     "can_submit_app",
-    "cleanup_old_published_posts",
     "cleanup_orphaned_scheduled_posts",
     "db_manager",
     "get_last_post_time",

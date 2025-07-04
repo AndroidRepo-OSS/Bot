@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -16,6 +17,8 @@ from .models import AppSubmission, ScheduledPost
 if TYPE_CHECKING:
     from io import BytesIO
 
+logger = logging.getLogger(__name__)
+
 
 async def has_pending_scheduled_post(repository_id: int) -> bool:
     db = db_manager.get_database()
@@ -23,7 +26,6 @@ async def has_pending_scheduled_post(repository_id: int) -> bool:
     async for session in db.get_session():
         stmt = select(ScheduledPost).where(
             ScheduledPost.repository_id == repository_id,
-            ScheduledPost.is_published == False,  # noqa: E712
         )
         result = await session.execute(stmt)
         return result.scalar_one_or_none() is not None
@@ -124,7 +126,6 @@ async def schedule_post(
             banner_data=banner_buffer.getvalue(),
             banner_filename=banner_filename,
             scheduled_time=scheduled_time,
-            is_published=False,
             job_id=job_id,
         )
 
@@ -148,7 +149,6 @@ async def get_scheduled_posts_after_time(
             .where(
                 ScheduledPost.scheduled_time >= start_time,
                 ScheduledPost.scheduled_time <= end_time,
-                ScheduledPost.is_published == False,  # noqa: E712
             )
             .distinct()
             .order_by(ScheduledPost.scheduled_time)
@@ -166,9 +166,7 @@ async def get_scheduled_posts_in_range(
     db = db_manager.get_database()
 
     async for session in db.get_session():
-        conditions = [
-            ScheduledPost.is_published == False,  # noqa: E712
-        ]
+        conditions = []
 
         if include_past:
             conditions.append(ScheduledPost.scheduled_time <= end_time)
@@ -195,13 +193,49 @@ async def update_scheduled_post_as_published(post_id: int, channel_message_id: i
     db = db_manager.get_database()
 
     async for session in db.get_session():
-        stmt = select(ScheduledPost).where(ScheduledPost.id == post_id)
-        scheduled_post = (await session.execute(stmt)).scalar_one_or_none()
+        try:
+            stmt = select(ScheduledPost).where(ScheduledPost.id == post_id)
+            scheduled_post = (await session.execute(stmt)).scalar_one_or_none()
 
-        if scheduled_post:
-            scheduled_post.is_published = True
-            scheduled_post.channel_message_id = channel_message_id
+            if not scheduled_post:
+                logger.warning("Scheduled post %d not found when marking as published", post_id)
+                return
+
+            existing_app_stmt = select(AppSubmission).where(
+                AppSubmission.repository_id == scheduled_post.repository_id
+            )
+            existing_app = (await session.execute(existing_app_stmt)).scalar_one_or_none()
+
+            if existing_app:
+                existing_app.repository_name = scheduled_post.repository_name
+                existing_app.repository_owner = scheduled_post.repository_owner
+                existing_app.repository_full_name = scheduled_post.repository_full_name
+                existing_app.repository_url = scheduled_post.repository_url
+                existing_app.description = scheduled_post.description
+                existing_app.submitted_at = datetime.now(UTC)
+                existing_app.channel_message_id = channel_message_id
+            else:
+                new_app = AppSubmission(
+                    repository_id=scheduled_post.repository_id,
+                    repository_name=scheduled_post.repository_name,
+                    repository_owner=scheduled_post.repository_owner,
+                    repository_full_name=scheduled_post.repository_full_name,
+                    repository_url=scheduled_post.repository_url,
+                    description=scheduled_post.description,
+                    submitted_at=datetime.now(UTC),
+                    channel_message_id=channel_message_id,
+                )
+                session.add(new_app)
+
+            await session.flush()
+
+            await session.delete(scheduled_post)
             await session.commit()
+
+        except Exception as e:
+            await session.rollback()
+            logger.error("Failed to mark scheduled post %d as published: %s", post_id, e)
+            raise
 
 
 async def get_last_post_time() -> datetime | None:
@@ -216,65 +250,17 @@ async def get_last_post_time() -> datetime | None:
         )
         last_app = (await session.execute(app_stmt)).scalar_one_or_none()
 
-        scheduled_stmt = (
-            select(ScheduledPost)
-            .where(ScheduledPost.is_published == True)  # noqa: E712
-            .order_by(ScheduledPost.scheduled_time.desc())
-            .limit(1)
-        )
-        last_scheduled = (await session.execute(scheduled_stmt)).scalar_one_or_none()
-
-        last_time = None
-
         if last_app:
             app_time = last_app.submitted_at
             if app_time.tzinfo is None:
                 app_time = app_time.replace(tzinfo=UTC)
             else:
                 app_time = app_time.astimezone(UTC)
-            last_time = app_time
+            return app_time
 
-        if last_scheduled:
-            scheduled_time = last_scheduled.scheduled_time
-            if scheduled_time.tzinfo is None:
-                scheduled_time = scheduled_time.replace(tzinfo=UTC)
-            else:
-                scheduled_time = scheduled_time.astimezone(UTC)
-
-            if last_time is None or scheduled_time > last_time:
-                last_time = scheduled_time
-
-        return last_time
+        return None
 
     return None
-
-
-async def cleanup_old_published_posts(days_old: int = 7) -> int:
-    db = db_manager.get_database()
-
-    cutoff_date = datetime.now(UTC) - timedelta(days=days_old)
-
-    async for session in db.get_session():
-        stmt = select(ScheduledPost).where(
-            ScheduledPost.is_published == True,  # noqa: E712
-            ScheduledPost.scheduled_time < cutoff_date,
-        )
-
-        old_posts = (await session.execute(stmt)).scalars().all()
-        count = len(old_posts)
-
-        if count > 0:
-            delete_stmt = delete(ScheduledPost).where(
-                ScheduledPost.is_published == True,  # noqa: E712
-                ScheduledPost.scheduled_time < cutoff_date,
-            )
-
-            await session.execute(delete_stmt)
-            await session.commit()
-
-        return count
-
-    return 0
 
 
 async def get_next_available_slot_with_lock(base_time: datetime | None = None) -> datetime:
@@ -330,7 +316,6 @@ async def cleanup_orphaned_scheduled_posts(days_old: int = 30) -> int:
 
     async for session in db.get_session():
         stmt = select(ScheduledPost).where(
-            ScheduledPost.is_published == False,  # noqa: E712
             ScheduledPost.scheduled_time < cutoff_date,
         )
 
@@ -339,7 +324,6 @@ async def cleanup_orphaned_scheduled_posts(days_old: int = 30) -> int:
 
         if count > 0:
             delete_stmt = delete(ScheduledPost).where(
-                ScheduledPost.is_published == False,  # noqa: E712
                 ScheduledPost.scheduled_time < cutoff_date,
             )
 

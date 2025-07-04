@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, LargeBinary, String, Text
+from sqlalchemy import DateTime, LargeBinary, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -52,15 +52,11 @@ class ScheduledPost(Base):
     scheduled_time: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True
     )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=func.now(), server_default=func.now()
-    )
-    is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     channel_message_id: Mapped[int | None] = mapped_column(nullable=True)
     job_id: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
 
     def __repr__(self) -> str:
         return (
             f"<ScheduledPost(id={self.id}, repo='{self.repository_full_name}', "
-            f"scheduled_time='{self.scheduled_time}', is_published={self.is_published})>"
+            f"scheduled_time='{self.scheduled_time}')>"
         )
