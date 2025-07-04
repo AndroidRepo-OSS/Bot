@@ -197,3 +197,4 @@ cython_debug/
 config.env
 data/generated_banners/
 data/database.db*
+data/scheduler_jobs.db*

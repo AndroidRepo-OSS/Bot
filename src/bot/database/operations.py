@@ -160,35 +160,6 @@ async def get_scheduled_posts_after_time(
     return []
 
 
-async def get_scheduled_posts_in_range(
-    start_time: datetime, end_time: datetime, include_past: bool = False
-) -> list[ScheduledPost]:
-    db = db_manager.get_database()
-
-    async for session in db.get_session():
-        conditions = []
-
-        if include_past:
-            conditions.append(ScheduledPost.scheduled_time <= end_time)
-        else:
-            conditions.extend([
-                ScheduledPost.scheduled_time >= start_time,
-                ScheduledPost.scheduled_time <= end_time,
-            ])
-
-        stmt = (
-            select(ScheduledPost)
-            .where(*conditions)
-            .distinct()
-            .order_by(ScheduledPost.scheduled_time)
-        )
-
-        result = await session.execute(stmt)
-        return list(result.scalars().all())
-
-    return []
-
-
 async def update_scheduled_post_as_published(post_id: int, channel_message_id: int) -> None:
     db = db_manager.get_database()
 

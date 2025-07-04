@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from aiogram import Bot
 from aiogram.types import BufferedInputFile
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from bot.config import Settings
@@ -16,8 +17,6 @@ from bot.database import (
     cleanup_orphaned_scheduled_posts,
     get_last_post_time,
     get_next_available_slot_with_lock,
-    get_scheduled_posts_after_time,
-    get_scheduled_posts_in_range,
     update_scheduled_post_as_published,
     update_scheduled_post_time,
 )
@@ -38,8 +37,10 @@ def ensure_timezone_aware(dt: datetime) -> datetime:
 class PostScheduler:
     def __init__(self, bot: Bot, settings: Settings) -> None:
         self.bot = bot
-        self.scheduler = AsyncIOScheduler(timezone="UTC")
         self.settings = settings
+
+        jobstore = SQLAlchemyJobStore(url="sqlite:///data/scheduler_jobs.db")
+        self.scheduler = AsyncIOScheduler(jobstores={"default": jobstore}, timezone="UTC")
 
     async def start(self) -> None:
         self.scheduler.start()
@@ -50,7 +51,6 @@ class PostScheduler:
             id="cleanup_old_posts",
             replace_existing=True,
         )
-        await self._restore_scheduled_jobs()
         logger.info("Post scheduler started")
 
     @staticmethod
@@ -177,97 +177,3 @@ class PostScheduler:
     @staticmethod
     async def get_next_available_slot(base_time: datetime | None = None) -> datetime:
         return await get_next_available_slot_with_lock(base_time)
-
-    async def _restore_scheduled_jobs(self) -> None:
-        try:
-            current_time = datetime.now(UTC)
-            future_time = current_time + timedelta(days=365)
-            past_time = current_time - timedelta(hours=24)
-
-            pending_posts = await get_scheduled_posts_after_time(current_time, future_time)
-            missed_posts = await get_scheduled_posts_in_range(
-                past_time, current_time, include_past=True
-            )
-
-            restored_count = 0
-            missed_count = 0
-
-            for post in pending_posts:
-                job_id = f"post_{post.id}_{post.repository_id}"
-
-                scheduled_time = ensure_timezone_aware(post.scheduled_time)
-                run_date = self.round_slot(scheduled_time)
-
-                self.scheduler.add_job(
-                    self._publish_scheduled_post,
-                    "date",
-                    run_date=run_date,
-                    args=[post.id, post.post_text, post.banner_data, post.banner_filename],
-                    id=job_id,
-                    replace_existing=True,
-                    misfire_grace_time=3600 * 2,
-                )
-                restored_count += 1
-
-            await self._process_missed_posts_sequentially(missed_posts)
-            missed_count = len(missed_posts)
-
-            logger.info("Restored %d scheduled post jobs", restored_count)
-            if missed_count > 0:
-                logger.info("Processed %d missed posts", missed_count)
-
-        except Exception as e:
-            logger.error("Failed to restore scheduled jobs: %s", e)
-
-    async def _process_missed_posts_sequentially(self, missed_posts: list[ScheduledPost]) -> None:
-        if not missed_posts:
-            return
-
-        current_time = datetime.now(UTC)
-        next_available_slot = None
-
-        for post in missed_posts:
-            try:
-                scheduled_time = ensure_timezone_aware(post.scheduled_time)
-                time_diff = current_time - scheduled_time
-
-                if next_available_slot is None:
-                    next_available_slot = await self.get_next_available_slot(current_time)
-                else:
-                    next_available_slot = await self.get_next_available_slot(
-                        next_available_slot + timedelta(hours=1)
-                    )
-
-                await self._reschedule_missed_post_to_slot(post, next_available_slot)
-
-                logger.info(
-                    "Rescheduled missed post %d (was %d minutes late) to %s",
-                    post.id,
-                    int(time_diff.total_seconds() / 60),
-                    next_available_slot.strftime("%Y-%m-%d %H:%M UTC"),
-                )
-
-            except Exception as e:
-                logger.error("Failed to handle missed post %d: %s", post.id, e)
-
-    async def _reschedule_missed_post_to_slot(
-        self, post: ScheduledPost, target_slot: datetime
-    ) -> None:
-        try:
-            rounded_slot = self.round_slot(target_slot)
-            job_id = f"post_{post.id}_{post.repository_id}"
-
-            await update_scheduled_post_time(post.id, rounded_slot)
-
-            self.scheduler.add_job(
-                self._publish_scheduled_post,
-                "date",
-                run_date=rounded_slot,
-                args=[post.id, post.post_text, post.banner_data, post.banner_filename],
-                id=job_id,
-                replace_existing=True,
-                misfire_grace_time=3600 * 2,
-            )
-
-        except Exception as e:
-            logger.error("Failed to reschedule missed post %d to specific slot: %s", post.id, e)
