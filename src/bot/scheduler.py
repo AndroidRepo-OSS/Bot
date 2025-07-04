@@ -14,6 +14,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from bot.config import Settings
 from bot.database import (
     cleanup_orphaned_scheduled_posts,
+    get_last_post_time,
     get_next_available_slot_with_lock,
     get_scheduled_posts_after_time,
     get_scheduled_posts_in_range,
@@ -97,6 +98,21 @@ class PostScheduler:
         job_id = f"post_{post.id}_{post.repository_id}"
 
         scheduled_time = ensure_timezone_aware(post.scheduled_time)
+
+        last_post_time = await get_last_post_time()
+        if last_post_time:
+            time_diff_hours = (scheduled_time - last_post_time).total_seconds() / 3600
+            if time_diff_hours < 1.0:
+                min_allowed_time = last_post_time + timedelta(hours=1)
+                if scheduled_time < min_allowed_time:
+                    scheduled_time = min_allowed_time
+                    logger.info(
+                        "Adjusted scheduled time for post %d to maintain 1-hour interval. "
+                        "New time: %s",
+                        post.id,
+                        scheduled_time,
+                    )
+
         run_date = self.round_slot(scheduled_time)
 
         if run_date != scheduled_time:
