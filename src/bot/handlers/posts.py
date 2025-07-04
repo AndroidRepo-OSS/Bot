@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from io import BytesIO
 
 from aiogram import F, Router
+from aiogram.enums import ChatType
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
@@ -20,6 +21,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.config import Settings, settings
 from bot.database import can_submit_app, has_pending_scheduled_post, schedule_post, submit_app
 from bot.database.operations import get_scheduled_posts_after_time
+from bot.filters.sudo import SudoersFilter
 from bot.scheduler import PostScheduler
 from bot.utils.banner_generator import generate_banner
 from bot.utils.enums import KeyboardType, PostAction, PostCallback
@@ -28,6 +30,8 @@ from bot.utils.repository_client import RepositoryClient
 from bot.utils.states import PostStates
 
 router = Router(name="posts")
+router.message.filter(SudoersFilter(), F.chat.type == ChatType.PRIVATE)
+router.callback_query.filter(SudoersFilter(), F.chat.type == ChatType.PRIVATE)
 
 
 def get_project_name(enhanced_data: EnhancedRepositoryData) -> str:
