@@ -1,16 +1,19 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
-from __future__ import annotations
-
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from io import BytesIO
+from types import TracebackType
+from typing import Self
 
 from aiogram import Bot
 from aiogram.types import BufferedInputFile
-from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler import AsyncScheduler
+from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
+from apscheduler.eventbrokers.local import LocalEventBroker
+from apscheduler.triggers.date import DateTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from bot.config import Settings
 from bot.database import (
@@ -22,9 +25,6 @@ from bot.database import (
     update_scheduled_post_time,
 )
 from bot.database.models import ScheduledPost
-
-if TYPE_CHECKING:
-    from io import BytesIO
 
 logger = logging.getLogger(__name__)
 
@@ -40,25 +40,31 @@ class PostScheduler:
         self.bot = bot
         self.settings = settings
 
-        jobstore = SQLAlchemyJobStore(url="sqlite:///data/scheduler_jobs.db")
-        self.scheduler = AsyncIOScheduler(jobstores={"default": jobstore}, timezone="UTC")
+        data_store = SQLAlchemyDataStore("sqlite:///data/scheduler_jobs.db")
+        event_broker = LocalEventBroker()
+        self.scheduler = AsyncScheduler(data_store, event_broker)
+        self._started: bool = False
+
+    async def __aenter__(self) -> Self:
+        self._exit_stack = await self.scheduler.__aenter__()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        await self.scheduler.__aexit__(exc_type, exc_val, exc_tb)
 
     async def start(self) -> None:
-        self.scheduler.start()
-        self.scheduler.add_job(
-            self._cleanup_old_posts,
-            "interval",
-            hours=24,
-            id="cleanup_old_posts",
-            replace_existing=True,
+        await self.scheduler.add_schedule(
+            self._cleanup_old_posts, IntervalTrigger(hours=24), id="cleanup_old_posts"
         )
-        self.scheduler.add_job(
-            self._database_maintenance,
-            "interval",
-            days=7,
-            id="database_maintenance",
-            replace_existing=True,
+        await self.scheduler.add_schedule(
+            self._database_maintenance, IntervalTrigger(days=7), id="database_maintenance"
         )
+
         logger.info("Post scheduler started")
 
     @staticmethod
@@ -82,7 +88,9 @@ class PostScheduler:
             logger.error("Failed to perform database maintenance: %s", e)
 
     async def stop(self) -> None:
-        self.scheduler.shutdown()
+        if self._started:
+            await self.scheduler.__aexit__(None, None, None)
+            self._started = False
         logger.info("Post scheduler stopped")
 
     @staticmethod
@@ -109,11 +117,18 @@ class PostScheduler:
         banner_filename: str,
     ) -> None:
         if not post or not post.id:
-            logger.error("Invalid post provided for scheduling")
-            return
+            msg = "Invalid post provided for scheduling"
+            raise ValueError(msg)
+
+        if not post_text.strip():
+            msg = "Post text cannot be empty"
+            raise ValueError(msg)
+
+        if not banner_filename:
+            msg = "Banner filename cannot be empty"
+            raise ValueError(msg)
 
         job_id = f"post_{post.id}_{post.repository_id}"
-
         scheduled_time = ensure_timezone_aware(post.scheduled_time)
 
         last_post_time = await get_last_post_time()
@@ -136,18 +151,17 @@ class PostScheduler:
             await update_scheduled_post_time(post.id, run_date)
 
         try:
-            self.scheduler.add_job(
+            await self.scheduler.add_schedule(
                 self._publish_scheduled_post,
-                "date",
-                run_date=run_date,
+                DateTrigger(run_date),
                 args=[post.id, post_text, banner_buffer.getvalue(), banner_filename],
                 id=job_id,
-                replace_existing=True,
-                misfire_grace_time=3600 * 2,
+                metadata={"job_id": job_id, "scheduled_time": str(run_date)},
             )
         except Exception as e:
             logger.error("Failed to schedule post %d: %s", post.id, e)
-            raise
+            msg = f"Failed to schedule post {post.id}"
+            raise RuntimeError(msg) from e
 
         logger.info(
             "Scheduled post for %s at %s (Job ID: %s)",
@@ -183,13 +197,6 @@ class PostScheduler:
         except Exception as e:
             logger.error("Failed to publish scheduled post %s: %s", post_id, e)
             raise
-
-    def cancel_scheduled_post(self, job_id: str) -> None:
-        try:
-            self.scheduler.remove_job(job_id)
-            logger.info("Cancelled scheduled post job: %s", job_id)
-        except Exception as e:
-            logger.warning("Failed to cancel scheduled post job %s: %s", job_id, e)
 
     @staticmethod
     async def get_next_available_slot(base_time: datetime | None = None) -> datetime:

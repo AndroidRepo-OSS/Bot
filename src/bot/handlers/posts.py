@@ -241,19 +241,20 @@ async def process_post_publication(
     project_name = get_project_name(enhanced_data)
     banner_filename = f"{project_name.lower().replace(' ', '_')}_banner.png"
 
-    scheduler = PostScheduler(callback.bot, settings)
     current_time = datetime.now(UTC)
-    next_slot = await scheduler.get_next_available_slot(current_time)
-    time_diff = (scheduler.round_slot(next_slot) - current_time).total_seconds()
 
-    if time_diff <= 60:
-        result_text = await _handle_publication(
-            callback, settings, post_text, banner_buffer, banner_filename, repository
-        )
-    else:
-        result_text = await _handle_scheduling(
-            scheduler, repository, post_text, banner_buffer, banner_filename
-        )
+    async with PostScheduler(callback.bot, settings) as scheduler:
+        next_slot = await scheduler.get_next_available_slot(current_time)
+        time_diff = (scheduler.round_slot(next_slot) - current_time).total_seconds()
+
+        if time_diff <= 60:
+            result_text = await _handle_publication(
+                callback, settings, post_text, banner_buffer, banner_filename, repository
+            )
+        else:
+            result_text = await _handle_scheduling(
+                scheduler, repository, post_text, banner_buffer, banner_filename
+            )
 
     if result_text:
         await callback.message.edit_caption(caption=result_text)

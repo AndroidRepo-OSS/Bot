@@ -33,21 +33,19 @@ async def main() -> None:
     defaults = DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True)
     bot = Bot(token=settings.bot_token.get_secret_value(), default=defaults)
 
-    scheduler = PostScheduler(bot, settings)
-    await scheduler.start()
-    logger.info("Post scheduler started")
+    async with PostScheduler(bot, settings):
+        logger.info("Post scheduler started")
 
-    dp.include_routers(posts_router)
+        dp.include_routers(posts_router)
 
-    logger.info("Starting bot...")
+        logger.info("Starting bot...")
 
-    try:
-        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
-    finally:
-        await scheduler.stop()
-        await bot.session.close()
-        await database.close()
-        logger.info("Database connection closed")
+        try:
+            await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+        finally:
+            await bot.session.close()
+            await database.close()
+            logger.info("Database connection closed")
 
 
 if __name__ == "__main__":

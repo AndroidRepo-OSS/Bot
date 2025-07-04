@@ -1,11 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
-from __future__ import annotations
-
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from io import BytesIO
 
 from sqlalchemy import delete, select
 
@@ -13,9 +11,6 @@ from bot.utils.models import GitHubRepository, GitLabRepository
 
 from .connection import database
 from .models import AppSubmission, ScheduledPost
-
-if TYPE_CHECKING:
-    from io import BytesIO
 
 logger = logging.getLogger(__name__)
 
