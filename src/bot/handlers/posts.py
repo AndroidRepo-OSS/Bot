@@ -19,17 +19,8 @@ from aiogram.types import (
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import settings
-from bot.database import (
-    can_submit,
-    clear_all_scheduled_posts,
-    create_scheduled_post,
-    delete_post,
-    has_pending_post,
-    submit,
-)
-from bot.database.operations import get_posts_in_range
+from bot.database import can_submit, submit
 from bot.filters.sudo import SudoersFilter
-from bot.scheduler import PostScheduler
 from bot.utils.banner_generator import generate_banner
 from bot.utils.enums import KeyboardType, PostAction, PostCallback
 from bot.utils.models import EnhancedRepositoryData, GitHubRepository, GitLabRepository
@@ -196,54 +187,6 @@ async def _handle_publication(
     return "✅ <b>Post Published!</b>\n\n<i>Post sent to channel and saved to database.</i>"
 
 
-async def _handle_scheduling(
-    scheduler: PostScheduler,
-    repository: GitHubRepository | GitLabRepository,
-    post_text: str,
-    banner_buffer: BytesIO,
-    banner_filename: str,
-) -> str | None:
-    if await has_pending_post(repository.id):
-        return (
-            "⚠️ <b>Post Already Scheduled</b>\n\n"
-            "This repository already has a post scheduled for publication.\n\n"
-            "<i>To avoid spam, only one post per repository can be scheduled.</i>"
-        )
-
-    try:
-        next_slot = await scheduler.get_next_slot()
-        rounded_slot = scheduler.round_to_interval(next_slot)
-        job_id = f"post_{repository.id}_{int(rounded_slot.timestamp())}"
-
-        scheduled_post = await create_scheduled_post(
-            repository=repository,
-            post_text=post_text,
-            banner_buffer=banner_buffer,
-            banner_filename=banner_filename,
-            scheduled_time=rounded_slot,
-            job_id=job_id,
-        )
-
-        try:
-            await scheduler.schedule_post(
-                post=scheduled_post,
-                post_text=post_text,
-                banner_buffer=banner_buffer,
-                banner_filename=banner_filename,
-            )
-        except Exception as scheduler_error:
-            await delete_post(scheduled_post.id)
-            raise scheduler_error
-
-        return (
-            "⏰ <b>Post Scheduled Successfully!</b>\n\n"
-            f"<b>Scheduled for:</b> {rounded_slot.strftime('%Y-%m-%d %H:%M UTC')}\n\n"
-            "<i>Post will be automatically published at the scheduled time.</i>"
-        )
-    except Exception as e:
-        return f"❌ <b>Scheduling Failed</b>\n\n{e!s}"
-
-
 async def process_post_publication(
     callback: CallbackQuery,
     enhanced_data: EnhancedRepositoryData,
@@ -261,21 +204,10 @@ async def process_post_publication(
     project_name = _get_project_name(enhanced_data)
     banner_filename = f"{project_name.lower().replace(' ', '_')}_banner.png"
 
-    current_time = datetime.now(UTC)
-
     try:
-        async with PostScheduler(callback.bot, settings) as scheduler:
-            next_slot = await scheduler.get_next_slot(current_time)
-            time_diff = (next_slot - current_time).total_seconds()
-
-            if time_diff <= 60:
-                result_text = await _handle_publication(
-                    callback, post_text, banner_buffer, banner_filename, repository
-                )
-            else:
-                result_text = await _handle_scheduling(
-                    scheduler, repository, post_text, banner_buffer, banner_filename
-                )
+        result_text = await _handle_publication(
+            callback, post_text, banner_buffer, banner_filename, repository
+        )
 
         if result_text:
             await callback.message.edit_caption(caption=result_text)
@@ -363,71 +295,6 @@ async def process_repository_confirmation(
 
     except Exception as e:
         await _handle_error(message, state, f"Processing failed: {e!s}")
-
-
-@router.message(Command("scheduled"))
-async def list_scheduled_posts(message: Message) -> None:
-    now = datetime.now(UTC)
-    scheduled_posts = await get_posts_in_range(now, now.replace(year=now.year + 1))
-
-    if not scheduled_posts:
-        await message.answer(
-            "📅 <b>No Scheduled Posts</b>\n\nThere are no posts currently scheduled."
-        )
-        return
-
-    unique_posts = {
-        f"{post.id}_{post.repository_id}_{post.scheduled_time}": post for post in scheduled_posts
-    }
-    final_posts = list(unique_posts.values())
-
-    text = "📅 <b>Scheduled Posts</b>\n\n"
-    for i, post in enumerate(final_posts):
-        text += (
-            f"<b>ID:</b> {post.id}\n"
-            f"<b>Repository:</b> {post.repository_full_name}\n"
-            f"<b>Scheduled:</b> {post.scheduled_time.strftime('%Y-%m-%d %H:%M UTC')}\n"
-            f"<b>Status:</b> ⏰ Pending"
-        )
-        if i < len(final_posts) - 1:
-            text += "\n\n"
-
-    await message.answer(text)
-
-
-@router.message(Command("clearscheduled"))
-async def clear_scheduled_posts(message: Message) -> None:
-    try:
-        cleared_count = await clear_all_scheduled_posts()
-
-        cancelled_jobs = 0
-        if message.bot:
-            try:
-                async with PostScheduler(message.bot, settings) as scheduler:
-                    cancelled_jobs = await scheduler.cancel_all_post_jobs()
-            except Exception as scheduler_error:
-                await message.answer(
-                    f"❌ <b>Error</b>\n\nFailed to cancel scheduler jobs: {scheduler_error!s}"
-                )
-                return
-
-        if cleared_count == 0:
-            await message.answer(
-                "📅 <b>No Posts to Clear</b>\n\nThere are no scheduled posts to remove."
-            )
-        else:
-            plural = "s" if cleared_count != 1 else ""
-            job_plural = "s" if cancelled_jobs != 1 else ""
-            job_info = ""
-            if cancelled_jobs > 0:
-                job_info = f" and {cancelled_jobs} scheduler job{job_plural}"
-
-            await message.answer(
-                f"🗑️ <b>Scheduled Posts Cleared</b>\n\n"
-                f"Successfully removed {cleared_count} scheduled post{plural}{job_info}."
-            )
-    except Exception as e:
-        await message.answer(f"❌ <b>Error</b>\n\nFailed to clear scheduled posts: {e!s}")
 
 
 @router.message(Command("post"))

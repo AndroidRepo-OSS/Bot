@@ -18,7 +18,6 @@ dependencies = [
     "pillow>=11.2.1",
     "aiosqlite>=0.21.0",
     "sqlalchemy[asyncio]>=2.0.41",
-    "apscheduler>=4.0.0a6",
 ]
 
 [dependency-groups]
