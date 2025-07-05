@@ -15,9 +15,15 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIClient:
+    DEFAULT_MODEL = "openai/gpt-4.1"
+    FALLBACK_MODEL = "openai/gpt-4.1-mini"
+    MAX_TOKENS = 1000
+    TEMPERATURE = 0.2
+    README_CONTENT_LIMIT = 2000
+
     def __init__(self, api_key: str, base_url: str | None = None) -> None:
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-        self._model = "openai/gpt-4.1"
+        self._model = self.DEFAULT_MODEL
 
     async def __aenter__(self) -> OpenAIClient:
         return self
@@ -32,11 +38,11 @@ for Android apps, tools, and utilities.
 
 Focus on:
 - What problems it solves for users
-- Key user benefits (not technical details)
+- Key user benefits
 - Who would find it useful
 
 Guidelines:
-- project_name: The actual project/app name (not necessarily the repository name)
+- project_name: The actual project name (not necessarily the repository name)
   - Project Name Guidelines:
     - Identify the actual project name from README, description, or documentation
     - The project name may differ from the repository name (e.g., "Signal" vs "Signal-Android")
@@ -47,7 +53,10 @@ Guidelines:
 - key_features: 3-4 user-facing features
 - important_links: Only include download, documentation, or official website links
 - Exclude GitHub URLs if they are for the project being analyzed
-- No #android or #androidrepo tags"""
+- No #android or #androidrepo tags
+
+CRITICAL: Keep the total response under 800 characters to fit Telegram image caption limits. \
+Be concise while maintaining technical accuracy."""
 
     @staticmethod
     def _create_user_prompt(
@@ -66,7 +75,9 @@ Guidelines:
 
         if readme_content:
             content = (
-                readme_content[:2000] + "..." if len(readme_content) > 2000 else readme_content
+                readme_content[: OpenAIClient.README_CONTENT_LIMIT] + "..."
+                if len(readme_content) > OpenAIClient.README_CONTENT_LIMIT
+                else readme_content
             )
             parts.append(f"Documentation/README: {content}")
 
@@ -84,10 +95,7 @@ Guidelines:
         system_prompt = self._create_system_prompt()
         user_prompt = self._create_user_prompt(repo_name, description, readme_content, topics)
 
-        models_to_try = [self._model]
-        if self._model != "openai/gpt-4.1-mini":
-            models_to_try.append("openai/gpt-4.1-mini")
-
+        models_to_try = self._get_models_to_try()
         original_model = self._model
 
         for model_index, model in enumerate(models_to_try):
@@ -97,20 +105,24 @@ Guidelines:
             logger.info("Trying %s model %s for %s", model_name, model, repo_name)
 
             try:
-                result = await self._attempt_enhancement(
+                return await self._attempt_enhancement(
                     system_prompt, user_prompt, repo_name, model_name, max_retries
                 )
-                self._model = original_model
-                return result
             except Exception as e:
                 if model_index == len(models_to_try) - 1:
-                    self._model = original_model
                     raise
                 logger.info("Switching to fallback model after errors: %s", e)
+            finally:
+                self._model = original_model
 
-        self._model = original_model
         msg = f"Failed to enhance content for {repo_name} after trying all models"
         raise RuntimeError(msg)
+
+    def _get_models_to_try(self) -> list[str]:
+        models = [self._model]
+        if self._model != self.FALLBACK_MODEL:
+            models.append(self.FALLBACK_MODEL)
+        return models
 
     async def _attempt_enhancement(
         self,
@@ -151,10 +163,14 @@ Guidelines:
                 if attempt == max_retries - 1:
                     raise
 
-            await asyncio.sleep(2**attempt)
+            await self._backoff_delay(attempt)
 
         msg = f"Failed to enhance content for {repo_name} after {max_retries} attempts"
         raise RuntimeError(msg)
+
+    @staticmethod
+    async def _backoff_delay(attempt: int) -> None:
+        await asyncio.sleep(2**attempt)
 
     async def _make_api_request(self, system_prompt: str, user_prompt: str):
         return await self._client.beta.chat.completions.parse(
@@ -163,8 +179,8 @@ Guidelines:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            max_tokens=1000,
-            temperature=0.2,
+            max_tokens=self.MAX_TOKENS,
+            temperature=self.TEMPERATURE,
             response_format=AIGeneratedContent,
         )
 
@@ -181,5 +197,5 @@ Guidelines:
             msg = "Empty or unparseable response from OpenAI"
             raise ValueError(msg)
 
-        logger.debug("AI response: %s", parsed_response)
+        logger.debug("Generated content: %s", parsed_response)
         return parsed_response
