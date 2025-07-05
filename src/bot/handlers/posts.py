@@ -20,13 +20,13 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import Settings, settings
 from bot.database import (
-    can_submit_app,
-    delete_scheduled_post,
-    has_pending_scheduled_post,
-    schedule_post,
-    submit_app,
+    can_submit,
+    create_scheduled_post,
+    delete_post,
+    has_pending_post,
+    submit,
 )
-from bot.database.operations import get_scheduled_posts_after_time
+from bot.database.operations import get_posts_in_range
 from bot.filters.sudo import SudoersFilter
 from bot.scheduler import PostScheduler
 from bot.utils.banner_generator import generate_banner
@@ -184,7 +184,7 @@ async def _handle_publication(
         chat_id=settings.channel_id, photo=banner_input, caption=post_text
     )
 
-    await submit_app(repository, sent_message.message_id)
+    await submit(repository, sent_message.message_id)
     return "✅ <b>Post Published!</b>\n\n<i>Post sent to channel and saved to database.</i>"
 
 
@@ -195,7 +195,7 @@ async def _handle_scheduling(
     banner_buffer: BytesIO,
     banner_filename: str,
 ) -> str | None:
-    if await has_pending_scheduled_post(repository.id):
+    if await has_pending_post(repository.id):
         return (
             "⚠️ <b>Post Already Scheduled</b>\n\n"
             "This repository already has a post scheduled for publication.\n\n"
@@ -203,11 +203,11 @@ async def _handle_scheduling(
         )
 
     try:
-        next_slot = await scheduler.get_next_available_slot()
-        rounded_slot = scheduler.round_slot(next_slot)
+        next_slot = await scheduler.get_next_slot()
+        rounded_slot = scheduler.round_to_interval(next_slot)
         job_id = f"post_{repository.id}_{int(rounded_slot.timestamp())}"
 
-        scheduled_post = await schedule_post(
+        scheduled_post = await create_scheduled_post(
             repository=repository,
             post_text=post_text,
             banner_buffer=banner_buffer,
@@ -224,7 +224,7 @@ async def _handle_scheduling(
                 banner_filename=banner_filename,
             )
         except Exception as scheduler_error:
-            await delete_scheduled_post(scheduled_post.id)
+            await delete_post(scheduled_post.id)
             raise scheduler_error
 
         return (
@@ -258,7 +258,7 @@ async def process_post_publication(
 
     try:
         async with PostScheduler(callback.bot, settings) as scheduler:
-            next_slot = await scheduler.get_next_available_slot(current_time)
+            next_slot = await scheduler.get_next_slot(current_time)
             time_diff = (next_slot - current_time).total_seconds()
 
             if time_diff <= 60:
@@ -344,7 +344,7 @@ async def process_repository_confirmation(
                 return
 
             repo_data = await client.get_basic_repository_data(repository_url)
-            can_submit_repo, last_submission = await can_submit_app(repo_data.id)
+            can_submit_repo, last_submission = await can_submit(repo_data.id)
 
             if not can_submit_repo and last_submission:
                 days_since = (datetime.now(tz=UTC) - last_submission.replace(tzinfo=UTC)).days
@@ -370,7 +370,7 @@ async def process_repository_confirmation(
 @router.message(Command("scheduled"))
 async def list_scheduled_posts(message: Message) -> None:
     now = datetime.now(UTC)
-    scheduled_posts = await get_scheduled_posts_after_time(now, now.replace(year=now.year + 1))
+    scheduled_posts = await get_posts_in_range(now, now.replace(year=now.year + 1))
 
     if not scheduled_posts:
         await message.answer(

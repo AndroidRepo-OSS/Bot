@@ -18,19 +18,19 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from bot.config import Settings
 from bot.database import (
-    cleanup_orphaned_scheduled_posts,
+    cleanup_orphaned_posts,
     database,
-    get_last_post_time,
-    get_next_available_slot_with_lock,
-    update_scheduled_post_as_published,
-    update_scheduled_post_time,
+    get_last_submission_time,
+    get_next_slot,
+    mark_post_published,
+    update_post_time,
 )
 from bot.database.models import ScheduledPost
 
 logger = logging.getLogger(__name__)
 
 
-def ensure_timezone_aware(dt: datetime) -> datetime:
+def to_utc(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=UTC)
     return dt
@@ -52,7 +52,7 @@ class PostScheduler:
         await self.scheduler.__aenter__()
         if not self._started:
             await self.scheduler.add_schedule(
-                self._cleanup_old_posts, IntervalTrigger(hours=24), id="cleanup_old_posts"
+                self._cleanup_orphaned, IntervalTrigger(hours=24), id="cleanup_old_posts"
             )
             await self.scheduler.add_schedule(
                 self._database_maintenance, IntervalTrigger(days=7), id="database_maintenance"
@@ -73,9 +73,9 @@ class PostScheduler:
             logger.info("Post scheduler stopped")
 
     @staticmethod
-    async def _cleanup_old_posts() -> None:
+    async def _cleanup_orphaned() -> None:
         try:
-            orphaned_count = await cleanup_orphaned_scheduled_posts(days_old=3)
+            orphaned_count = await cleanup_orphaned_posts(days_old=3)
 
             if orphaned_count > 0:
                 logger.info("Daily cleanup: %d orphaned scheduled posts", orphaned_count)
@@ -93,11 +93,11 @@ class PostScheduler:
             logger.error("Failed to perform database maintenance: %s", e)
 
     @staticmethod
-    def round_slot(
+    def round_to_interval(
         slot: datetime,
         interval_minutes: int = 15,
     ) -> datetime:
-        slot = ensure_timezone_aware(slot)
+        slot = to_utc(slot)
 
         minute = (slot.minute // interval_minutes) * interval_minutes
         if slot.minute % interval_minutes:
@@ -128,9 +128,9 @@ class PostScheduler:
             raise ValueError(msg)
 
         job_id = f"post_{post.id}_{post.repository_id}"
-        scheduled_time = ensure_timezone_aware(post.scheduled_time)
+        scheduled_time = to_utc(post.scheduled_time)
 
-        last_post_time = await get_last_post_time()
+        last_post_time = await get_last_submission_time()
         if last_post_time:
             time_diff_hours = (scheduled_time - last_post_time).total_seconds() / 3600
             if time_diff_hours < 1.0:
@@ -142,10 +142,10 @@ class PostScheduler:
                     scheduled_time,
                 )
 
-        run_date = self.round_slot(scheduled_time)
+        run_date = self.round_to_interval(scheduled_time)
 
         if run_date != scheduled_time:
-            await update_scheduled_post_time(post.id, run_date)
+            await update_post_time(post.id, run_date)
 
         try:
             banner_data = banner_buffer.getvalue()
@@ -155,7 +155,7 @@ class PostScheduler:
             banner_b64 = base64.b64encode(banner_data).decode("utf-8")
 
             await self.scheduler.add_schedule(
-                publish_scheduled_post,
+                publish_post,
                 DateTrigger(run_date),
                 args=[
                     int(post.id),
@@ -180,11 +180,11 @@ class PostScheduler:
             raise RuntimeError(msg) from e
 
     @staticmethod
-    async def get_next_available_slot(base_time: datetime | None = None) -> datetime:
-        return await get_next_available_slot_with_lock(base_time)
+    async def get_next_slot(base_time: datetime | None = None) -> datetime:
+        return await get_next_slot(base_time)
 
 
-async def publish_scheduled_post(
+async def publish_post(
     post_id: int,
     post_text: str,
     banner_b64: str,
@@ -207,7 +207,7 @@ async def publish_scheduled_post(
         )
 
         try:
-            await update_scheduled_post_as_published(post_id, sent_message.message_id)
+            await mark_post_published(post_id, sent_message.message_id)
             logger.info("Successfully published scheduled post %s", post_id)
         except Exception as db_error:
             logger.error(
