@@ -10,7 +10,7 @@ from typing import Self
 
 from aiogram import Bot
 from aiogram.types import BufferedInputFile
-from apscheduler import AsyncScheduler
+from apscheduler import AsyncScheduler, CoalescePolicy, JobOutcome, JobReleased
 from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
 from apscheduler.eventbrokers.local import LocalEventBroker
 from apscheduler.triggers.date import DateTrigger
@@ -45,7 +45,7 @@ class PostScheduler:
             "sqlite:///data/scheduler_jobs.db", start_from_scratch=False
         )
         event_broker = LocalEventBroker()
-        self.scheduler = AsyncScheduler(data_store, event_broker)
+        self.scheduler = AsyncScheduler(data_store=data_store, event_broker=event_broker)
         self._started: bool = False
 
     async def __aenter__(self) -> Self:
@@ -57,7 +57,8 @@ class PostScheduler:
             await self.scheduler.add_schedule(
                 self._database_maintenance, IntervalTrigger(days=7), id="database_maintenance"
             )
-            logger.info("Post scheduler started")
+            self.scheduler.subscribe(self._job_event_listener, JobReleased)
+            logger.info("Post scheduler started with job event monitoring")
         self._started = True
         return self
 
@@ -158,14 +159,16 @@ class PostScheduler:
                 publish_post,
                 DateTrigger(run_date),
                 args=[
-                    int(post.id),
-                    str(post_text),
+                    post.id,
+                    post_text,
                     banner_b64,
-                    str(banner_filename),
-                    str(self.settings.channel_id),
-                    str(self.bot.token),
+                    banner_filename,
+                    self.settings.channel_id,
+                    self.bot.token,
                 ],
                 id=job_id,
+                misfire_grace_time=timedelta(minutes=30),
+                coalesce=CoalescePolicy.latest,
                 metadata={"job_id": job_id, "scheduled_time": str(run_date)},
             )
             logger.info(
@@ -203,6 +206,23 @@ class PostScheduler:
             logger.error("Failed to cancel scheduled jobs: %s", e)
             raise
 
+    @staticmethod
+    def _job_event_listener(event: JobReleased) -> None:
+        if event.outcome == JobOutcome.missed_start_deadline:
+            logger.warning(
+                "Job %s missed its deadline - scheduled for %s",
+                event.job_id,
+                event.scheduled_start,
+            )
+        elif event.outcome == JobOutcome.success:
+            logger.debug("Job %s completed successfully", event.job_id)
+        elif event.outcome == JobOutcome.error:
+            logger.error(
+                "Job %s failed with error: %s",
+                event.job_id,
+                event.exception_message,
+            )
+
 
 async def publish_post(
     post_id: int,
@@ -215,30 +235,18 @@ async def publish_post(
     logger = logging.getLogger(__name__)
 
     try:
-        bot = Bot(token=bot_token)
+        async with Bot(token=bot_token) as bot:
+            banner_data = base64.b64decode(banner_b64)
+            banner_input = BufferedInputFile(banner_data, filename=banner_filename)
 
-        banner_data = base64.b64decode(banner_b64)
-        banner_input = BufferedInputFile(banner_data, filename=banner_filename)
+            sent_message = await bot.send_photo(
+                chat_id=int(channel_id),
+                photo=banner_input,
+                caption=post_text,
+            )
 
-        sent_message = await bot.send_photo(
-            chat_id=int(channel_id),
-            photo=banner_input,
-            caption=post_text,
-        )
-
-        try:
             await mark_post_published(post_id, sent_message.message_id)
             logger.info("Successfully published scheduled post %s", post_id)
-        except Exception as db_error:
-            logger.error(
-                "Published post %s to channel but failed to update database: %s",
-                post_id,
-                db_error,
-            )
-            logger.info("Post was sent with message_id: %s", sent_message.message_id)
-            raise
-        finally:
-            await bot.session.close()
 
     except Exception as e:
         logger.error("Failed to publish scheduled post %s: %s", post_id, e)
