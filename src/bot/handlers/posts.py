@@ -18,7 +18,7 @@ from aiogram.types import (
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.config import Settings, settings
+from bot.config import settings
 from bot.database import (
     can_submit,
     clear_all_scheduled_posts,
@@ -41,28 +41,43 @@ router.message.filter(SudoersFilter(), F.chat.type == ChatType.PRIVATE)
 router.callback_query.filter(SudoersFilter())
 
 
-def get_project_name(enhanced_data: EnhancedRepositoryData) -> str:
-    if enhanced_data.ai_content and enhanced_data.ai_content.project_name:
-        return enhanced_data.ai_content.project_name
-    return enhanced_data.repository.name
+def _cleanup_banner(banner_buffer: BytesIO | None) -> None:
+    if banner_buffer:
+        banner_buffer.close()
 
 
-def get_description(enhanced_data: EnhancedRepositoryData) -> str | None:
-    if enhanced_data.ai_content:
-        return enhanced_data.ai_content.enhanced_description
-    return enhanced_data.repository.description
+def _get_project_name(enhanced_data: EnhancedRepositoryData) -> str:
+    return (
+        enhanced_data.ai_content.project_name
+        if enhanced_data.ai_content and enhanced_data.ai_content.project_name
+        else enhanced_data.repository.name
+    )
 
 
-def get_tags(enhanced_data: EnhancedRepositoryData) -> list[str]:
-    if enhanced_data.ai_content and enhanced_data.ai_content.relevant_tags:
-        return enhanced_data.ai_content.relevant_tags
-    return enhanced_data.repository.topics or []
+async def _edit_message_text_or_caption(message: Message, text: str) -> None:
+    if message.photo:
+        await message.edit_caption(caption=text)
+    else:
+        await message.edit_text(text)
+
+
+async def _get_repository_url_from_state(state: FSMContext) -> str | None:
+    data = await state.get_data()
+    return data.get("repository_url")
 
 
 def format_post(enhanced_data: EnhancedRepositoryData) -> str:
-    project_name = get_project_name(enhanced_data)
-    description = get_description(enhanced_data)
-    tags = get_tags(enhanced_data)
+    project_name = _get_project_name(enhanced_data)
+    description = (
+        enhanced_data.ai_content.enhanced_description
+        if enhanced_data.ai_content
+        else enhanced_data.repository.description
+    )
+    tags = (
+        enhanced_data.ai_content.relevant_tags
+        if enhanced_data.ai_content and enhanced_data.ai_content.relevant_tags
+        else enhanced_data.repository.topics or []
+    )
 
     sections = [f"<b>{project_name}</b>"]
 
@@ -117,7 +132,7 @@ def create_keyboard(keyboard_type: KeyboardType) -> InlineKeyboardMarkup:
 async def _validate_session(
     callback: CallbackQuery, state: FSMContext
 ) -> tuple[str, EnhancedRepositoryData, BytesIO] | None:
-    if isinstance(callback.message, InaccessibleMessage) or not callback.message:
+    if not (message := callback.message) or isinstance(message, InaccessibleMessage):
         return None
 
     data = await state.get_data()
@@ -125,25 +140,21 @@ async def _validate_session(
     enhanced_data = data.get("enhanced_data")
     banner_buffer = data.get("banner_buffer")
 
-    error_message = None
     if (
         not isinstance(post_text, str)
         or not enhanced_data
         or not isinstance(banner_buffer, BytesIO)
     ):
-        error_message = "Session expired or missing data. Try /post again."
-    elif not settings.channel_id:
-        error_message = "Channel ID not configured."
-    elif len(banner_buffer.getvalue()) > 10 * 1024 * 1024:
-        error_message = "Banner too large (>10MB)."
-
-    if error_message:
-        await callback.message.edit_caption(caption=f"❌ <b>Error</b>\n\n{error_message}")
+        await _edit_message_text_or_caption(
+            message, "❌ <b>Error</b>\n\nSession expired or missing data. Try /post again."
+        )
         return None
 
-    assert isinstance(post_text, str)
-    assert isinstance(enhanced_data, EnhancedRepositoryData)
-    assert isinstance(banner_buffer, BytesIO)
+    if not settings.channel_id:
+        await _edit_message_text_or_caption(
+            message, "❌ <b>Error</b>\n\nChannel ID not configured."
+        )
+        return None
 
     return post_text, enhanced_data, banner_buffer
 
@@ -151,17 +162,13 @@ async def _validate_session(
 async def _handle_error(
     message: Message, state: FSMContext, error_text: str, clear_state: bool = True
 ) -> None:
-    if message.photo:
-        await message.edit_caption(caption=f"❌ <b>Error</b>\n\n{error_text}")
-    else:
-        await message.edit_text(f"❌ <b>Error</b>\n\n{error_text}")
+    await _edit_message_text_or_caption(message, f"❌ <b>Error</b>\n\n{error_text}")
     if clear_state:
         await state.clear()
 
 
 async def _handle_publication(
     callback: CallbackQuery,
-    settings: Settings,
     post_text: str,
     banner_buffer: BytesIO,
     banner_filename: str,
@@ -242,7 +249,6 @@ async def process_post_publication(
     enhanced_data: EnhancedRepositoryData,
     post_text: str,
     banner_buffer: BytesIO,
-    settings: Settings,
 ) -> None:
     if (
         not callback.bot
@@ -252,7 +258,7 @@ async def process_post_publication(
         return
 
     repository = enhanced_data.repository
-    project_name = get_project_name(enhanced_data)
+    project_name = _get_project_name(enhanced_data)
     banner_filename = f"{project_name.lower().replace(' ', '_')}_banner.png"
 
     current_time = datetime.now(UTC)
@@ -264,7 +270,7 @@ async def process_post_publication(
 
             if time_diff <= 60:
                 result_text = await _handle_publication(
-                    callback, settings, post_text, banner_buffer, banner_filename, repository
+                    callback, post_text, banner_buffer, banner_filename, repository
                 )
             else:
                 result_text = await _handle_scheduling(
@@ -282,7 +288,7 @@ async def process_post_publication(
 async def process_post_content(
     message: Message, state: FSMContext, enhanced_data: EnhancedRepositoryData
 ) -> None:
-    project_name = get_project_name(enhanced_data)
+    project_name = _get_project_name(enhanced_data)
     await message.edit_text(
         "🎨 <b>Finalizing Content</b>\n\n<i>Formatting post and generating banner...</i>"
     )
@@ -335,15 +341,6 @@ async def process_repository_confirmation(
 
     try:
         async with RepositoryClient() as client:
-            if not client.is_valid_repository_url(repository_url):
-                error_msg = (
-                    f"<b>Invalid Repository</b>\n\n"
-                    f"<b>URL:</b> <code>{repository_url}</code>\n"
-                    "Please check the URL and try again with /post"
-                )
-                await _handle_error(message, state, error_msg)
-                return
-
             repo_data = await client.get_basic_repository_data(repository_url)
             can_submit_repo, last_submission = await can_submit(repo_data.id)
 
@@ -435,9 +432,8 @@ async def clear_scheduled_posts(message: Message) -> None:
 
 @router.message(Command("post"))
 async def post_command_handler(message: Message, state: FSMContext) -> None:
-    if banner_buffer := (await state.get_data()).get("banner_buffer"):
-        banner_buffer.close()
-
+    data = await state.get_data()
+    _cleanup_banner(data.get("banner_buffer"))
     await state.clear()
     await state.set_state(PostStates.waiting_for_repository_url)
 
@@ -459,10 +455,10 @@ async def cancel_command_handler(message: Message, state: FSMContext) -> None:
         )
         return
 
-    if banner_buffer := (await state.get_data()).get("banner_buffer"):
-        banner_buffer.close()
-
+    data = await state.get_data()
+    _cleanup_banner(data.get("banner_buffer"))
     await state.clear()
+
     await message.reply(
         "❌ <b>Session Cancelled</b>\n\n"
         "Your post creation has been cancelled.\n\n"
@@ -511,29 +507,29 @@ async def invalid_repository_url_handler(message: Message) -> None:
 
 @router.callback_query(PostCallback.filter(F.action == PostAction.CONFIRM))
 async def confirm_post_handler(callback: CallbackQuery, state: FSMContext) -> None:
-    if not callback.message or isinstance(callback.message, InaccessibleMessage):
+    if not (message := callback.message) or isinstance(message, InaccessibleMessage):
         return
 
-    repository_url = (await state.get_data()).get("repository_url")
+    repository_url = await _get_repository_url_from_state(state)
     if not repository_url:
-        await _handle_error(callback.message, state, "Session expired, please start again.")
+        await _handle_error(message, state, "Session expired, please start again.")
         return
 
-    await process_repository_confirmation(callback.message, state, repository_url)
+    await process_repository_confirmation(message, state, repository_url)
 
 
 @router.callback_query(PostCallback.filter(F.action == PostAction.REGENERATE))
 async def regenerate_post_handler(callback: CallbackQuery, state: FSMContext) -> None:
-    if not callback.message or isinstance(callback.message, InaccessibleMessage):
+    if not (message := callback.message) or isinstance(message, InaccessibleMessage):
         return
 
-    repository_url = (await state.get_data()).get("repository_url")
+    repository_url = await _get_repository_url_from_state(state)
     if not repository_url:
-        await _handle_error(callback.message, state, "Session expired, please start again.")
+        await _handle_error(message, state, "Session expired, please start again.")
         return
 
-    await callback.message.delete()
-    new_message = await callback.message.answer("🔄 <b>Regenerating Content</b>\n\nPlease wait...")
+    await message.delete()
+    new_message = await message.answer("🔄 <b>Regenerating Content</b>\n\nPlease wait...")
 
     await state.set_state(PostStates.waiting_for_confirmation)
     await process_repository_confirmation(new_message, state, repository_url)
@@ -548,29 +544,26 @@ async def publish_post_handler(callback: CallbackQuery, state: FSMContext) -> No
 
     post_text, enhanced_data, banner_buffer = session_data
     try:
-        await process_post_publication(callback, enhanced_data, post_text, banner_buffer, settings)
+        await process_post_publication(callback, enhanced_data, post_text, banner_buffer)
     except Exception as e:
-        if callback.message and not isinstance(callback.message, InaccessibleMessage):
-            await _handle_error(callback.message, state, f"Publishing Failed: {e!s}", False)
+        if (message := callback.message) and not isinstance(message, InaccessibleMessage):
+            await _handle_error(message, state, f"Publishing Failed: {e!s}", False)
     finally:
-        banner_buffer.close()
+        _cleanup_banner(banner_buffer)
         await state.clear()
 
 
 @router.callback_query(PostCallback.filter(F.action == PostAction.CANCEL))
 async def cancel_callback_handler(callback: CallbackQuery, state: FSMContext) -> None:
-    if not callback.message or isinstance(callback.message, InaccessibleMessage):
+    if not (message := callback.message) or isinstance(message, InaccessibleMessage):
         return
 
     if await state.get_state():
-        if banner_buffer := (await state.get_data()).get("banner_buffer"):
-            banner_buffer.close()
+        data = await state.get_data()
+        _cleanup_banner(data.get("banner_buffer"))
         await state.clear()
 
-    cancel_text = "❌ <b>Post Creation Cancelled</b>\n\nYou can start again anytime with /post."
-    if callback.message.photo:
-        await callback.message.edit_caption(caption=cancel_text)
-    else:
-        await callback.message.edit_text(cancel_text)
-
+    await _edit_message_text_or_caption(
+        message, "❌ <b>Post Creation Cancelled</b>\n\nYou can start again anytime with /post."
+    )
     await callback.answer("Post cancelled")
