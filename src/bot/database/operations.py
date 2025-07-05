@@ -324,3 +324,26 @@ async def delete_post(post_id: int) -> bool:
 
     msg = "Failed to delete scheduled post"
     raise RuntimeError(msg)
+
+
+async def clear_all_scheduled_posts() -> int:
+    async for session in database.get_session():
+        try:
+            stmt = select(ScheduledPost)
+            result = await session.execute(stmt)
+            scheduled_posts = result.scalars().all()
+            count = len(scheduled_posts)
+
+            if count > 0:
+                delete_stmt = delete(ScheduledPost)
+                await session.execute(delete_stmt)
+                await session.commit()
+                logger.info("Cleared %d scheduled posts", count)
+
+            return count
+        except Exception as e:
+            await session.rollback()
+            logger.error("Failed to clear scheduled posts: %s", e)
+            raise
+
+    return 0

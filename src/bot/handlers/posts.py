@@ -21,6 +21,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.config import Settings, settings
 from bot.database import (
     can_submit,
+    clear_all_scheduled_posts,
     create_scheduled_post,
     delete_post,
     has_pending_post,
@@ -395,6 +396,41 @@ async def list_scheduled_posts(message: Message) -> None:
             text += "\n\n"
 
     await message.answer(text)
+
+
+@router.message(Command("clearscheduled"))
+async def clear_scheduled_posts(message: Message) -> None:
+    try:
+        cleared_count = await clear_all_scheduled_posts()
+
+        cancelled_jobs = 0
+        if message.bot:
+            try:
+                async with PostScheduler(message.bot, settings) as scheduler:
+                    cancelled_jobs = await scheduler.cancel_all_post_jobs()
+            except Exception as scheduler_error:
+                await message.answer(
+                    f"❌ <b>Error</b>\n\nFailed to cancel scheduler jobs: {scheduler_error!s}"
+                )
+                return
+
+        if cleared_count == 0:
+            await message.answer(
+                "📅 <b>No Posts to Clear</b>\n\nThere are no scheduled posts to remove."
+            )
+        else:
+            plural = "s" if cleared_count != 1 else ""
+            job_plural = "s" if cancelled_jobs != 1 else ""
+            job_info = ""
+            if cancelled_jobs > 0:
+                job_info = f" and {cancelled_jobs} scheduler job{job_plural}"
+
+            await message.answer(
+                f"🗑️ <b>Scheduled Posts Cleared</b>\n\n"
+                f"Successfully removed {cleared_count} scheduled post{plural}{job_info}."
+            )
+    except Exception as e:
+        await message.answer(f"❌ <b>Error</b>\n\nFailed to clear scheduled posts: {e!s}")
 
 
 @router.message(Command("post"))

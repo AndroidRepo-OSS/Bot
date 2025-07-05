@@ -183,6 +183,26 @@ class PostScheduler:
     async def get_next_slot(base_time: datetime | None = None) -> datetime:
         return await get_next_slot(base_time)
 
+    async def cancel_all_post_jobs(self) -> int:
+        if not self._started:
+            return 0
+
+        try:
+            schedules = await self.scheduler.get_schedules()
+            cancelled_count = 0
+
+            for schedule in schedules:
+                excluded_jobs = {"cleanup_old_posts", "database_maintenance"}
+                if schedule.id.startswith("post_") and schedule.id not in excluded_jobs:
+                    await self.scheduler.remove_schedule(schedule.id)
+                    cancelled_count += 1
+                    logger.info("Cancelled scheduled job: %s", schedule.id)
+
+            return cancelled_count
+        except Exception as e:
+            logger.error("Failed to cancel scheduled jobs: %s", e)
+            raise
+
 
 async def publish_post(
     post_id: int,

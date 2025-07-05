@@ -6,6 +6,7 @@ from .models import AppSubmission, ScheduledPost
 from .operations import (
     can_submit,
     cleanup_orphaned_posts,
+    clear_all_scheduled_posts,
     create_scheduled_post,
     delete_post,
     get_last_submission_time,
@@ -22,6 +23,7 @@ __all__ = (
     "ScheduledPost",
     "can_submit",
     "cleanup_orphaned_posts",
+    "clear_all_scheduled_posts",
     "create_scheduled_post",
     "database",
     "delete_post",
