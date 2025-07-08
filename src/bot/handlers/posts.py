@@ -8,6 +8,7 @@ from io import BytesIO
 from aiogram import F, Router
 from aiogram.enums import ChatType
 from aiogram.filters import Command
+from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     BufferedInputFile,
@@ -22,7 +23,7 @@ from bot.config import settings
 from bot.database import can_submit, submit
 from bot.filters.sudo import SudoersFilter
 from bot.utils.banner_generator import generate_banner
-from bot.utils.enums import KeyboardType, PostAction, PostCallback
+from bot.utils.enums import KeyboardType, PostAction
 from bot.utils.models import EnhancedRepositoryData, GitHubRepository, GitLabRepository
 from bot.utils.repository_client import RepositoryClient
 from bot.utils.states import PostStates
@@ -30,6 +31,10 @@ from bot.utils.states import PostStates
 router = Router(name="posts")
 router.message.filter(SudoersFilter(), F.chat.type == ChatType.PRIVATE)
 router.callback_query.filter(SudoersFilter())
+
+
+class PostCallback(CallbackData, prefix="post"):
+    action: PostAction
 
 
 def _cleanup_banner(banner_buffer: BytesIO | None) -> None:

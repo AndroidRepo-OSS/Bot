@@ -11,7 +11,7 @@ license = { file = "LICENSE" }
 authors = [{ name = "Hitalo M." }]
 requires-python = ">=3.13"
 dependencies = [
-    "aiogram[fast]>=3.20.0.post0",
+    "aiogram[fast]>=3.21.0",
     "pydantic-settings>=2.10.1",
     "aiohttp[speedups]>=3.9.0",
     "openai>=1.93.0",

@@ -4,8 +4,6 @@
 from enum import Enum
 from urllib.parse import urlparse
 
-from aiogram.filters.callback_data import CallbackData
-
 
 class KeyboardType(Enum):
     CONFIRMATION = "confirmation"
@@ -17,10 +15,6 @@ class PostAction(Enum):
     CANCEL = "cancel"
     PUBLISH = "publish"
     REGENERATE = "regenerate"
-
-
-class PostCallback(CallbackData, prefix="post"):
-    action: PostAction
 
 
 class Platform(Enum):
