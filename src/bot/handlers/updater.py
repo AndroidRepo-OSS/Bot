@@ -7,16 +7,16 @@ import sys
 from pathlib import Path
 
 from aiogram import F, Router
-from aiogram.enums import ChatType
 from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import CallbackQuery, InaccessibleMessage, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.filters.sudo import SudoersFilter
+from bot.utils.logger import LogLevel, log_system_event, log_user_action
 
-router = Router(name="admin")
-router.message.filter(SudoersFilter(), F.chat.type == ChatType.PRIVATE)
+router = Router(name="updater")
+router.message.filter(SudoersFilter())
 router.callback_query.filter(SudoersFilter())
 
 
@@ -174,6 +174,14 @@ async def confirm_update(callback: CallbackQuery, callback_data: UpdateCallback)
 
     status_message = callback.message
 
+    if callback.bot and callback.from_user:
+        await log_user_action(
+            bot=callback.bot,
+            user=callback.from_user,
+            action_description="Initiated bot update",
+            level=LogLevel.WARNING,
+        )
+
     try:
         project_root = Path(__file__).parent.parent.parent.parent
 
@@ -186,6 +194,15 @@ async def confirm_update(callback: CallbackQuery, callback_data: UpdateCallback)
 
         if not await _install_dependencies(project_root, status_message):
             return
+
+        if callback.bot:
+            triggered_by = callback.from_user.full_name if callback.from_user else "Unknown"
+            await log_system_event(
+                bot=callback.bot,
+                event_description="Bot updated successfully - restarting",
+                level=LogLevel.SUCCESS,
+                extra_data={"triggered_by": triggered_by},
+            )
 
         await status_message.edit_text("🔄 Restarting bot...")
         await asyncio.sleep(1)

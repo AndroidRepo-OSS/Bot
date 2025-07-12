@@ -24,6 +24,7 @@ from bot.database import can_submit, submit
 from bot.filters.topic import SubmissionTopicFilter
 from bot.utils.banner_generator import generate_banner
 from bot.utils.enums import KeyboardType, PostAction
+from bot.utils.logger import log_error, log_post_created
 from bot.utils.models import EnhancedRepositoryData, GitHubRepository, GitLabRepository
 from bot.utils.repository_client import RepositoryClient
 from bot.utils.states import (
@@ -193,6 +194,16 @@ async def _handle_publication(
     )
 
     await submit(repository, sent_message.message_id)
+
+    if callback.from_user:
+        await log_post_created(
+            bot=callback.bot,
+            admin_user=callback.from_user,
+            repository_name=repository.name,
+            repository_url=repository.url,
+            channel_message_id=sent_message.message_id,
+        )
+
     return "✅ <b>Post Published!</b>\n\n<i>Post sent to channel and saved to database.</i>"
 
 
@@ -223,6 +234,17 @@ async def process_post_publication(
     except Exception as e:
         error_message = f"Failed to process publication: {e!s}"
         await callback.message.edit_caption(caption=f"❌ <b>Error</b>\n\n{error_message}")
+
+        if callback.bot and callback.from_user:
+            await log_error(
+                bot=callback.bot,
+                error_description=(
+                    f"Post publication failed for {repository.name}: {error_message}"
+                ),
+                user=callback.from_user,
+                extra_data={"repository_name": repository.name, "repository_url": repository.url},
+            )
+
         raise
 
 

@@ -30,3 +30,8 @@ class TopicFilter(BaseFilter):
 class SubmissionTopicFilter(TopicFilter):
     def __init__(self):
         super().__init__(topic_name="Submissions")
+
+
+class LogsTopicFilter(TopicFilter):
+    def __init__(self):
+        super().__init__(topic_name="Logs")

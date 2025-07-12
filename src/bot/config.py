@@ -31,6 +31,10 @@ class Settings(BaseSettings):
         default=0, description="Telegram group ID where users can submit posts in topics"
     )
 
+    logs_topic_id: int = Field(
+        default=0, description="Topic ID for logs in the group (0 to disable logs)"
+    )
+
     openai_api_key: SecretStr = Field(description="OpenAI API key for content enhancement")
     openai_base_url: str = Field(
         default="https://api.openai.com/v1", description="OpenAI API base URL"
