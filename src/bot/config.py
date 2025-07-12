@@ -27,6 +27,10 @@ class Settings(BaseSettings):
         default=-1001258691467, description="Telegram channel ID where posts will be sent"
     )
 
+    group_id: int = Field(
+        default=0, description="Telegram group ID where users can submit posts in topics"
+    )
+
     openai_api_key: SecretStr = Field(description="OpenAI API key for content enhancement")
     openai_base_url: str = Field(
         default="https://api.openai.com/v1", description="OpenAI API base URL"

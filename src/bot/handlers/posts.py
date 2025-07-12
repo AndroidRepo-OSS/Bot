@@ -21,25 +21,29 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import settings
 from bot.database import can_submit, submit
-from bot.filters.sudo import SudoersFilter
+from bot.filters.topic import SubmissionTopicFilter
 from bot.utils.banner_generator import generate_banner
 from bot.utils.enums import KeyboardType, PostAction
 from bot.utils.models import EnhancedRepositoryData, GitHubRepository, GitLabRepository
 from bot.utils.repository_client import RepositoryClient
-from bot.utils.states import PostStates
+from bot.utils.states import (
+    PostStates,
+    clear_user_data,
+    get_user_repository_url,
+    update_user_data,
+)
 
 router = Router(name="posts")
-router.message.filter(SudoersFilter(), F.chat.type == ChatType.PRIVATE)
-router.callback_query.filter(SudoersFilter())
+router.message.filter(
+    F.chat.type.in_([ChatType.GROUP, ChatType.SUPERGROUP]),
+    SubmissionTopicFilter(),
+    F.chat.id == settings.group_id,
+)
+router.callback_query.filter()
 
 
 class PostCallback(CallbackData, prefix="post"):
     action: PostAction
-
-
-def _cleanup_banner(banner_buffer: BytesIO | None) -> None:
-    if banner_buffer:
-        banner_buffer.close()
 
 
 def _get_project_name(enhanced_data: EnhancedRepositoryData) -> str:
@@ -304,60 +308,68 @@ async def process_repository_confirmation(
 
 @router.message(Command("post"))
 async def post_command_handler(message: Message, state: FSMContext) -> None:
-    data = await state.get_data()
-    _cleanup_banner(data.get("banner_buffer"))
-    await state.clear()
+    if not message.from_user:
+        return
+
+    user_id = message.from_user.id
+    await clear_user_data(state, user_id)
     await state.set_state(PostStates.waiting_for_repository_url)
 
     await message.reply(
         "📱 <b>Create Repository Post</b>\n\n"
         "Send a GitHub or GitLab repository URL to generate a post.\n\n"
-        "💡 Use /cancel to abort anytime."
+        "💡 Send 'cancel' to abort anytime."
     )
 
 
 @router.message(Command("cancel"))
 @router.message(F.text.casefold() == "cancel")
 async def cancel_command_handler(message: Message, state: FSMContext) -> None:
-    if not await state.get_state():
+    if not message.from_user:
+        return
+
+    user_id = message.from_user.id
+    current_state = await state.get_state()
+
+    if not current_state:
         await message.reply(
             "❌ <b>No Active Session</b>\n\n"
             "You don't have any post creation in progress.\n\n"
-            "💡 Use /post to start creating a new post."
+            "💡 Send /post to start creating a new post."
         )
         return
 
-    data = await state.get_data()
-    _cleanup_banner(data.get("banner_buffer"))
-    await state.clear()
+    await clear_user_data(state, user_id)
 
     await message.reply(
         "❌ <b>Session Cancelled</b>\n\n"
         "Your post creation has been cancelled.\n\n"
-        "💡 Use /post to start over."
+        "💡 Send /post to start over."
     )
 
 
 @router.message(PostStates.waiting_for_repository_url, F.text)
 async def repository_url_handler(message: Message, state: FSMContext) -> None:
-    if not message.text:
+    if not message.text or not message.from_user:
         await message.reply(
             "❌ <b>Invalid Input</b>\n\n"
             "Please provide a valid repository URL from GitHub or GitLab."
         )
         return
 
+    user_id = message.from_user.id
     url = message.text.strip()
+
     async with RepositoryClient() as client:
         if not client.is_valid_repository_url(url):
             await message.reply(
                 "❌ <b>Invalid Repository URL</b>\n\n"
                 "Please provide a valid repository URL from GitHub or GitLab.\n\n"
-                "💡 Use /cancel to abort."
+                "💡 Send 'cancel' to abort."
             )
             return
 
-    await state.update_data(repository_url=url)
+    await update_user_data(state, user_id, repository_url=url)
     await state.set_state(PostStates.waiting_for_confirmation)
 
     await message.reply(
@@ -373,7 +385,7 @@ async def invalid_repository_url_handler(message: Message) -> None:
     await message.reply(
         "❌ <b>Invalid Input</b>\n\n"
         "Please send a valid GitHub or GitLab repository URL.\n\n"
-        "💡 Use /cancel to abort."
+        "💡 Send 'cancel' to abort."
     )
 
 
@@ -382,7 +394,12 @@ async def confirm_post_handler(callback: CallbackQuery, state: FSMContext) -> No
     if not (message := callback.message) or isinstance(message, InaccessibleMessage):
         return
 
-    repository_url = await _get_repository_url_from_state(state)
+    if not callback.from_user:
+        return
+
+    user_id = callback.from_user.id
+    repository_url = await get_user_repository_url(state, user_id)
+
     if not repository_url:
         await _handle_error(message, state, "Session expired, please start again.")
         return
@@ -421,7 +438,8 @@ async def publish_post_handler(callback: CallbackQuery, state: FSMContext) -> No
         if (message := callback.message) and not isinstance(message, InaccessibleMessage):
             await _handle_error(message, state, f"Publishing Failed: {e!s}", False)
     finally:
-        _cleanup_banner(banner_buffer)
+        if banner_buffer:
+            banner_buffer.close()
         await state.clear()
 
 
@@ -432,7 +450,8 @@ async def cancel_callback_handler(callback: CallbackQuery, state: FSMContext) ->
 
     if await state.get_state():
         data = await state.get_data()
-        _cleanup_banner(data.get("banner_buffer"))
+        if banner_buffer := data.get("banner_buffer"):
+            banner_buffer.close()
         await state.clear()
 
     await _edit_message_text_or_caption(

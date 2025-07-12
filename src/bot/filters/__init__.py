@@ -2,5 +2,6 @@
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
 from .sudo import SudoersFilter
+from .topic import SubmissionTopicFilter, TopicFilter
 
-__all__ = ("SudoersFilter",)
+__all__ = ("SubmissionTopicFilter", "SudoersFilter", "TopicFilter")
