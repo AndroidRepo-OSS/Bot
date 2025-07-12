@@ -4,12 +4,12 @@
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from bot.utils.models import GitHubRepository, GitLabRepository
 
 from .connection import database
-from .models import AppSubmission
+from .models import AppSubmission, Tag
 
 logger = logging.getLogger(__name__)
 
@@ -79,3 +79,67 @@ async def submit(
 
     msg = "Failed to submit app"
     raise RuntimeError(msg)
+
+
+async def get_standard_tags() -> set[str]:
+    async for session in database.get_session():
+        stmt = select(Tag.name).where(Tag.is_standard)
+        result = await session.execute(stmt)
+        return {tag[0] for tag in result.fetchall()}
+
+    return set()
+
+
+async def get_all_tags() -> set[str]:
+    async for session in database.get_session():
+        stmt = select(Tag.name)
+        result = await session.execute(stmt)
+        return {tag[0] for tag in result.fetchall()}
+
+    return set()
+
+
+async def save_tags(tags: list[str], existing_tags: set[str] | None = None) -> None:
+    if existing_tags is None:
+        existing_tags = await get_all_tags()
+
+    new_tags = [tag for tag in tags if tag not in existing_tags]
+
+    if not new_tags:
+        return
+
+    async for session in database.get_session():
+        for tag_name in new_tags:
+            tag = Tag(name=tag_name, is_standard=False, usage_count=1)
+            session.add(tag)
+
+        await session.commit()
+
+
+async def update_tag_usage(tags: list[str]) -> None:
+    if not tags:
+        return
+
+    async for session in database.get_session():
+        for tag_name in tags:
+            stmt = (
+                update(Tag)
+                .where(Tag.name == tag_name)
+                .values(
+                    usage_count=Tag.usage_count + 1,
+                    last_used_at=datetime.now(UTC),
+                )
+            )
+            await session.execute(stmt)
+
+        await session.commit()
+
+
+async def filter_and_save_tags(tags: list[str]) -> list[str]:
+    existing_tags = await get_all_tags()
+    standard_tags = await get_standard_tags()
+
+    await save_tags(tags, existing_tags)
+    await update_tag_usage(tags)
+
+    return [tag for tag in tags if tag in standard_tags]

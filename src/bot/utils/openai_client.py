@@ -10,6 +10,7 @@ from openai import AsyncOpenAI
 from pydantic import ValidationError
 
 from .models import AIGeneratedContent
+from .tag_manager import get_tags_for_ai_context, process_ai_generated_tags
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +33,8 @@ class OpenAIClient:
         await self._client.close()
 
     @staticmethod
-    def _create_system_prompt() -> str:
-        return """You are an Android content curator. Create user-focused descriptions \
+    def _create_system_prompt(standard_tags: set[str] | None = None) -> str:
+        base_prompt = """You are an Android content curator. Create user-focused descriptions \
 for Android apps, tools, and utilities.
 
 Focus on:
@@ -57,6 +58,17 @@ Guidelines:
 
 CRITICAL: Keep the total response under 800 characters to fit Telegram image caption limits. \
 Be concise while maintaining technical accuracy."""
+
+        if standard_tags:
+            tags_list = ", ".join(sorted(standard_tags))
+            tag_guidance = f"""
+
+For relevant_tags, prioritize these standard tags when applicable: {tags_list}
+You can suggest additional tags if they better describe the app, but prefer standard tags when \
+possible."""
+            base_prompt += tag_guidance
+
+        return base_prompt
 
     @staticmethod
     def _create_user_prompt(
@@ -92,7 +104,9 @@ Be concise while maintaining technical accuracy."""
         max_retries: int = 3,
     ) -> AIGeneratedContent:
         topics = topics or []
-        system_prompt = self._create_system_prompt()
+
+        standard_tags = await get_tags_for_ai_context()
+        system_prompt = self._create_system_prompt(standard_tags)
         user_prompt = self._create_user_prompt(repo_name, description, readme_content, topics)
 
         models_to_try = self._get_models_to_try()
@@ -105,9 +119,14 @@ Be concise while maintaining technical accuracy."""
             logger.info("Trying %s model %s for %s", model_name, model, repo_name)
 
             try:
-                return await self._attempt_enhancement(
+                ai_content = await self._attempt_enhancement(
                     system_prompt, user_prompt, repo_name, model_name, max_retries
                 )
+
+                if ai_content.relevant_tags:
+                    await process_ai_generated_tags(ai_content.relevant_tags)
+
+                return ai_content
             except Exception as e:
                 if model_index == len(models_to_try) - 1:
                     raise
