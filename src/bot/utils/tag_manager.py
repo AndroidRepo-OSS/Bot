@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 
-from bot.database.operations import filter_and_save_tags, get_standard_tags, update_tag_usage
+from bot.database.operations import filter_and_save_tags, get_all_tags
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +16,22 @@ async def process_ai_generated_tags(ai_tags: list[str]) -> list[str]:
 
     normalized_tags = [tag.lower().strip() for tag in ai_tags if tag.strip()]
 
-    await update_tag_usage(normalized_tags)
+    if len(normalized_tags) < 5:
+        logger.warning(
+            "AI generated only %d tags, expected 5-7. Tags: %s",
+            len(normalized_tags),
+            normalized_tags,
+        )
+    elif len(normalized_tags) > 7:
+        logger.warning(
+            "AI generated %d tags, expected 5-7. Keeping first 7 tags: %s",
+            len(normalized_tags),
+            normalized_tags[:7],
+        )
+        normalized_tags = normalized_tags[:7]
 
     return await filter_and_save_tags(normalized_tags)
 
 
 async def get_tags_for_ai_context() -> set[str]:
-    return await get_standard_tags()
+    return await get_all_tags()

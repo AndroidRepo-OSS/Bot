@@ -30,15 +30,17 @@ class RepositoryData:
 class OpenAIClient:
     DEFAULT_MODEL = "openai/gpt-4.1"
     FALLBACK_MODEL = "openai/gpt-4.1-mini"
-    MAX_TOKENS = 1000
+    MAX_TOKENS = 2000
     TEMPERATURE = 0.2
-    README_CONTENT_LIMIT = 2000
+    README_CONTENT_LIMIT = 5000
 
     def __init__(self, api_key: str, base_url: str | None = None) -> None:
         self._api_key = api_key
         self._base_url = base_url
         self._agent: Agent[RepositoryData, AIGeneratedContent] | None = None
-        self._current_model = self.DEFAULT_MODEL
+        self._model_settings = ModelSettings(
+            max_tokens=self.MAX_TOKENS, temperature=self.TEMPERATURE
+        )
 
     async def __aenter__(self) -> Self:
         await self._initialize_agent()
@@ -53,36 +55,48 @@ class OpenAIClient:
         pass
 
     async def _initialize_agent(self, model_name: str | None = None) -> None:
-        if self._agent is not None and model_name is None:
-            return
+        current_model = model_name or self.DEFAULT_MODEL
 
-        if model_name is not None:
-            self._current_model = model_name
-
-        standard_tags = await get_tags_for_ai_context()
-        system_prompt = self._create_system_prompt(standard_tags)
-
-        model_settings = ModelSettings(max_tokens=self.MAX_TOKENS, temperature=self.TEMPERATURE)
-
-        if self._base_url:
-            provider = OpenAIProvider(api_key=self._api_key, base_url=self._base_url)
-            model = OpenAIModel(self._current_model, provider=provider)
-        else:
-            model = OpenAIModel(
-                self._current_model, provider=OpenAIProvider(api_key=self._api_key)
-            )
+        model = self._create_model(current_model)
 
         self._agent = Agent(
             model=model,
             deps_type=RepositoryData,
             output_type=AIGeneratedContent,
-            system_prompt=system_prompt,
-            model_settings=model_settings,
+            system_prompt=self._create_base_system_prompt(),
+            model_settings=self._model_settings,
         )
 
+        @self._agent.system_prompt
+        async def add_suggested_tags_context() -> str:
+            suggested_tags = await get_tags_for_ai_context()
+            if not suggested_tags:
+                return """
+
+For relevant_tags, you MUST create exactly 5-7 tags using underscores \
+(e.g., "media_player", "file_manager"). \
+Create meaningful tags that best describe the app's category, functionality, \
+and target use cases. \
+If you can only think of a few obvious tags, expand with related categories, user types, \
+or use cases."""
+
+            tags_list = ", ".join(sorted(suggested_tags))
+            return f"""
+
+For relevant_tags, you MUST provide exactly 5-7 tags. Prioritize these existing tags \
+when applicable: {tags_list}
+If existing tags don't reach 5-7 tags, create new appropriate tags to meet the requirement. \
+Use underscores for multi-word tags and ensure all tags are relevant to the app's functionality."""
+
+    def _create_model(self, model_name: str) -> OpenAIModel:
+        if self._base_url:
+            provider = OpenAIProvider(api_key=self._api_key, base_url=self._base_url)
+            return OpenAIModel(model_name, provider=provider)
+        return OpenAIModel(model_name, provider=OpenAIProvider(api_key=self._api_key))
+
     @staticmethod
-    def _create_system_prompt(standard_tags: set[str] | None = None) -> str:
-        base_prompt = """You are an Android content curator. Create user-focused descriptions \
+    def _create_base_system_prompt() -> str:
+        return """You are an Android content curator. Create user-focused descriptions \
 for Android apps, tools, and utilities.
 
 Focus on:
@@ -98,7 +112,11 @@ Guidelines:
     - Look for app names, display names, or branding mentioned in the documentation
     - If uncertain, use the project/repository name as a fallback
 - enhanced_description: 2-3 sentences, user benefits focused
-- relevant_tags: 5-7 tags using underscores (e.g., "media_player")
+- relevant_tags: EXACTLY 5-7 tags using underscores (e.g., "media_player")
+  - REQUIREMENT: You must provide between 5 and 7 tags, never less, never more
+  - Mix of category tags (e.g., "communication", "productivity"), feature tags \
+(e.g., "offline_support", "material_design"), and user type tags \
+(e.g., "power_users", "developers")
 - key_features: 3-4 user-facing features
 - important_links: Only include download, documentation, or official website links
 - Exclude GitHub URLs if they are for the project being analyzed
@@ -106,17 +124,6 @@ Guidelines:
 
 CRITICAL: Keep the total response under 800 characters to fit Telegram image caption limits. \
 Be concise while maintaining technical accuracy."""
-
-        if standard_tags:
-            tags_list = ", ".join(sorted(standard_tags))
-            tag_guidance = f"""
-
-For relevant_tags, prioritize these standard tags when applicable: {tags_list}
-You can suggest additional tags if they better describe the app, but prefer standard tags when \
-possible."""
-            base_prompt += tag_guidance
-
-        return base_prompt
 
     def _create_user_prompt(self, repo_data: RepositoryData) -> str:
         parts = [f"Repository Name: {repo_data.repo_name}"]
@@ -145,7 +152,8 @@ possible."""
         topics: list[str] | None = None,
         max_retries: int = 3,
     ) -> AIGeneratedContent:
-        await self._initialize_agent()
+        if self._agent is None:
+            await self._initialize_agent()
 
         if self._agent is None:
             msg = "Agent not initialized"
@@ -168,7 +176,8 @@ possible."""
             ai_content = result.output
 
             if ai_content.relevant_tags:
-                await process_ai_generated_tags(ai_content.relevant_tags)
+                processed_tags = await process_ai_generated_tags(ai_content.relevant_tags)
+                ai_content.relevant_tags = processed_tags
 
             logger.debug("Generated content: %s", ai_content)
             return ai_content
