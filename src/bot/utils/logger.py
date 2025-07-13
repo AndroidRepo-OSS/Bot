@@ -79,25 +79,22 @@ class LoggerSystem:
         user: User | None = None,
         extra_data: dict[str, Any] | None = None,
     ) -> str:
-        timestamp = datetime.now(UTC).strftime("%d/%m/%Y %H:%M:%S")
+        timestamp = datetime.now(UTC).strftime("%H:%M:%S")
+        action_name = action.value.replace("_", " ").title()
 
-        lines = [
-            f"{level.value} <b>Log Entry</b>",
-            f"<b>Timestamp:</b> {timestamp}",
-            f"<b>Action:</b> {action.value.replace('_', ' ').title()}",
-        ]
+        lines = [f"{level.value} <b>{action_name}</b> - {timestamp}"]
 
         if user:
             user_info = f"@{user.username}" if user.username else f"ID: {user.id}"
             full_name = user.full_name or "Unknown User"
             lines.append(f"<b>User:</b> {full_name} ({user_info})")
 
-        lines.append(f"<b>Message:</b> {message}")
+        lines.append(message)
 
         if extra_data:
-            lines.append("<b>Additional Data:</b>")
             for key, value in extra_data.items():
-                lines.append(f"  • <b>{key.title()}:</b> {value}")
+                if key != "repository":
+                    lines.append(f"<b>{key.title()}:</b> {value}")
 
         return "\n".join(lines)
 
@@ -110,24 +107,22 @@ class LoggerSystem:
         channel_message_id: int | None = None,
         silent: bool = True,
     ) -> bool:
-        extra_data = {
-            "repository": f'<a href="{repository_url}">{repository_name}</a>',
-        }
+        extra_data = {}
 
         if channel_message_id:
-            extra_data["channel_message_id"] = str(channel_message_id)
+            extra_data["message_id"] = str(channel_message_id)
 
         if action == LogAction.POST_CREATED:
-            message = f"New post created for repository: {repository_name}"
+            message = f'✨ New post: <a href="{repository_url}">{repository_name}</a>'
             level = LogLevel.SUCCESS
         elif action == LogAction.POST_UPDATED:
-            message = f"Post updated for repository: {repository_name}"
+            message = f'📝 Updated: <a href="{repository_url}">{repository_name}</a>'
             level = LogLevel.INFO
         elif action == LogAction.POST_DELETED:
-            message = f"Post deleted for repository: {repository_name}"
+            message = f'🗑️ Deleted: <a href="{repository_url}">{repository_name}</a>'
             level = LogLevel.WARNING
         else:
-            message = f"Post action performed for repository: {repository_name}"
+            message = f'🔄 Action on: <a href="{repository_url}">{repository_name}</a>'
             level = LogLevel.INFO
 
         return await self.log(
@@ -135,7 +130,7 @@ class LoggerSystem:
             action=action,
             message=message,
             user=admin_user,
-            extra_data=extra_data,
+            extra_data=extra_data or None,
             silent=silent,
         )
 
@@ -203,62 +198,3 @@ _logger_manager = _LoggerManager()
 
 def get_logger(bot: Bot) -> LoggerSystem:
     return _logger_manager.get_logger(bot)
-
-
-async def log_post_created(
-    bot: Bot,
-    admin_user: User,
-    repository_name: str,
-    repository_url: str,
-) -> bool:
-    logger = get_logger(bot)
-    return await logger.log_post_action(
-        action=LogAction.POST_CREATED,
-        admin_user=admin_user,
-        repository_name=repository_name,
-        repository_url=repository_url,
-    )
-
-
-async def log_user_action(
-    bot: Bot,
-    user: User,
-    action_description: str,
-    level: LogLevel = LogLevel.INFO,
-    extra_data: dict[str, Any] | None = None,
-) -> bool:
-    logger = get_logger(bot)
-    return await logger.log_user_action(
-        user=user,
-        action_description=action_description,
-        level=level,
-        extra_data=extra_data,
-    )
-
-
-async def log_system_event(
-    bot: Bot,
-    event_description: str,
-    level: LogLevel = LogLevel.INFO,
-    extra_data: dict[str, Any] | None = None,
-) -> bool:
-    logger = get_logger(bot)
-    return await logger.log_system_event(
-        event_description=event_description,
-        level=level,
-        extra_data=extra_data,
-    )
-
-
-async def log_error(
-    bot: Bot,
-    error_description: str,
-    user: User | None = None,
-    extra_data: dict[str, Any] | None = None,
-) -> bool:
-    logger = get_logger(bot)
-    return await logger.log_error(
-        error_description=error_description,
-        user=user,
-        extra_data=extra_data,
-    )

@@ -15,7 +15,7 @@ from .database import database
 from .handlers.logs import router as logs_router
 from .handlers.posts import router as posts_router
 from .handlers.updater import router as updater_router
-from .utils.logger import LogLevel, log_system_event
+from .utils.logger import LogLevel, get_logger
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -40,8 +40,8 @@ async def main() -> None:
 
             dp.include_routers(updater_router, posts_router, logs_router)
 
-            await log_system_event(
-                bot=bot,
+            bot_logger = get_logger(bot)
+            await bot_logger.log_system_event(
                 event_description="Bot successfully initialized and ready to operate",
                 level=LogLevel.SUCCESS,
                 extra_data={

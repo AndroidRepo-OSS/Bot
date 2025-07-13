@@ -13,7 +13,7 @@ from aiogram.types import CallbackQuery, InaccessibleMessage, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.filters.sudo import SudoersFilter
-from bot.utils.logger import LogLevel, log_system_event, log_user_action
+from bot.utils.logger import LogLevel, get_logger
 
 router = Router(name="updater")
 router.message.filter(SudoersFilter())
@@ -175,8 +175,8 @@ async def confirm_update(callback: CallbackQuery, callback_data: UpdateCallback)
     status_message = callback.message
 
     if callback.bot and callback.from_user:
-        await log_user_action(
-            bot=callback.bot,
+        logger = get_logger(callback.bot)
+        await logger.log_user_action(
             user=callback.from_user,
             action_description="Initiated bot update",
             level=LogLevel.WARNING,
@@ -197,8 +197,8 @@ async def confirm_update(callback: CallbackQuery, callback_data: UpdateCallback)
 
         if callback.bot:
             triggered_by = callback.from_user.full_name if callback.from_user else "Unknown"
-            await log_system_event(
-                bot=callback.bot,
+            logger = get_logger(callback.bot)
+            await logger.log_system_event(
                 event_description="Bot updated successfully - restarting",
                 level=LogLevel.SUCCESS,
                 extra_data={"triggered_by": triggered_by},

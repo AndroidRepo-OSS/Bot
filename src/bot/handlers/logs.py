@@ -8,7 +8,7 @@ from aiogram.types import Message
 
 from bot.config import settings
 from bot.filters.sudo import SudoersFilter
-from bot.utils.logger import LogLevel, get_logger, log_system_event, log_user_action
+from bot.utils.logger import LogLevel, get_logger
 
 router = Router(name="logs")
 router.message.filter(
@@ -33,16 +33,15 @@ async def test_logs_command(message: Message) -> None:
         )
         return
 
-    await log_user_action(
-        bot=message.bot,
+    logger = get_logger(message.bot)
+    await logger.log_user_action(
         user=message.from_user,
         action_description="Tested the logging system",
         level=LogLevel.INFO,
         extra_data={"command": "/test_logs"},
     )
 
-    await log_system_event(
-        bot=message.bot,
+    await logger.log_system_event(
         event_description="Logging system tested via administrative command",
         level=LogLevel.SUCCESS,
         extra_data={"triggered_by": message.from_user.full_name or "Unknown"},

@@ -25,7 +25,7 @@ from bot.filters.topic import SubmissionTopicFilter
 from bot.utils.banner_generator import generate_banner
 from bot.utils.client_factory import get_repository_client, is_valid_repository_url
 from bot.utils.enums import KeyboardType, PostAction
-from bot.utils.logger import log_error, log_post_created
+from bot.utils.logger import LogAction, get_logger
 from bot.utils.models import EnhancedRepositoryData, GitHubRepository, GitLabRepository
 from bot.utils.states import (
     PostStates,
@@ -196,8 +196,9 @@ async def _handle_publication(
     await submit(repository, sent_message.message_id)
 
     if callback.from_user:
-        await log_post_created(
-            bot=callback.bot,
+        logger = get_logger(callback.bot)
+        await logger.log_post_action(
+            action=LogAction.POST_CREATED,
             admin_user=callback.from_user,
             repository_name=repository.name,
             repository_url=repository.url,
@@ -235,8 +236,8 @@ async def process_post_publication(
         await callback.message.edit_caption(caption=f"❌ <b>Error</b>\n\n{error_message}")
 
         if callback.bot and callback.from_user:
-            await log_error(
-                bot=callback.bot,
+            logger = get_logger(callback.bot)
+            await logger.log_error(
                 error_description=(
                     f"Post publication failed for {repository.name}: {error_message}"
                 ),
