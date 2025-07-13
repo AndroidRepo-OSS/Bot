@@ -6,7 +6,9 @@ from __future__ import annotations
 import logging
 from urllib.parse import urlparse
 
-from .base_client import BaseRepositoryClient
+import aiohttp
+
+from .base_client import BaseRepositoryClient, UnsupportedPlatformError
 from .models import GitHubRepository
 
 logger = logging.getLogger(__name__)
@@ -20,6 +22,22 @@ class GitHubClient(BaseRepositoryClient):
     @property
     def platform_name(self) -> str:
         return "github.com"
+
+    @staticmethod
+    def is_github_url(url: str) -> bool:
+        try:
+            GitHubClient._validate_repository_url(url)
+            parsed = urlparse(url.strip())
+            return parsed.netloc == "github.com"
+        except Exception:
+            return False
+
+    @staticmethod
+    def get_client_for_url(url: str, session: aiohttp.ClientSession | None = None) -> GitHubClient:
+        if not GitHubClient.is_github_url(url):
+            msg = f"Not a GitHub URL: {url}"
+            raise UnsupportedPlatformError(msg)
+        return GitHubClient(session)
 
     def _parse_url(self, url: str) -> tuple[str, str]:
         self._validate_platform_url(url)

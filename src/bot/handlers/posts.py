@@ -23,10 +23,10 @@ from bot.config import settings
 from bot.database import can_submit, submit
 from bot.filters.topic import SubmissionTopicFilter
 from bot.utils.banner_generator import generate_banner
+from bot.utils.client_factory import get_repository_client, is_valid_repository_url
 from bot.utils.enums import KeyboardType, PostAction
 from bot.utils.logger import log_error, log_post_created
 from bot.utils.models import EnhancedRepositoryData, GitHubRepository, GitLabRepository
-from bot.utils.repository_client import RepositoryClient
 from bot.utils.states import (
     PostStates,
     clear_user_data,
@@ -302,7 +302,7 @@ async def process_repository_confirmation(
     )
 
     try:
-        async with RepositoryClient() as client:
+        async with get_repository_client(repository_url) as client:
             repo_data = await client.get_basic_repository_data(repository_url)
             can_submit_repo, last_submission = await can_submit(repo_data.id)
 
@@ -381,14 +381,13 @@ async def repository_url_handler(message: Message, state: FSMContext) -> None:
     user_id = message.from_user.id
     url = message.text.strip()
 
-    async with RepositoryClient() as client:
-        if not client.is_valid_repository_url(url):
-            await message.reply(
-                "❌ <b>Invalid Repository URL</b>\n\n"
-                "Please provide a valid repository URL from GitHub or GitLab.\n\n"
-                "💡 Send 'cancel' to abort."
-            )
-            return
+    if not is_valid_repository_url(url):
+        await message.reply(
+            "❌ <b>Invalid Repository URL</b>\n\n"
+            "Please provide a valid repository URL from GitHub or GitLab.\n\n"
+            "💡 Send 'cancel' to abort."
+        )
+        return
 
     await update_user_data(state, user_id, repository_url=url)
     await state.set_state(PostStates.waiting_for_confirmation)

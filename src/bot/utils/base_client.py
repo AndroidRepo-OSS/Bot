@@ -22,6 +22,14 @@ logger = logging.getLogger(__name__)
 Repository = GitHubRepository | GitLabRepository
 
 
+class UnsupportedPlatformError(ValueError):
+    pass
+
+
+class InvalidRepositoryURLError(ValueError):
+    pass
+
+
 class BaseRepositoryClient(ABC):
     def __init__(self, session: aiohttp.ClientSession | None = None) -> None:
         self._session = session
@@ -60,6 +68,38 @@ class BaseRepositoryClient(ABC):
 
     @abstractmethod
     async def _fetch_readme(self, *args: Any) -> str | None: ...
+
+    @staticmethod
+    def _validate_repository_url(url: str) -> None:
+        try:
+            parsed = urlparse(url.strip())
+
+            if not parsed.netloc:
+                msg = "URL must have a valid domain"
+                raise InvalidRepositoryURLError(msg)
+
+            path_parts = [part for part in parsed.path.strip("/").split("/") if part]
+            if len(path_parts) < 2:
+                msg = "URL must contain owner and repository name"
+                raise InvalidRepositoryURLError(msg)
+
+        except (AttributeError, TypeError) as e:
+            msg = f"Invalid URL format: {e}"
+            raise InvalidRepositoryURLError(msg) from e
+
+    @staticmethod
+    def is_valid_repository_url(url: str) -> bool:
+        try:
+            BaseRepositoryClient._validate_repository_url(url)
+            parsed = urlparse(url.strip())
+            return parsed.netloc in {"github.com", "gitlab.com"}
+        except Exception:
+            return False
+
+    async def get_basic_repository_data(self, repository_url: str) -> Repository:
+        self._validate_repository_url(repository_url)
+        owner, repo = self._parse_url(repository_url)
+        return await self._get_repository_data(owner, repo)
 
     async def _fetch_json(self, url: str) -> dict[str, Any]:
         if not self._session:

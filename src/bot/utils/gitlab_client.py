@@ -6,7 +6,9 @@ from __future__ import annotations
 import logging
 from urllib.parse import urlparse
 
-from .base_client import BaseRepositoryClient
+import aiohttp
+
+from .base_client import BaseRepositoryClient, UnsupportedPlatformError
 from .models import GitLabRepository
 
 logger = logging.getLogger(__name__)
@@ -20,6 +22,22 @@ class GitLabClient(BaseRepositoryClient):
     @property
     def platform_name(self) -> str:
         return "gitlab.com"
+
+    @staticmethod
+    def is_gitlab_url(url: str) -> bool:
+        try:
+            GitLabClient._validate_repository_url(url)
+            parsed = urlparse(url.strip())
+            return parsed.netloc == "gitlab.com"
+        except Exception:
+            return False
+
+    @staticmethod
+    def get_client_for_url(url: str, session: aiohttp.ClientSession | None = None) -> GitLabClient:
+        if not GitLabClient.is_gitlab_url(url):
+            msg = f"Not a GitLab URL: {url}"
+            raise UnsupportedPlatformError(msg)
+        return GitLabClient(session)
 
     def _parse_url(self, url: str) -> tuple[str, str]:
         self._validate_platform_url(url)
