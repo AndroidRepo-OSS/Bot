@@ -3,16 +3,28 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
+from dataclasses import dataclass
+from typing import Self
 
-from openai import AsyncOpenAI
-from pydantic import ValidationError
+from pydantic_ai import Agent
+from pydantic_ai.exceptions import UnexpectedModelBehavior
+from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.settings import ModelSettings
 
 from .models import AIGeneratedContent
 from .tag_manager import get_tags_for_ai_context, process_ai_generated_tags
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class RepositoryData:
+    repo_name: str
+    description: str | None
+    readme_content: str | None
+    topics: list[str]
 
 
 class OpenAIClient:
@@ -23,14 +35,50 @@ class OpenAIClient:
     README_CONTENT_LIMIT = 2000
 
     def __init__(self, api_key: str, base_url: str | None = None) -> None:
-        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-        self._model = self.DEFAULT_MODEL
+        self._api_key = api_key
+        self._base_url = base_url
+        self._agent: Agent[RepositoryData, AIGeneratedContent] | None = None
+        self._current_model = self.DEFAULT_MODEL
 
-    async def __aenter__(self) -> OpenAIClient:
+    async def __aenter__(self) -> Self:
+        await self._initialize_agent()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        await self._client.close()
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object | None,
+    ) -> None:
+        pass
+
+    async def _initialize_agent(self, model_name: str | None = None) -> None:
+        if self._agent is not None and model_name is None:
+            return
+
+        if model_name is not None:
+            self._current_model = model_name
+
+        standard_tags = await get_tags_for_ai_context()
+        system_prompt = self._create_system_prompt(standard_tags)
+
+        model_settings = ModelSettings(max_tokens=self.MAX_TOKENS, temperature=self.TEMPERATURE)
+
+        if self._base_url:
+            provider = OpenAIProvider(api_key=self._api_key, base_url=self._base_url)
+            model = OpenAIModel(self._current_model, provider=provider)
+        else:
+            model = OpenAIModel(
+                self._current_model, provider=OpenAIProvider(api_key=self._api_key)
+            )
+
+        self._agent = Agent(
+            model=model,
+            deps_type=RepositoryData,
+            output_type=AIGeneratedContent,
+            system_prompt=system_prompt,
+            model_settings=model_settings,
+        )
 
     @staticmethod
     def _create_system_prompt(standard_tags: set[str] | None = None) -> str:
@@ -70,26 +118,20 @@ possible."""
 
         return base_prompt
 
-    @staticmethod
-    def _create_user_prompt(
-        project_name: str,
-        description: str | None,
-        readme_content: str | None,
-        topics: list[str],
-    ) -> str:
-        parts = [f"Repository Name: {project_name}"]
+    def _create_user_prompt(self, repo_data: RepositoryData) -> str:
+        parts = [f"Repository Name: {repo_data.repo_name}"]
 
-        if description:
-            parts.append(f"Repository Description: {description}")
+        if repo_data.description:
+            parts.append(f"Repository Description: {repo_data.description}")
 
-        if topics:
-            parts.append(f"Repository Tags: {', '.join(topics)}")
+        if repo_data.topics:
+            parts.append(f"Repository Tags: {', '.join(repo_data.topics)}")
 
-        if readme_content:
+        if repo_data.readme_content:
             content = (
-                readme_content[: OpenAIClient.README_CONTENT_LIMIT] + "..."
-                if len(readme_content) > OpenAIClient.README_CONTENT_LIMIT
-                else readme_content
+                repo_data.readme_content[: self.README_CONTENT_LIMIT] + "..."
+                if len(repo_data.readme_content) > self.README_CONTENT_LIMIT
+                else repo_data.readme_content
             )
             parts.append(f"Documentation/README: {content}")
 
@@ -103,118 +145,45 @@ possible."""
         topics: list[str] | None = None,
         max_retries: int = 3,
     ) -> AIGeneratedContent:
+        await self._initialize_agent()
+
+        if self._agent is None:
+            msg = "Agent not initialized"
+            raise RuntimeError(msg)
+
         topics = topics or []
-
-        standard_tags = await get_tags_for_ai_context()
-        system_prompt = self._create_system_prompt(standard_tags)
-        user_prompt = self._create_user_prompt(repo_name, description, readme_content, topics)
-
-        models_to_try = self._get_models_to_try()
-        original_model = self._model
-
-        for model_index, model in enumerate(models_to_try):
-            self._model = model
-            model_name = "fallback" if model_index > 0 else "primary"
-
-            logger.info("Trying %s model %s for %s", model_name, model, repo_name)
-
-            try:
-                ai_content = await self._attempt_enhancement(
-                    system_prompt, user_prompt, repo_name, model_name, max_retries
-                )
-
-                if ai_content.relevant_tags:
-                    await process_ai_generated_tags(ai_content.relevant_tags)
-
-                return ai_content
-            except Exception as e:
-                if model_index == len(models_to_try) - 1:
-                    raise
-                logger.info("Switching to fallback model after errors: %s", e)
-            finally:
-                self._model = original_model
-
-        msg = f"Failed to enhance content for {repo_name} after trying all models"
-        raise RuntimeError(msg)
-
-    def _get_models_to_try(self) -> list[str]:
-        models = [self._model]
-        if self._model != self.FALLBACK_MODEL:
-            models.append(self.FALLBACK_MODEL)
-        return models
-
-    async def _attempt_enhancement(
-        self,
-        system_prompt: str,
-        user_prompt: str,
-        repo_name: str,
-        model_name: str,
-        max_retries: int,
-    ) -> AIGeneratedContent:
-        for attempt in range(max_retries):
-            try:
-                logger.info(
-                    "Requesting content enhancement from OpenAI for %s using %s model "
-                    "(attempt %d/%d)",
-                    repo_name,
-                    model_name,
-                    attempt + 1,
-                    max_retries,
-                )
-
-                response = await self._make_api_request(system_prompt, user_prompt)
-                return self._process_response(response)
-
-            except ValidationError as e:
-                logger.error("Invalid data structure from OpenAI with %s model: %s", model_name, e)
-                if attempt == max_retries - 1:
-                    msg = f"OpenAI returned invalid data after {max_retries} attempts: {e}"
-                    raise ValueError(msg) from e
-
-            except Exception as e:
-                logger.error(
-                    "OpenAI API error for %s with %s model (attempt %d): %s",
-                    repo_name,
-                    model_name,
-                    attempt + 1,
-                    e,
-                )
-                if attempt == max_retries - 1:
-                    raise
-
-            await self._backoff_delay(attempt)
-
-        msg = f"Failed to enhance content for {repo_name} after {max_retries} attempts"
-        raise RuntimeError(msg)
-
-    @staticmethod
-    async def _backoff_delay(attempt: int) -> None:
-        await asyncio.sleep(2**attempt)
-
-    async def _make_api_request(self, system_prompt: str, user_prompt: str):
-        return await self._client.beta.chat.completions.parse(
-            model=self._model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            max_tokens=self.MAX_TOKENS,
-            temperature=self.TEMPERATURE,
-            response_format=AIGeneratedContent,
+        repo_data = RepositoryData(
+            repo_name=repo_name,
+            description=description,
+            readme_content=readme_content,
+            topics=topics,
         )
 
-    @staticmethod
-    def _process_response(response):
-        if response.choices[0].message.refusal:
-            refusal = response.choices[0].message.refusal
-            logger.warning("OpenAI refused to generate content: %s", refusal)
-            msg = f"OpenAI refused to generate content: {refusal}"
-            raise ValueError(msg)
+        user_prompt = self._create_user_prompt(repo_data)
 
-        parsed_response = response.choices[0].message.parsed
-        if not parsed_response:
-            msg = "Empty or unparseable response from OpenAI"
-            raise ValueError(msg)
+        try:
+            logger.info("Requesting content enhancement for %s", repo_name)
 
-        logger.debug("Generated content: %s", parsed_response)
-        return parsed_response
+            result = await self._agent.run(user_prompt, deps=repo_data)
+            ai_content = result.output
+
+            if ai_content.relevant_tags:
+                await process_ai_generated_tags(ai_content.relevant_tags)
+
+            logger.debug("Generated content: %s", ai_content)
+            return ai_content
+
+        except UnexpectedModelBehavior as e:
+            logger.error("Model behavior error for %s: %s", repo_name, e)
+
+            if max_retries > 1:
+                logger.info("Retrying with fallback model for %s", repo_name)
+                await self._initialize_agent(self.FALLBACK_MODEL)
+                return await self.enhance_repository_content(
+                    repo_name, description, readme_content, topics, max_retries - 1
+                )
+            raise
+
+        except Exception as e:
+            logger.error("Unexpected error for %s: %s", repo_name, e)
+            raise
