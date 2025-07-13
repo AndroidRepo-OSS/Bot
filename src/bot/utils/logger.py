@@ -210,7 +210,6 @@ async def log_post_created(
     admin_user: User,
     repository_name: str,
     repository_url: str,
-    channel_message_id: int | None = None,
 ) -> bool:
     logger = get_logger(bot)
     return await logger.log_post_action(
@@ -218,7 +217,6 @@ async def log_post_created(
         admin_user=admin_user,
         repository_name=repository_name,
         repository_url=repository_url,
-        channel_message_id=channel_message_id,
     )
 
 

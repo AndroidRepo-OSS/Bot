@@ -201,7 +201,6 @@ async def _handle_publication(
             admin_user=callback.from_user,
             repository_name=repository.name,
             repository_url=repository.url,
-            channel_message_id=sent_message.message_id,
         )
 
     return "✅ <b>Post Published!</b>\n\n<i>Post sent to channel and saved to database.</i>"
