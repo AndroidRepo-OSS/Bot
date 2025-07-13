@@ -28,11 +28,12 @@ class Settings(BaseSettings):
     )
 
     group_id: int = Field(
-        default=0, description="Telegram group ID where users can submit posts in topics"
+        default=-1002372208018,
+        description="Telegram group ID where users can submit posts in topics",
     )
 
     logs_topic_id: int = Field(
-        default=0, description="Topic ID for logs in the group (0 to disable logs)"
+        default=4, description="Topic ID for logs in the group (0 to disable logs)"
     )
 
     openai_api_key: SecretStr = Field(description="OpenAI API key for content enhancement")
