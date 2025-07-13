@@ -27,12 +27,7 @@ from bot.utils.client_factory import get_repository_client, is_valid_repository_
 from bot.utils.enums import KeyboardType, PostAction
 from bot.utils.logger import LogAction, get_logger
 from bot.utils.models import EnhancedRepositoryData, GitHubRepository, GitLabRepository
-from bot.utils.states import (
-    PostStates,
-    clear_user_data,
-    get_user_repository_url,
-    update_user_data,
-)
+from bot.utils.states import PostStates, clear_user_data, get_user_repository_url, update_user_data
 
 router = Router(name="posts")
 router.message.filter(
@@ -338,9 +333,7 @@ async def post_command_handler(message: Message, state: FSMContext) -> None:
     await state.set_state(PostStates.waiting_for_repository_url)
 
     await message.reply(
-        "📱 <b>Create Repository Post</b>\n\n"
-        "Send a GitHub or GitLab repository URL to generate a post.\n\n"
-        "💡 Send 'cancel' to abort anytime."
+        "📱 <b>New Post</b>\n\nSend a GitHub or GitLab repository URL. Use /cancel to abort."
     )
 
 
@@ -355,19 +348,13 @@ async def cancel_command_handler(message: Message, state: FSMContext) -> None:
 
     if not current_state:
         await message.reply(
-            "❌ <b>No Active Session</b>\n\n"
-            "You don't have any post creation in progress.\n\n"
-            "💡 Send /post to start creating a new post."
+            "❌ <b>No Active Session</b>\n\nNo post creation in progress. Use /post to start."
         )
         return
 
     await clear_user_data(state, user_id)
 
-    await message.reply(
-        "❌ <b>Session Cancelled</b>\n\n"
-        "Your post creation has been cancelled.\n\n"
-        "💡 Send /post to start over."
-    )
+    await message.reply("❌ <b>Cancelled</b>\n\nPost creation cancelled. Use /post to start over.")
 
 
 @router.message(PostStates.waiting_for_repository_url, F.text)
@@ -384,9 +371,9 @@ async def repository_url_handler(message: Message, state: FSMContext) -> None:
 
     if not is_valid_repository_url(url):
         await message.reply(
-            "❌ <b>Invalid Repository URL</b>\n\n"
-            "Please provide a valid repository URL from GitHub or GitLab.\n\n"
-            "💡 Send 'cancel' to abort."
+            "❌ <b>Invalid URL</b>\n\n"
+            "Send a valid GitHub or GitLab repository URL.\n"
+            "Use /cancel to abort."
         )
         return
 
@@ -476,6 +463,6 @@ async def cancel_callback_handler(callback: CallbackQuery, state: FSMContext) ->
         await state.clear()
 
     await _edit_message_text_or_caption(
-        message, "❌ <b>Post Creation Cancelled</b>\n\nYou can start again anytime with /post."
+        message, "❌ <b>Cancelled</b>\nYou can start again with /post."
     )
-    await callback.answer("Post cancelled")
+    await callback.answer("Cancelled")

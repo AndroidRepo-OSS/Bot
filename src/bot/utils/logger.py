@@ -113,16 +113,16 @@ class LoggerSystem:
             extra_data["message_id"] = str(channel_message_id)
 
         if action == LogAction.POST_CREATED:
-            message = f'✨ New post: <a href="{repository_url}">{repository_name}</a>'
+            message = f'New post: <a href="{repository_url}">{repository_name}</a>'
             level = LogLevel.SUCCESS
         elif action == LogAction.POST_UPDATED:
-            message = f'📝 Updated: <a href="{repository_url}">{repository_name}</a>'
+            message = f'Updated: <a href="{repository_url}">{repository_name}</a>'
             level = LogLevel.INFO
         elif action == LogAction.POST_DELETED:
-            message = f'🗑️ Deleted: <a href="{repository_url}">{repository_name}</a>'
+            message = f'Deleted: <a href="{repository_url}">{repository_name}</a>'
             level = LogLevel.WARNING
         else:
-            message = f'🔄 Action on: <a href="{repository_url}">{repository_name}</a>'
+            message = f'Action on: <a href="{repository_url}">{repository_name}</a>'
             level = LogLevel.INFO
 
         return await self.log(

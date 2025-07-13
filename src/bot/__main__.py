@@ -30,13 +30,11 @@ async def main() -> None:
     dp = Dispatcher(storage=storage)
 
     async with database:
-        logger.info("Database initialized")
-
         defaults = DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True)
         bot = Bot(token=settings.bot_token.get_secret_value(), default=defaults)
 
         async with bot:
-            logger.info("Bot initialized")
+            logger.info("Starting the bot...")
 
             dp.include_routers(updater_router, posts_router, logs_router)
 
@@ -50,8 +48,6 @@ async def main() -> None:
                     "routers_loaded": ["updater", "posts", "logs"],
                 },
             )
-
-            logger.info("Starting bot...")
 
             await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
