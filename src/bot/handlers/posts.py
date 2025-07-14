@@ -18,6 +18,7 @@ from aiogram.types import (
     Message,
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from pydantic import Field
 
 from bot.config import settings
 from bot.database import can_submit, submit
@@ -39,7 +40,7 @@ router.callback_query.filter()
 
 
 class PostCallback(CallbackData, prefix="post"):
-    action: PostAction
+    action: PostAction = Field(description="Action to perform on the post")
 
 
 def _get_project_name(enhanced_data: EnhancedRepositoryData) -> str:

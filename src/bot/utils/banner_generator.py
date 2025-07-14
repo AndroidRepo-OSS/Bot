@@ -4,12 +4,12 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
+from pydantic import BaseModel, ConfigDict, Field
 
 MATERIAL_COLORS = (
     "#1565C0",
@@ -41,18 +41,19 @@ FONT_REGULAR_PATH = DATA_DIR / "font_regular.ttf"
 CHANNEL_LOGO_PATH = DATA_DIR / "channel_logo.png"
 
 
-@dataclass(slots=True, frozen=True)
-class BannerConfig:
-    width: int = 1920
-    height: int = 1080
-    text_color: str = "white"
-    margin: int = 100
-    footer_margin: int = 50
-    footer_text: str = "@AndroidRepo"
-    logo_size: int = 100
-    footer_font_size: int = 54
-    min_font_size: int = 40
-    max_font_size: int = 180
+class BannerConfig(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    width: int = Field(default=1920, gt=0, description="Banner width in pixels")
+    height: int = Field(default=1080, gt=0, description="Banner height in pixels")
+    text_color: str = Field(default="white", description="Text color for the banner")
+    margin: int = Field(default=100, ge=0, description="Banner margin in pixels")
+    footer_margin: int = Field(default=50, ge=0, description="Footer margin in pixels")
+    footer_text: str = Field(default="@AndroidRepo", description="Footer text to display")
+    logo_size: int = Field(default=100, gt=0, description="Logo size in pixels")
+    footer_font_size: int = Field(default=54, gt=0, description="Footer font size")
+    min_font_size: int = Field(default=40, gt=0, description="Minimum font size for title")
+    max_font_size: int = Field(default=180, gt=0, description="Maximum font size for title")
 
 
 class BannerGenerator:

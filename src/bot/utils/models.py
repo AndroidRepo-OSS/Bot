@@ -5,18 +5,36 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 
 class BaseRepository(BaseModel):
-    id: int = Field(..., description="Repository ID (unique identifier)")
-    name: str = Field(..., description="Repository name")
-    full_name: str = Field(..., description="Full repository name (owner/repo)")
-    owner: str = Field(..., description="Repository owner")
+    model_config = ConfigDict(str_strip_whitespace=True, validate_default=True, extra="forbid")
+
+    id: int = Field(..., gt=0, description="Repository ID (unique identifier)")
+    name: str = Field(..., min_length=1, description="Repository name")
+    full_name: str = Field(..., min_length=1, description="Full repository name (owner/repo)")
+    owner: str = Field(..., min_length=1, description="Repository owner")
     description: str | None = Field(None, description="Repository description")
     url: str = Field(..., description="Repository URL")
     topics: list[str] = Field(default_factory=list, description="Repository topics/tags")
     readme_content: str | None = Field(None, description="README content (truncated)")
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        if not v.startswith(("http://", "https://")):
+            msg = "URL must start with http:// or https://"
+            raise ValueError(msg)
+        return v
+
+    @field_validator("full_name")
+    @classmethod
+    def validate_full_name(cls, v: str) -> str:
+        if "/" not in v:
+            msg = "Full name must contain owner/repo format"
+            raise ValueError(msg)
+        return v
 
     @computed_field
     @property
@@ -34,29 +52,48 @@ class BaseRepository(BaseModel):
         return bool(self.readme_content and self.readme_content.strip())
 
 
-class GitHubRepository(BaseRepository): ...
+class GitHubRepository(BaseRepository):
+    model_config = ConfigDict(str_strip_whitespace=True, validate_default=True, extra="forbid")
 
 
-class GitLabRepository(BaseRepository): ...
+class GitLabRepository(BaseRepository):
+    model_config = ConfigDict(str_strip_whitespace=True, validate_default=True, extra="forbid")
 
 
 class ImportantLink(BaseModel):
-    title: str = Field(..., description="Human-readable title for the link")
+    model_config = ConfigDict(str_strip_whitespace=True, validate_default=True, extra="forbid")
+
+    title: str = Field(..., min_length=1, description="Human-readable title for the link")
     url: str = Field(..., description="Valid URL to the resource")
     type: Literal["download", "website", "documentation", "demo", "store", "repository"] = Field(
         ..., description="Category of the link"
     )
 
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        if not v.startswith(("http://", "https://")):
+            msg = "URL must start with http:// or https://"
+            raise ValueError(msg)
+        return v
+
 
 class AIGeneratedContent(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, validate_default=True, extra="forbid")
+
     project_name: str = Field(
-        ..., description="The actual project name (may differ from repository name)"
+        ..., min_length=1, description="The actual project name (may differ from repository name)"
     )
     enhanced_description: str = Field(
-        ..., description="User-focused description explaining benefits and problems solved"
+        ...,
+        min_length=10,
+        description="User-focused description explaining benefits and problems solved",
     )
     relevant_tags: list[str] = Field(
-        default_factory=list, description="Relevant tags for categorizing the Android app or tool"
+        default_factory=list,
+        min_length=5,
+        max_length=7,
+        description="Relevant tags for categorizing the Android app or tool",
     )
     key_features: list[str] = Field(
         default_factory=list, description="Key features that users will find valuable"
@@ -64,6 +101,23 @@ class AIGeneratedContent(BaseModel):
     important_links: list[ImportantLink] = Field(
         default_factory=list, description="Important links for downloads, docs, or websites"
     )
+
+    @field_validator("relevant_tags")
+    @classmethod
+    def validate_tags(cls, v: list[str]) -> list[str]:
+        if not (5 <= len(v) <= 7):
+            msg = "Must have between 5 and 7 tags"
+            raise ValueError(msg)
+
+        for tag in v:
+            if not tag or not tag.strip():
+                msg = "Tags cannot be empty"
+                raise ValueError(msg)
+            if " " in tag.strip():
+                msg = "Tags should use underscores instead of spaces"
+                raise ValueError(msg)
+
+        return [tag.strip().lower() for tag in v]
 
     @computed_field
     @property
@@ -82,6 +136,8 @@ class AIGeneratedContent(BaseModel):
 
 
 class EnhancedRepositoryData(BaseModel):
+    model_config = ConfigDict(validate_default=True, extra="forbid")
+
     repository: GitHubRepository | GitLabRepository
     ai_content: AIGeneratedContent | None = None
 

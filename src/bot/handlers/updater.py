@@ -11,6 +11,7 @@ from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import CallbackQuery, InaccessibleMessage, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from pydantic import Field
 
 from bot.filters.sudo import SudoersFilter
 from bot.utils.logger import LogLevel, get_logger
@@ -21,7 +22,7 @@ router.callback_query.filter(SudoersFilter())
 
 
 class UpdateCallback(CallbackData, prefix="update"):
-    action: str
+    action: str = Field(description="Action to perform during update")
 
 
 async def _run_command(command: list[str], cwd: Path) -> tuple[int, str, str]:

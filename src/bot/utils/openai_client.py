@@ -4,9 +4,9 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from typing import Self
 
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.models.openai import OpenAIModel
@@ -19,12 +19,13 @@ from .tag_manager import get_tags_for_ai_context, process_ai_generated_tags
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True, slots=True)
-class RepositoryData:
-    repo_name: str
-    description: str | None
-    readme_content: str | None
-    topics: list[str]
+class RepositoryData(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    repo_name: str = Field(..., min_length=1, description="Repository name")
+    description: str | None = Field(None, description="Repository description")
+    readme_content: str | None = Field(None, description="README content")
+    topics: list[str] = Field(default_factory=list, description="Repository topics/tags")
 
 
 class OpenAIClient:
