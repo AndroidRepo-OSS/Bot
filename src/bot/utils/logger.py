@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
+import logging
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
@@ -10,6 +11,8 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.types import User
 
 from bot.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class LogLevel(Enum):
@@ -65,10 +68,10 @@ class LoggerSystem:
             return True
 
         except TelegramAPIError as e:
-            print(f"Failed to send log message: {e}")
+            logger.error("Failed to send log message: %s", e)
             return False
         except Exception as e:
-            print(f"Unexpected error in logging system: {e}")
+            logger.error("Unexpected error in logging system: %s", e)
             return False
 
     @staticmethod
@@ -82,19 +85,23 @@ class LoggerSystem:
         timestamp = datetime.now(UTC).strftime("%H:%M:%S")
         action_name = action.value.replace("_", " ").title()
 
-        lines = [f"{level.value} <b>{action_name}</b> - {timestamp}"]
+        lines = [
+            f"{level.value} <b>{action_name}</b>",
+            f"<b>Time:</b> {timestamp}",
+        ]
 
         if user:
-            user_info = f"@{user.username}" if user.username else f"ID: {user.id}"
+            username = f"@{user.username}" if user.username else f"ID: {user.id}"
             full_name = user.full_name or "Unknown User"
-            lines.append(f"<b>User:</b> {full_name} ({user_info})")
+            lines.append(f"<b>User:</b> {full_name} ({username})")
 
-        lines.append(message)
+        lines.append(f"\n{message}")
 
         if extra_data:
+            lines.append("\n<b>Details:</b>")
             for key, value in extra_data.items():
                 if key != "repository":
-                    lines.append(f"<b>{key.title()}:</b> {value}")
+                    lines.append(f"• <b>{key.replace('_', ' ').title()}:</b> {value}")
 
         return "\n".join(lines)
 
@@ -108,22 +115,17 @@ class LoggerSystem:
         silent: bool = True,
     ) -> bool:
         extra_data = {}
-
         if channel_message_id:
             extra_data["message_id"] = str(channel_message_id)
 
-        if action == LogAction.POST_CREATED:
-            message = f'New post: <a href="{repository_url}">{repository_name}</a>'
-            level = LogLevel.SUCCESS
-        elif action == LogAction.POST_UPDATED:
-            message = f'Updated: <a href="{repository_url}">{repository_name}</a>'
-            level = LogLevel.INFO
-        elif action == LogAction.POST_DELETED:
-            message = f'Deleted: <a href="{repository_url}">{repository_name}</a>'
-            level = LogLevel.WARNING
-        else:
-            message = f'Action on: <a href="{repository_url}">{repository_name}</a>'
-            level = LogLevel.INFO
+        action_messages = {
+            LogAction.POST_CREATED: ("📝 Repository published", LogLevel.SUCCESS),
+            LogAction.POST_UPDATED: ("🔄 Repository updated", LogLevel.INFO),
+            LogAction.POST_DELETED: ("🗑️ Repository removed", LogLevel.WARNING),
+        }
+
+        default_message, level = action_messages.get(action, ("Repository action", LogLevel.INFO))
+        message = f'{default_message}: <a href="{repository_url}">{repository_name}</a>'
 
         return await self.log(
             level=level,

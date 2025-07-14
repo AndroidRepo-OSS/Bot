@@ -12,7 +12,6 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from .config import settings
 from .database import database
-from .handlers.logs import router as logs_router
 from .handlers.posts import router as posts_router
 from .handlers.updater import router as updater_router
 from .utils.logger import LogLevel, get_logger
@@ -36,7 +35,7 @@ async def main() -> None:
         async with bot:
             logger.info("Starting the bot...")
 
-            dp.include_routers(updater_router, posts_router, logs_router)
+            dp.include_routers(updater_router, posts_router)
 
             bot_logger = get_logger(bot)
             await bot_logger.log_system_event(
