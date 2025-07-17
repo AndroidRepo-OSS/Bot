@@ -35,7 +35,8 @@ async def main() -> None:
         async with bot:
             logger.info("Starting the bot...")
 
-            dp.include_routers(updater_router, posts_router)
+            routers = [updater_router, posts_router]
+            dp.include_routers(*routers)
 
             bot_logger = get_logger(bot)
             await bot_logger.log_system_event(
@@ -44,7 +45,7 @@ async def main() -> None:
                 extra_data={
                     "bot_id": settings.bot_id,
                     "database_status": "connected",
-                    "routers_loaded": ["updater", "posts", "logs"],
+                    "routers_loaded": [router.name for router in routers],
                 },
             )
 
