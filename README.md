@@ -1,3 +1,5 @@
 # Android Repository Bot
 
-A Telegram bot designed to automate the creation of posts for the _Android Repository_ channel. The bot transforms GitHub and GitLab repository URLs into visually appealing posts.
+A Telegram bot that makes it easy to share Android projects in the Android Repository channel.
+
+It uses LLMs to automatically generate descriptions and tags, getting project info directly from GitHub or GitLab. Share your projects quickly and easily.
