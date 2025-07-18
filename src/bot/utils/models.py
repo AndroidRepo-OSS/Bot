@@ -129,11 +129,6 @@ class AIGeneratedContent(BaseModel):
     def has_links(self) -> bool:
         return bool(self.important_links)
 
-    @computed_field
-    @property
-    def has_tags(self) -> bool:
-        return bool(self.relevant_tags)
-
 
 class EnhancedRepositoryData(BaseModel):
     model_config = ConfigDict(validate_default=True, extra="forbid")

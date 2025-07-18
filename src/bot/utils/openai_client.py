@@ -176,9 +176,8 @@ Be concise while maintaining technical accuracy."""
             result = await self._agent.run(user_prompt, deps=repo_data)
             ai_content = result.output
 
-            if ai_content.relevant_tags:
-                processed_tags = await process_ai_generated_tags(ai_content.relevant_tags)
-                ai_content.relevant_tags = processed_tags
+            processed_tags = await process_ai_generated_tags(ai_content.relevant_tags)
+            ai_content.relevant_tags = processed_tags
 
             logger.debug("Generated content: %s", ai_content)
             return ai_content

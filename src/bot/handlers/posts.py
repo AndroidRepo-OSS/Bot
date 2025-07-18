@@ -43,28 +43,23 @@ class PostCallback(CallbackData, prefix="post"):
     action: PostAction = Field(description="Action to perform on the post")
 
 
-def _get_project_name(enhanced_data: EnhancedRepositoryData) -> str:
+def get_project_name(enhanced_data: EnhancedRepositoryData) -> str:
     return (
         enhanced_data.ai_content.project_name
-        if enhanced_data.ai_content and enhanced_data.ai_content.project_name
+        if enhanced_data.ai_content
         else enhanced_data.repository.name
     )
 
 
-async def _edit_message_text_or_caption(message: Message, text: str) -> None:
+async def edit_message_text_or_caption(message: Message, text: str) -> None:
     if message.photo:
         await message.edit_caption(caption=text)
     else:
         await message.edit_text(text)
 
 
-async def _get_repository_url_from_state(state: FSMContext) -> str | None:
-    data = await state.get_data()
-    return data.get("repository_url")
-
-
 def format_post(enhanced_data: EnhancedRepositoryData) -> str:
-    project_name = _get_project_name(enhanced_data)
+    project_name = get_project_name(enhanced_data)
     description = (
         enhanced_data.ai_content.enhanced_description
         if enhanced_data.ai_content
@@ -72,8 +67,8 @@ def format_post(enhanced_data: EnhancedRepositoryData) -> str:
     )
     tags = (
         enhanced_data.ai_content.relevant_tags
-        if enhanced_data.ai_content and enhanced_data.ai_content.relevant_tags
-        else enhanced_data.repository.topics or []
+        if enhanced_data.ai_content
+        else enhanced_data.repository.topics
     )
 
     sections = [f"<b>{project_name}</b>"]
@@ -142,13 +137,13 @@ async def _validate_session(
         or not enhanced_data
         or not isinstance(banner_buffer, BytesIO)
     ):
-        await _edit_message_text_or_caption(
+        await edit_message_text_or_caption(
             message, "❌ <b>Error</b>\n\nSession expired or missing data. Try /post again."
         )
         return None
 
     if not settings.channel_id:
-        await _edit_message_text_or_caption(
+        await edit_message_text_or_caption(
             message, "❌ <b>Error</b>\n\nChannel ID not configured."
         )
         return None
@@ -159,7 +154,7 @@ async def _validate_session(
 async def _handle_error(
     message: Message, state: FSMContext, error_text: str, clear_state: bool = True
 ) -> None:
-    await _edit_message_text_or_caption(message, f"❌ <b>Error</b>\n\n{error_text}")
+    await edit_message_text_or_caption(message, f"❌ <b>Error</b>\n\n{error_text}")
     if clear_state:
         await state.clear()
 
@@ -217,7 +212,7 @@ async def process_post_publication(
         return
 
     repository = enhanced_data.repository
-    project_name = _get_project_name(enhanced_data)
+    project_name = get_project_name(enhanced_data)
     banner_filename = f"{project_name.lower().replace(' ', '_')}_banner.png"
 
     try:
@@ -247,7 +242,7 @@ async def process_post_publication(
 async def process_post_content(
     message: Message, state: FSMContext, enhanced_data: EnhancedRepositoryData
 ) -> None:
-    project_name = _get_project_name(enhanced_data)
+    project_name = get_project_name(enhanced_data)
     await message.edit_text(
         "🎨 <b>Finalizing Content</b>\n\n<i>Formatting post and generating banner...</i>"
     )
@@ -421,7 +416,8 @@ async def regenerate_post_handler(callback: CallbackQuery, state: FSMContext) ->
     if not (message := callback.message) or isinstance(message, InaccessibleMessage):
         return
 
-    repository_url = await _get_repository_url_from_state(state)
+    data = await state.get_data()
+    repository_url = data.get("repository_url")
     if not repository_url:
         await _handle_error(message, state, "Session expired, please start again.")
         return
@@ -463,7 +459,7 @@ async def cancel_callback_handler(callback: CallbackQuery, state: FSMContext) ->
             banner_buffer.close()
         await state.clear()
 
-    await _edit_message_text_or_caption(
+    await edit_message_text_or_caption(
         message, "❌ <b>Cancelled</b>\nYou can start again with /post."
     )
     await callback.answer("Cancelled")
