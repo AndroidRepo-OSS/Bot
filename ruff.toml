@@ -24,6 +24,8 @@ select = [
     "TID",   # flake8-tidy-imports
     "UP",    # pyupgrade
     "W",     # pycodestyle
+    "ICN",   # flake8-import-conventions
+    "A",     # flake8-annotations
 ]
 ignore = [
     "RUF001",
