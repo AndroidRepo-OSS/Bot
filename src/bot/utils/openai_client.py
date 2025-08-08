@@ -6,12 +6,15 @@ from __future__ import annotations
 import logging
 from typing import Self
 
+from httpx import AsyncClient, HTTPStatusError
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.retries import AsyncTenacityTransport, wait_retry_after
 from pydantic_ai.settings import ModelSettings
+from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from .models import AIGeneratedContent
 from .tag_manager import get_tags_for_ai_context, process_ai_generated_tags
@@ -40,7 +43,7 @@ class OpenAIClient:
         self._base_url = base_url
         self._agent: Agent[RepositoryData, AIGeneratedContent] | None = None
         self._model_settings = ModelSettings(
-            max_tokens=self.MAX_TOKENS, temperature=self.TEMPERATURE
+            max_tokens=self.MAX_TOKENS, temperature=self.TEMPERATURE, timeout=60.0
         )
 
     async def __aenter__(self) -> Self:
@@ -54,6 +57,29 @@ class OpenAIClient:
         exc_tb: object | None,
     ) -> None:
         pass
+
+    @staticmethod
+    def _create_retrying_client() -> AsyncClient:
+        def should_retry_status(response):
+            if response.status_code in {429, 500, 502, 503, 504}:
+                logger.warning(
+                    "HTTP %d error from OpenAI API, will retry with backoff", response.status_code
+                )
+                response.raise_for_status()
+
+        transport = AsyncTenacityTransport(
+            controller=AsyncRetrying(
+                retry=retry_if_exception_type((HTTPStatusError, ConnectionError)),
+                wait=wait_retry_after(
+                    fallback_strategy=wait_exponential(multiplier=2, min=2, max=30), max_wait=60
+                ),
+                stop=stop_after_attempt(5),
+                reraise=True,
+            ),
+            validate_response=should_retry_status,
+        )
+
+        return AsyncClient(transport=transport, timeout=60.0)
 
     async def _initialize_agent(self, model_name: str | None = None) -> None:
         current_model = model_name or self.DEFAULT_MODEL
@@ -90,10 +116,16 @@ If existing tags don't reach 5-7 tags, create new appropriate tags to meet the r
 Use underscores for multi-word tags and ensure all tags are relevant to the app's functionality."""
 
     def _create_model(self, model_name: str) -> OpenAIModel:
+        client = self._create_retrying_client()
+
         if self._base_url:
-            provider = OpenAIProvider(api_key=self._api_key, base_url=self._base_url)
+            provider = OpenAIProvider(
+                api_key=self._api_key, base_url=self._base_url, http_client=client
+            )
             return OpenAIModel(model_name, provider=provider)
-        return OpenAIModel(model_name, provider=OpenAIProvider(api_key=self._api_key))
+
+        provider = OpenAIProvider(api_key=self._api_key, http_client=client)
+        return OpenAIModel(model_name, provider=provider)
 
     @staticmethod
     def _create_base_system_prompt() -> str:

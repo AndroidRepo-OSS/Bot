@@ -17,7 +17,7 @@ dependencies = [
     "pillow>=11.2.1",
     "aiosqlite>=0.21.0",
     "sqlalchemy[asyncio]>=2.0.41",
-    "pydantic-ai-slim[openai]>=0.4.2",
+    "pydantic-ai-slim[openai,retries]>=0.4.2",
 ]
 
 [dependency-groups]
