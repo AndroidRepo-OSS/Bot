@@ -24,10 +24,10 @@ from bot.config import settings
 from bot.database import can_submit, submit
 from bot.filters.topic import SubmissionTopicFilter
 from bot.utils.banner_generator import generate_banner
-from bot.utils.client_factory import get_repository_client, is_valid_repository_url
 from bot.utils.enums import KeyboardType, PostAction
 from bot.utils.logger import LogAction, get_logger
 from bot.utils.models import EnhancedRepositoryData, GitHubRepository, GitLabRepository
+from bot.utils.repo_client import RepositoryClient
 from bot.utils.states import PostStates, clear_user_data, get_user_repository_url, update_user_data
 
 router = Router(name="posts")
@@ -54,45 +54,32 @@ def get_project_name(enhanced_data: EnhancedRepositoryData) -> str:
 async def edit_message_text_or_caption(message: Message, text: str) -> None:
     if message.photo:
         await message.edit_caption(caption=text)
-    else:
-        await message.edit_text(text)
+        return
+    await message.edit_text(text)
 
 
 def format_post(enhanced_data: EnhancedRepositoryData) -> str:
     project_name = get_project_name(enhanced_data)
-    description = (
-        enhanced_data.ai_content.enhanced_description
-        if enhanced_data.ai_content
-        else enhanced_data.repository.description
-    )
-    tags = (
-        enhanced_data.ai_content.relevant_tags
-        if enhanced_data.ai_content
-        else enhanced_data.repository.topics
-    )
+    ai = enhanced_data.ai_content
+    repo = enhanced_data.repository
+
+    description = ai.enhanced_description if ai and ai.enhanced_description else repo.description
+    tags = ai.relevant_tags if ai and ai.relevant_tags else repo.topics
 
     sections = [f"<b>{project_name}</b>"]
 
     if description:
         sections.append(f"<i>{description}</i>")
 
-    if enhanced_data.ai_content and enhanced_data.ai_content.key_features:
-        features_text = "\n".join(
-            f"• {feature}" for feature in enhanced_data.ai_content.key_features
-        )
+    if ai and ai.key_features:
+        features_text = "\n".join(f"• {feature}" for feature in ai.key_features)
         sections.append(f"✨ <b>Key Features:</b>\n{features_text}")
 
-    platform_name = (
-        "GitHub" if isinstance(enhanced_data.repository, GitHubRepository) else "GitLab"
-    )
-    links = [f'• <a href="{enhanced_data.repository.url}">{platform_name} Repository</a>']
+    platform_name = "GitHub" if isinstance(repo, GitHubRepository) else "GitLab"
+    links = [f'• <a href="{repo.url}">{platform_name} Repository</a>']
 
-    if enhanced_data.ai_content and enhanced_data.ai_content.important_links:
-        additional_links = [
-            f'• <a href="{link.url}">{link.title}</a>'
-            for link in enhanced_data.ai_content.important_links
-        ]
-        links.extend(additional_links)
+    if ai and ai.important_links:
+        links.extend(f'• <a href="{link.url}">{link.title}</a>' for link in ai.important_links)
 
     sections.append("🔗 <b>Links:</b>\n" + "\n".join(links))
 
@@ -107,16 +94,20 @@ def create_keyboard(keyboard_type: KeyboardType) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
     if keyboard_type == KeyboardType.CONFIRMATION:
-        builder.button(text="✅ Confirm", callback_data=PostCallback(action=PostAction.CONFIRM))
-        builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
+        for text, action in (("✅ Confirm", PostAction.CONFIRM), ("❌ Cancel", PostAction.CANCEL)):
+            builder.button(text=text, callback_data=PostCallback(action=action))
         builder.adjust(2)
-    elif keyboard_type == KeyboardType.PREVIEW:
-        builder.button(text="✅ Publish", callback_data=PostCallback(action=PostAction.PUBLISH))
-        builder.button(
-            text="🔄 Regenerate", callback_data=PostCallback(action=PostAction.REGENERATE)
-        )
-        builder.button(text="❌ Cancel", callback_data=PostCallback(action=PostAction.CANCEL))
+        return builder.as_markup()
+
+    if keyboard_type == KeyboardType.PREVIEW:
+        for text, action in (
+            ("✅ Publish", PostAction.PUBLISH),
+            ("🔄 Regenerate", PostAction.REGENERATE),
+            ("❌ Cancel", PostAction.CANCEL),
+        ):
+            builder.button(text=text, callback_data=PostCallback(action=action))
         builder.adjust(2, 1)
+        return builder.as_markup()
 
     return builder.as_markup()
 
@@ -294,7 +285,7 @@ async def process_repository_confirmation(
     )
 
     try:
-        async with get_repository_client(repository_url) as client:
+        async with RepositoryClient() as client:
             repo_data = await client.get_basic_repository_data(repository_url)
             can_submit_repo, last_submission = await can_submit(repo_data.id)
 
@@ -365,7 +356,7 @@ async def repository_url_handler(message: Message, state: FSMContext) -> None:
     user_id = message.from_user.id
     url = message.text.strip()
 
-    if not is_valid_repository_url(url):
+    if not RepositoryClient.is_valid_repository_url(url):
         await message.reply(
             "❌ <b>Invalid URL</b>\n\n"
             "Send a valid GitHub or GitLab repository URL.\n"
@@ -416,8 +407,9 @@ async def regenerate_post_handler(callback: CallbackQuery, state: FSMContext) ->
     if not (message := callback.message) or isinstance(message, InaccessibleMessage):
         return
 
-    data = await state.get_data()
-    repository_url = data.get("repository_url")
+    repository_url = None
+    if callback.from_user:
+        repository_url = await get_user_repository_url(state, callback.from_user.id)
     if not repository_url:
         await _handle_error(message, state, "Session expired, please start again.")
         return
@@ -455,7 +447,8 @@ async def cancel_callback_handler(callback: CallbackQuery, state: FSMContext) ->
 
     if await state.get_state():
         data = await state.get_data()
-        if banner_buffer := data.get("banner_buffer"):
+        banner_buffer = data.get("banner_buffer")
+        if isinstance(banner_buffer, BytesIO):
             banner_buffer.close()
         await state.clear()
 

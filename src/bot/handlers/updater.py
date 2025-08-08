@@ -121,7 +121,7 @@ async def _check_pending_commits(project_root: Path, status_message: Message) ->
     return True, commits_stdout
 
 
-async def _pull_updates(project_root: Path, status_message: Message) -> tuple[bool, bool]:
+async def _pull_updates(project_root: Path, status_message: Message) -> bool:
     await status_message.edit_text("⬇️ Downloading updates...")
 
     try:
@@ -131,13 +131,13 @@ async def _pull_updates(project_root: Path, status_message: Message) -> tuple[bo
             )
     except TimeoutError:
         await status_message.edit_text("❌ Timeout pulling updates. Please try again.")
-        return False, False
+        return False
 
     if returncode != 0:
         await status_message.edit_text(f"❌ Error pulling updates:\n<code>{stderr}</code>")
-        return False, False
+        return False
 
-    return True, True
+    return True
 
 
 async def _install_dependencies(project_root: Path, status_message: Message) -> bool:
@@ -189,8 +189,7 @@ async def confirm_update(callback: CallbackQuery, callback_data: UpdateCallback)
         if not await _handle_local_changes(project_root, status_message):
             return
 
-        success, _ = await _pull_updates(project_root, status_message)
-        if not success:
+        if not await _pull_updates(project_root, status_message):
             return
 
         if not await _install_dependencies(project_root, status_message):

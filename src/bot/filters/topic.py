@@ -6,19 +6,20 @@ from aiogram.types import Message
 
 
 class TopicFilter(BaseFilter):
-    def __init__(self, topic_id: int | None = None, topic_name: str | None = None):
+    def __init__(self, topic_id: int | None = None, topic_name: str | None = None) -> None:
         self.topic_id = topic_id
         self.topic_name = topic_name
 
     async def __call__(self, message: Message) -> bool:
-        if not message.chat or not hasattr(message.chat, "is_forum") or not message.chat.is_forum:
+        chat = message.chat
+        if not chat or not getattr(chat, "is_forum", False):
             return False
 
         if self.topic_id is not None:
             return message.message_thread_id == self.topic_id
 
         if (
-            self.topic_name is not None
+            self.topic_name
             and message.reply_to_message
             and message.reply_to_message.forum_topic_created
         ):
@@ -28,10 +29,10 @@ class TopicFilter(BaseFilter):
 
 
 class SubmissionTopicFilter(TopicFilter):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(topic_name="Submissions")
 
 
 class LogsTopicFilter(TopicFilter):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(topic_name="Logs")

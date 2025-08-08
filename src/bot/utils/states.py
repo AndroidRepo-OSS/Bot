@@ -20,7 +20,7 @@ async def get_user_repository_url(state: FSMContext, user_id: int) -> str | None
 async def update_user_data(state: FSMContext, user_id: int, **kwargs) -> None:
     data = await state.get_data()
     user_key = f"user_{user_id}"
-    user_data = data.get(user_key, {})
+    user_data = dict(data.get(user_key, {}))
     user_data.update(kwargs)
     await state.update_data({user_key: user_data})
 
