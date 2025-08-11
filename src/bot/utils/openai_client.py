@@ -42,6 +42,7 @@ class OpenAIClient:
         self._api_key = api_key
         self._base_url = base_url
         self._agent: Agent[RepositoryData, AIGeneratedContent] | None = None
+        self._http_client: AsyncClient | None = None
         self._model_settings = ModelSettings(
             max_tokens=self.MAX_TOKENS, temperature=self.TEMPERATURE, timeout=60.0
         )
@@ -56,7 +57,9 @@ class OpenAIClient:
         exc_val: BaseException | None,
         exc_tb: object | None,
     ) -> None:
-        pass
+        if self._http_client is not None:
+            await self._http_client.aclose()
+            self._http_client = None
 
     @staticmethod
     def _create_retrying_client() -> AsyncClient:
@@ -116,7 +119,8 @@ If existing tags don't reach 5-7 tags, create new appropriate tags to meet the r
 Use underscores for multi-word tags and ensure all tags are relevant to the app's functionality."""
 
     def _create_model(self, model_name: str) -> OpenAIModel:
-        client = self._create_retrying_client()
+        client = self._http_client or self._create_retrying_client()
+        self._http_client = client
 
         if self._base_url:
             provider = OpenAIProvider(
@@ -188,10 +192,6 @@ Be concise while maintaining technical accuracy."""
         if self._agent is None:
             await self._initialize_agent()
 
-        if self._agent is None:
-            msg = "Agent not initialized"
-            raise RuntimeError(msg)
-
         topics = topics or []
         repo_data = RepositoryData(
             repo_name=repo_name,
@@ -205,7 +205,7 @@ Be concise while maintaining technical accuracy."""
         try:
             logger.info("Requesting content enhancement for %s", repo_name)
 
-            result = await self._agent.run(user_prompt, deps=repo_data)
+            result = await self._agent.run(user_prompt, deps=repo_data)  # type: ignore[union-attr]
             ai_content = result.output
 
             processed_tags = await process_ai_generated_tags(ai_content.relevant_tags)

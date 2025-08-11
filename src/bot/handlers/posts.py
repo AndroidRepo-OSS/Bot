@@ -84,7 +84,13 @@ def format_post(enhanced_data: EnhancedRepositoryData) -> str:
     sections.append("🔗 <b>Links:</b>\n" + "\n".join(links))
 
     if tags:
-        hashtags = " ".join(f"#{tag}" for tag in tags)
+        safe_tags = []
+        for tag in tags:
+            t = tag.strip().lower().replace(" ", "_")
+            t = "".join(ch for ch in t if ch.isalnum() or ch == "_")
+            if t:
+                safe_tags.append(t)
+        hashtags = " ".join(f"#{t}" for t in safe_tags)
         sections.append(f"🏷️ <b>Tags:</b> {hashtags}")
 
     return "\n\n".join(sections)

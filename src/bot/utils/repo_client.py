@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import base64
 import logging
-from typing import TYPE_CHECKING, Any
-from urllib.parse import urlparse
+from typing import TYPE_CHECKING, Any, Self
+from urllib.parse import quote, urlparse
 
 import aiohttp
 
@@ -33,12 +33,15 @@ class RepositoryClient:
     def __init__(self, session: aiohttp.ClientSession | None = None) -> None:
         self._session = session
         self._owns_session = session is None
-        self._platform_name = None
-        self._api_base = None
+        self._platform_name: str | None = None
+        self._api_base: str | None = None
+        self._cache_key: tuple[str, str] | None = None
+        self._cache_repo: Repository | None = None
 
-    async def __aenter__(self) -> RepositoryClient:
+    async def __aenter__(self) -> Self:
         if self._owns_session:
-            self._session = aiohttp.ClientSession()
+            timeout = aiohttp.ClientTimeout(total=30)
+            self._session = aiohttp.ClientSession(timeout=timeout)
         return self
 
     async def __aexit__(
@@ -87,22 +90,19 @@ class RepositoryClient:
         except Exception:
             return False
 
-    @staticmethod
-    def _netloc_supported(netloc: str) -> bool:
-        return netloc in {"github.com", "gitlab.com"}
-
     def _parse_url(self, url: str) -> tuple[str, str]:
         self._validate_repository_url(url)
         parsed = urlparse(url.strip())
-        if not self._netloc_supported(parsed.netloc):
+        platform_api_map = {
+            "github.com": "https://api.github.com",
+            "gitlab.com": "https://gitlab.com/api/v4",
+        }
+        api_base = platform_api_map.get(parsed.netloc)
+        if not api_base:
             msg = f"Unsupported platform: {parsed.netloc}"
             raise UnsupportedPlatformError(msg)
-
         self._platform_name = parsed.netloc
-        if self._platform_name == "github.com":
-            self._api_base = "https://api.github.com"
-        else:
-            self._api_base = "https://gitlab.com/api/v4"
+        self._api_base = api_base
 
         path_parts = [part for part in parsed.path.strip("/").split("/") if part]
         return path_parts[0], path_parts[1]
@@ -121,7 +121,10 @@ class RepositoryClient:
     async def get_basic_repository_data(self, repository_url: str) -> Repository:
         self._validate_repository_url(repository_url)
         owner, repo = self._parse_url(repository_url)
-        return await self._get_repository_data(owner, repo)
+        repository = await self._get_repository_data(owner, repo)
+        self._cache_key = (owner, repo)
+        self._cache_repo = repository
+        return repository
 
     async def _fetch_json(self, url: str) -> dict[str, Any]:
         if not self._session:
@@ -143,7 +146,12 @@ class RepositoryClient:
         owner, repo = self._parse_url(repository_url)
         logger.info("Fetching %s repository data: %s/%s", self.platform_name, owner, repo)
 
-        repository = await self._get_repository_data(owner, repo)
+        if self._cache_key == (owner, repo) and self._cache_repo is not None:
+            repository = self._cache_repo
+        else:
+            repository = await self._get_repository_data(owner, repo)
+            self._cache_key = (owner, repo)
+            self._cache_repo = repository
         ai_content = await self._get_ai_content(repository, openai_api_key, openai_base_url)
 
         return EnhancedRepositoryData(repository=repository, ai_content=ai_content)
@@ -170,7 +178,7 @@ class RepositoryClient:
         if self.platform_name == "github.com":
             url = f"{self.api_base}/repos/{owner}/{repo}"
             data = await self._fetch_json(url)
-            readme_content = await self._fetch_readme(owner, repo)
+            readme_content = await self._fetch_github_readme(owner, repo)
 
             return GitHubRepository(
                 id=data["id"],
@@ -185,10 +193,10 @@ class RepositoryClient:
 
         if self.platform_name == "gitlab.com":
             project_path = f"{owner}/{repo}"
-            encoded_path = project_path.replace("/", "%2F")
+            encoded_path = quote(project_path, safe="")
             url = f"{self.api_base}/projects/{encoded_path}"
             data = await self._fetch_json(url)
-            readme_content = await self._fetch_readme(data["id"])
+            readme_content = await self._fetch_gitlab_readme(data["id"])
 
             return GitLabRepository(
                 id=data["id"],
@@ -204,25 +212,17 @@ class RepositoryClient:
         msg = f"Unsupported platform: {self.platform_name}"
         raise UnsupportedPlatformError(msg)
 
-    async def _fetch_readme(self, *args: Any) -> str | None:
+    async def _fetch_github_readme(self, owner: str, repo: str) -> str | None:
         try:
-            if self.platform_name == "github.com":
-                owner, repo = args  # type: ignore[misc]
-                return await self._fetch_github_readme(owner, repo)
-            if self.platform_name == "gitlab.com":
-                project_id = int(args[0])  # type: ignore[index]
-                return await self._fetch_gitlab_readme(project_id)
+            readme_url = f"{self.api_base}/repos/{owner}/{repo}/readme"
+            readme_data = await self._fetch_json(readme_url)
+            content = readme_data.get("content")
+            if content:
+                return self._decode_base64_content(content)
+            return None
         except Exception as e:
             logger.warning("Failed to fetch README: %s", e)
-        return None
-
-    async def _fetch_github_readme(self, owner: str, repo: str) -> str | None:
-        readme_url = f"{self.api_base}/repos/{owner}/{repo}/readme"
-        readme_data = await self._fetch_json(readme_url)
-        content = readme_data.get("content")
-        if content:
-            return self._decode_base64_content(content)
-        return None
+            return None
 
     async def _fetch_gitlab_readme(self, project_id: int) -> str | None:
         readme_files = ["README.md", "README.rst", "README.txt", "README"]
@@ -232,7 +232,7 @@ class RepositoryClient:
                 try:
                     url = (
                         f"{self.api_base}/projects/{project_id}/repository/files/"
-                        f"{readme_file}?ref={branch}"
+                        f"{quote(readme_file, safe='')}?ref={branch}"
                     )
                     readme_data = await self._fetch_json(url)
                     content = readme_data.get("content")

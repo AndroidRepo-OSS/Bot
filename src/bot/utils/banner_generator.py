@@ -89,19 +89,16 @@ class BannerGenerator:
         return colors
 
     def _create_gradient_background(self, base_color: str) -> Image.Image:
-        gradient = Image.new("RGB", (self.config.width, self.config.height))
         try:
-            pixels = gradient.load()
-            if pixels is None:
-                return gradient
-
-            colors = self._calculate_gradient_colors(base_color)
-            for y, color in enumerate(colors):
-                for x in range(self.config.width):
-                    pixels[x, y] = color
+            column = Image.new("RGB", (1, self.config.height))
+            column.putdata(self._calculate_gradient_colors(base_color))
+            gradient = column.resize(
+                (self.config.width, self.config.height), Image.Resampling.BILINEAR
+            )
+            column.close()
             return gradient
         except Exception:
-            gradient.close()
+            column.close()
             raise
 
     @staticmethod
@@ -122,7 +119,7 @@ class BannerGenerator:
         try:
             return ImageFont.truetype(str(font_path), size)
         except OSError:
-            return ImageFont.load_default(size)
+            return ImageFont.load_default()
 
     @classmethod
     @lru_cache(maxsize=128)
@@ -241,7 +238,7 @@ class BannerGenerator:
             self._draw_footer(image, draw)
 
             buffer = BytesIO()
-            image.save(buffer, format="PNG", optimize=True, quality=95)
+            image.save(buffer, format="PNG", optimize=True, compress_level=9)
             buffer.seek(0)
             return buffer
         finally:
