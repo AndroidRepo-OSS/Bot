@@ -35,7 +35,6 @@ class OpenAIClient:
     DEFAULT_MODEL = "openai/gpt-4.1"
     FALLBACK_MODEL = "openai/gpt-4.1-mini"
     MAX_TOKENS = 2000
-    TEMPERATURE = 0.2
     README_CONTENT_LIMIT = 5000
 
     def __init__(self, api_key: str, base_url: str | None = None) -> None:
@@ -43,9 +42,7 @@ class OpenAIClient:
         self._base_url = base_url
         self._agent: Agent[RepositoryData, AIGeneratedContent] | None = None
         self._http_client: AsyncClient | None = None
-        self._model_settings = ModelSettings(
-            max_tokens=self.MAX_TOKENS, temperature=self.TEMPERATURE, timeout=60.0
-        )
+        self._model_settings = ModelSettings(max_tokens=self.MAX_TOKENS, timeout=60.0)
 
     async def __aenter__(self) -> Self:
         await self._initialize_agent()

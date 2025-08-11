@@ -9,6 +9,17 @@ from bot.database.operations import filter_and_save_tags, get_all_tags
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_TAGS: set[str] = {
+    "communication",
+    "productivity",
+    "utilities",
+    "customization",
+    "privacy",
+    "material_design",
+    "root",
+    "magisk_module",
+}
+
 
 async def process_ai_generated_tags(ai_tags: list[str]) -> list[str]:
     if not ai_tags:
@@ -34,4 +45,7 @@ async def process_ai_generated_tags(ai_tags: list[str]) -> list[str]:
 
 
 async def get_tags_for_ai_context() -> set[str]:
-    return await get_all_tags()
+    existing = await get_all_tags()
+    if not existing:
+        return set(DEFAULT_TAGS)
+    return existing | DEFAULT_TAGS
