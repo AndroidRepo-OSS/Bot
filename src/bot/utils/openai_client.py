@@ -8,16 +8,15 @@ from typing import Self
 
 from httpx import AsyncClient, HTTPStatusError
 from pydantic import BaseModel, ConfigDict, Field
-from pydantic_ai import Agent
-from pydantic_ai.exceptions import UnexpectedModelBehavior
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.models.fallback import FallbackModel
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai.retries import AsyncTenacityTransport, wait_retry_after
+from pydantic_ai.retries import AsyncTenacityTransport, RetryConfig, wait_retry_after
 from pydantic_ai.settings import ModelSettings
-from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from .models import AIGeneratedContent
-from .tag_manager import get_tags_for_ai_context, process_ai_generated_tags
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,7 @@ class RepositoryData(BaseModel):
     repo_name: str = Field(..., min_length=1, description="Repository name")
     description: str | None = Field(None, description="Repository description")
     readme_content: str | None = Field(None, description="README content")
-    topics: list[str] = Field(default_factory=list, description="Repository topics/tags")
+    topics: list[str] = Field(default_factory=list, description="Repository topics")
 
 
 class OpenAIClient:
@@ -68,7 +67,7 @@ class OpenAIClient:
                 response.raise_for_status()
 
         transport = AsyncTenacityTransport(
-            controller=AsyncRetrying(
+            config=RetryConfig(
                 retry=retry_if_exception_type((HTTPStatusError, ConnectionError)),
                 wait=wait_retry_after(
                     fallback_strategy=wait_exponential(multiplier=2, min=2, max=30), max_wait=60
@@ -81,102 +80,75 @@ class OpenAIClient:
 
         return AsyncClient(transport=transport, timeout=60.0)
 
-    async def _initialize_agent(self, model_name: str | None = None) -> None:
-        current_model = model_name or self.DEFAULT_MODEL
+    async def _initialize_agent(self) -> None:
+        if self._agent is not None:
+            return
 
-        model = self._create_model(current_model)
+        primary = self._create_model(self.DEFAULT_MODEL)
+        secondary = self._create_model(self.FALLBACK_MODEL)
+        model = FallbackModel(primary, secondary)
 
         self._agent = Agent(
             model=model,
             deps_type=RepositoryData,
             output_type=AIGeneratedContent,
-            system_prompt=self._create_base_system_prompt(),
+            system_prompt=(
+                "You are an Android content curator. Create concise, user-focused "
+                "descriptions for Android apps, tools, and utilities."
+            ),
             model_settings=self._model_settings,
         )
 
         @self._agent.system_prompt
-        async def add_suggested_tags_context() -> str:
-            suggested_tags = await get_tags_for_ai_context()
-            if not suggested_tags:
-                return """
+        def add_content_guidelines(ctx: RunContext[RepositoryData]) -> str:
+            return """
+Focus on user benefits and practical value. Keep responses under 800 characters total.
 
-For relevant_tags, you MUST create exactly 5-7 tags using underscores \
-(e.g., "media_player", "file_manager"). \
-Create meaningful tags that best describe the app's category, functionality, \
-and target use cases. \
-If you can only think of a few obvious tags, expand with related categories, user types, \
-or use cases."""
+Structure your response with:
+1. project_name: Extract from README/docs, fallback to repo name if unclear
+2. enhanced_description: 2-3 sentences highlighting user benefits and target audience
+3. key_features: 3-4 user-centric features
+4. important_links: Only direct download/documentation links (exclude GitHub if same project)
 
-            tags_list = ", ".join(sorted(suggested_tags))
-            return f"""
+Avoid hashtags like #android. Maintain technical precision and clarity.
+"""
 
-For relevant_tags, you MUST provide exactly 5-7 tags. Prioritize these existing tags \
-when applicable: {tags_list}
-If existing tags don't reach 5-7 tags, create new appropriate tags to meet the requirement. \
-Use underscores for multi-word tags and ensure all tags are relevant to the app's functionality."""
+        @self._agent.system_prompt
+        def add_repository_context(ctx: RunContext[RepositoryData]) -> str:
+            repo_data = ctx.deps
+            context_parts = [f"Repository: {repo_data.repo_name}"]
 
-    def _create_model(self, model_name: str) -> OpenAIModel:
-        client = self._http_client or self._create_retrying_client()
-        self._http_client = client
+            if repo_data.description:
+                context_parts.append(f"Description: {repo_data.description}")
+
+            if repo_data.topics:
+                context_parts.append(f"Topics: {', '.join(repo_data.topics)}")
+
+            return "\n".join(context_parts)
+
+    def _create_model(self, model_name: str) -> OpenAIChatModel:
+        if self._http_client is None:
+            self._http_client = self._create_retrying_client()
+        client = self._http_client
 
         if self._base_url:
             provider = OpenAIProvider(
                 api_key=self._api_key, base_url=self._base_url, http_client=client
             )
-            return OpenAIModel(model_name, provider=provider)
+            return OpenAIChatModel(model_name, provider=provider)
 
         provider = OpenAIProvider(api_key=self._api_key, http_client=client)
-        return OpenAIModel(model_name, provider=provider)
-
-    @staticmethod
-    def _create_base_system_prompt() -> str:
-        return """You are an Android content curator. Create user-focused descriptions \
-for Android apps, tools, and utilities.
-
-Focus on:
-- What problems it solves for users
-- Key user benefits
-- Who would find it useful
-
-Guidelines:
-- project_name: The actual project name (not necessarily the repository name)
-  - Project Name Guidelines:
-    - Identify the actual project name from README, description, or documentation
-    - The project name may differ from the repository name (e.g., "Signal" vs "Signal-Android")
-    - Look for app names, display names, or branding mentioned in the documentation
-    - If uncertain, use the project/repository name as a fallback
-- enhanced_description: 2-3 sentences, user benefits focused
-- relevant_tags: EXACTLY 5-7 tags using underscores (e.g., "media_player")
-  - REQUIREMENT: You must provide between 5 and 7 tags, never less, never more
-  - Mix of category tags (e.g., "communication", "productivity"), feature tags \
-(e.g., "offline_support", "material_design"), and user type tags \
-(e.g., "power_users", "developers")
-- key_features: 3-4 user-facing features
-- important_links: Only include download, documentation, or official website links
-- Exclude GitHub URLs if they are for the project being analyzed
-- No #android or #androidrepo tags
-
-CRITICAL: Keep the total response under 800 characters to fit Telegram image caption limits. \
-Be concise while maintaining technical accuracy."""
+        return OpenAIChatModel(model_name, provider=provider)
 
     def _create_user_prompt(self, repo_data: RepositoryData) -> str:
-        parts = [f"Repository Name: {repo_data.repo_name}"]
-
-        if repo_data.description:
-            parts.append(f"Repository Description: {repo_data.description}")
-
-        if repo_data.topics:
-            parts.append(f"Repository Tags: {', '.join(repo_data.topics)}")
-
         if repo_data.readme_content:
             content = (
                 repo_data.readme_content[: self.README_CONTENT_LIMIT] + "..."
                 if len(repo_data.readme_content) > self.README_CONTENT_LIMIT
                 else repo_data.readme_content
             )
-            parts.append(f"Documentation/README: {content}")
-
-        return "\n\n".join(parts)
+            return f"Documentation/README: {content}"
+        return "Generate content for this Android repository."
 
     async def enhance_repository_content(
         self,
@@ -184,44 +156,21 @@ Be concise while maintaining technical accuracy."""
         description: str | None = None,
         readme_content: str | None = None,
         topics: list[str] | None = None,
-        max_retries: int = 3,
     ) -> AIGeneratedContent:
         if self._agent is None:
             await self._initialize_agent()
 
-        topics = topics or []
         repo_data = RepositoryData(
             repo_name=repo_name,
             description=description,
             readme_content=readme_content,
-            topics=topics,
+            topics=topics or [],
         )
 
         user_prompt = self._create_user_prompt(repo_data)
 
-        try:
-            logger.info("Requesting content enhancement for %s", repo_name)
-
-            result = await self._agent.run(user_prompt, deps=repo_data)  # type: ignore[union-attr]
-            ai_content = result.output
-
-            processed_tags = await process_ai_generated_tags(ai_content.relevant_tags)
-            ai_content.relevant_tags = processed_tags
-
-            logger.debug("Generated content: %s", ai_content)
-            return ai_content
-
-        except UnexpectedModelBehavior as e:
-            logger.error("Model behavior error for %s: %s", repo_name, e)
-
-            if max_retries > 1:
-                logger.info("Retrying with fallback model for %s", repo_name)
-                await self._initialize_agent(self.FALLBACK_MODEL)
-                return await self.enhance_repository_content(
-                    repo_name, description, readme_content, topics, max_retries - 1
-                )
-            raise
-
-        except Exception as e:
-            logger.error("Unexpected error for %s: %s", repo_name, e)
-            raise
+        logger.info("Requesting content enhancement for %s", repo_name)
+        result = await self._agent.run(user_prompt, deps=repo_data)  # pyright: ignore[reportOptionalMemberAccess]
+        ai_content = result.output
+        logger.debug("Generated content: %s", ai_content)
+        return ai_content

@@ -14,7 +14,6 @@ class PostAction(Enum):
     CONFIRM = "confirm"
     CANCEL = "cancel"
     PUBLISH = "publish"
-    REGENERATE = "regenerate"
 
 
 class Platform(Enum):

@@ -2,6 +2,7 @@
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
 import asyncio
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from io import BytesIO
 
@@ -44,11 +45,8 @@ class PostCallback(CallbackData, prefix="post"):
 
 
 def get_project_name(enhanced_data: EnhancedRepositoryData) -> str:
-    return (
-        enhanced_data.ai_content.project_name
-        if enhanced_data.ai_content
-        else enhanced_data.repository.name
-    )
+    ai = enhanced_data.ai_content
+    return ai.project_name if ai else enhanced_data.repository.name
 
 
 async def edit_message_text_or_caption(message: Message, text: str) -> None:
@@ -64,9 +62,7 @@ def format_post(enhanced_data: EnhancedRepositoryData) -> str:
     repo = enhanced_data.repository
 
     description = ai.enhanced_description if ai and ai.enhanced_description else repo.description
-    tags = ai.relevant_tags if ai and ai.relevant_tags else repo.topics
-
-    sections = [f"<b>{project_name}</b>"]
+    sections: list[str] = [f"<b>{project_name}</b>"]
 
     if description:
         sections.append(f"<i>{description}</i>")
@@ -77,74 +73,54 @@ def format_post(enhanced_data: EnhancedRepositoryData) -> str:
 
     platform_name = "GitHub" if isinstance(repo, GitHubRepository) else "GitLab"
     links = [f'• <a href="{repo.url}">{platform_name} Repository</a>']
-
     if ai and ai.important_links:
         links.extend(f'• <a href="{link.url}">{link.title}</a>' for link in ai.important_links)
-
     sections.append("🔗 <b>Links:</b>\n" + "\n".join(links))
-
-    if tags:
-        safe_tags = []
-        for tag in tags:
-            t = tag.strip().lower().replace(" ", "_")
-            t = "".join(ch for ch in t if ch.isalnum() or ch == "_")
-            if t:
-                safe_tags.append(t)
-        hashtags = " ".join(f"#{t}" for t in safe_tags)
-        sections.append(f"🏷️ <b>Tags:</b> {hashtags}")
 
     return "\n\n".join(sections)
 
 
 def create_keyboard(keyboard_type: KeyboardType) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-
-    if keyboard_type == KeyboardType.CONFIRMATION:
-        for text, action in (("✅ Confirm", PostAction.CONFIRM), ("❌ Cancel", PostAction.CANCEL)):
-            builder.button(text=text, callback_data=PostCallback(action=action))
-        builder.adjust(2)
-        return builder.as_markup()
-
-    if keyboard_type == KeyboardType.PREVIEW:
-        for text, action in (
-            ("✅ Publish", PostAction.PUBLISH),
-            ("🔄 Regenerate", PostAction.REGENERATE),
+    layout: dict[KeyboardType, Sequence[tuple[str, PostAction]]] = {
+        KeyboardType.CONFIRMATION: (
+            ("✅ Confirm", PostAction.CONFIRM),
             ("❌ Cancel", PostAction.CANCEL),
-        ):
-            builder.button(text=text, callback_data=PostCallback(action=action))
-        builder.adjust(2, 1)
-        return builder.as_markup()
-
+        ),
+        KeyboardType.PREVIEW: (
+            ("✅ Publish", PostAction.PUBLISH),
+            ("❌ Cancel", PostAction.CANCEL),
+        ),
+    }
+    buttons = layout.get(keyboard_type, ())
+    for text, action in buttons:
+        builder.button(text=text, callback_data=PostCallback(action=action))
+    if buttons:
+        builder.adjust(len(buttons))
     return builder.as_markup()
 
 
 async def _validate_session(
     callback: CallbackQuery, state: FSMContext
 ) -> tuple[str, EnhancedRepositoryData, BytesIO] | None:
-    if not (message := callback.message) or isinstance(message, InaccessibleMessage):
+    message = callback.message
+    if not message or isinstance(message, InaccessibleMessage):
         return None
-
     data = await state.get_data()
     post_text = data.get("post_text")
     enhanced_data = data.get("enhanced_data")
     banner_buffer = data.get("banner_buffer")
-
-    if (
-        not isinstance(post_text, str)
-        or not enhanced_data
-        or not isinstance(banner_buffer, BytesIO)
+    if not (
+        isinstance(post_text, str)
+        and enhanced_data
+        and isinstance(banner_buffer, BytesIO)
+        and settings.channel_id
     ):
         await edit_message_text_or_caption(
-            message, "❌ <b>Error</b>\n\nSession expired or missing data. Try /post again."
+            message,
+            "❌ <b>Error</b>\n\nSession invalid or missing data / config. Try /post again.",
         )
         return None
-
-    if not settings.channel_id:
-        await edit_message_text_or_caption(
-            message, "❌ <b>Error</b>\n\nChannel ID not configured."
-        )
-        return None
-
     return post_text, enhanced_data, banner_buffer
 
 
@@ -201,28 +177,20 @@ async def process_post_publication(
     post_text: str,
     banner_buffer: BytesIO,
 ) -> None:
-    if (
-        not callback.bot
-        or not callback.message
-        or isinstance(callback.message, InaccessibleMessage)
-    ):
+    message = callback.message
+    if not (callback.bot and message and not isinstance(message, InaccessibleMessage)):
         return
-
     repository = enhanced_data.repository
-    project_name = get_project_name(enhanced_data)
-    banner_filename = f"{project_name.lower().replace(' ', '_')}_banner.png"
-
+    banner_filename = f"{get_project_name(enhanced_data).lower().replace(' ', '_')}_banner.png"
     try:
         result_text = await _handle_publication(
             callback, post_text, banner_buffer, banner_filename, repository
         )
-
         if result_text:
-            await callback.message.edit_caption(caption=result_text)
+            await message.edit_caption(caption=result_text)
     except Exception as e:
         error_message = f"Failed to process publication: {e!s}"
-        await callback.message.edit_caption(caption=f"❌ <b>Error</b>\n\n{error_message}")
-
+        await message.edit_caption(caption=f"❌ <b>Error</b>\n\n{error_message}")
         if callback.bot and callback.from_user:
             logger = get_logger(callback.bot)
             await logger.log_error(
@@ -230,9 +198,11 @@ async def process_post_publication(
                     f"Post publication failed for {repository.name}: {error_message}"
                 ),
                 user=callback.from_user,
-                extra_data={"repository_name": repository.name, "repository_url": repository.url},
+                extra_data={
+                    "repository_name": repository.name,
+                    "repository_url": repository.url,
+                },
             )
-
         raise
 
 
@@ -247,26 +217,22 @@ async def process_post_content(
     try:
         post_text_task = asyncio.to_thread(format_post, enhanced_data)
         banner_task = asyncio.to_thread(generate_banner, project_name)
-        results = await asyncio.gather(post_text_task, banner_task, return_exceptions=True)
-        post_text, banner_result = results
-
-        if isinstance(post_text, Exception):
-            raise post_text
-
+        post_text_result, banner_result = await asyncio.gather(
+            post_text_task, banner_task, return_exceptions=True
+        )
+        if isinstance(post_text_result, Exception):
+            raise post_text_result
         banner_buffer = banner_result if isinstance(banner_result, BytesIO) else None
-
         await state.update_data(
             enhanced_data=enhanced_data,
-            post_text=str(post_text),
+            post_text=str(post_text_result),
             banner_buffer=banner_buffer,
         )
         await state.set_state(PostStates.previewing_post)
-
         if banner_buffer:
-            await send_successful_preview(message, banner_buffer, str(post_text))
+            await send_successful_preview(message, banner_buffer, str(post_text_result))
         else:
             await _handle_error(message, state, "Banner generation failed. Try /post again.")
-
     except Exception:
         await _handle_error(message, state, "Content generation failed. Try /post again.")
 
@@ -406,25 +372,6 @@ async def confirm_post_handler(callback: CallbackQuery, state: FSMContext) -> No
         return
 
     await process_repository_confirmation(message, state, repository_url)
-
-
-@router.callback_query(PostCallback.filter(F.action == PostAction.REGENERATE))
-async def regenerate_post_handler(callback: CallbackQuery, state: FSMContext) -> None:
-    if not (message := callback.message) or isinstance(message, InaccessibleMessage):
-        return
-
-    repository_url = None
-    if callback.from_user:
-        repository_url = await get_user_repository_url(state, callback.from_user.id)
-    if not repository_url:
-        await _handle_error(message, state, "Session expired, please start again.")
-        return
-
-    await message.delete()
-    new_message = await message.answer("🔄 <b>Regenerating Content</b>\n\nPlease wait...")
-
-    await state.set_state(PostStates.waiting_for_confirmation)
-    await process_repository_confirmation(new_message, state, repository_url)
 
 
 @router.callback_query(PostCallback.filter(F.action == PostAction.PUBLISH))

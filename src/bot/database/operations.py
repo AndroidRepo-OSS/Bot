@@ -9,7 +9,7 @@ from sqlalchemy import select
 from bot.utils.models import GitHubRepository, GitLabRepository
 
 from .connection import database
-from .models import AppSubmission, Tag
+from .models import AppSubmission
 
 logger = logging.getLogger(__name__)
 
@@ -79,37 +79,3 @@ async def submit(
 
     msg = "Failed to submit app"
     raise RuntimeError(msg)
-
-
-async def get_all_tags() -> set[str]:
-    async for session in database.get_session():
-        stmt = select(Tag.name)
-        result = await session.execute(stmt)
-        return {tag[0] for tag in result.fetchall()}
-
-    return set()
-
-
-async def save_tags(tags: list[str], existing_tags: set[str] | None = None) -> None:
-    if existing_tags is None:
-        existing_tags = await get_all_tags()
-
-    new_tags = [tag for tag in tags if tag not in existing_tags]
-
-    if not new_tags:
-        return
-
-    async for session in database.get_session():
-        for tag_name in new_tags:
-            tag = Tag(name=tag_name)
-            session.add(tag)
-
-        await session.commit()
-
-
-async def filter_and_save_tags(tags: list[str]) -> list[str]:
-    existing_tags = await get_all_tags()
-
-    await save_tags(tags, existing_tags)
-
-    return tags

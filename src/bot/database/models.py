@@ -32,16 +32,3 @@ class AppSubmission(Base):
             f"<AppSubmission(id={self.id}, repo_id={self.repository_id}, "
             f"repo='{self.repository_full_name}', submitted_at='{self.submitted_at}')>"
         )
-
-
-class Tag(Base):
-    __tablename__ = "tags"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=func.now(), server_default=func.now()
-    )
-
-    def __repr__(self) -> str:
-        return f"<Tag(id={self.id}, name='{self.name}')>"

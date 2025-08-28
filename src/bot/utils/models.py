@@ -17,7 +17,7 @@ class BaseRepository(BaseModel):
     owner: str = Field(..., min_length=1, description="Repository owner")
     description: str | None = Field(None, description="Repository description")
     url: str = Field(..., description="Repository URL")
-    topics: list[str] = Field(default_factory=list, description="Repository topics/tags")
+    topics: list[str] = Field(default_factory=list, description="Repository topics")
     readme_content: str | None = Field(None, description="README content (truncated)")
 
     @field_validator("url")
@@ -89,35 +89,12 @@ class AIGeneratedContent(BaseModel):
         min_length=10,
         description="User-focused description explaining benefits and problems solved",
     )
-    relevant_tags: list[str] = Field(
-        default_factory=list,
-        min_length=5,
-        max_length=7,
-        description="Relevant tags for categorizing the Android app or tool",
-    )
     key_features: list[str] = Field(
         default_factory=list, description="Key features that users will find valuable"
     )
     important_links: list[ImportantLink] = Field(
         default_factory=list, description="Important links for downloads, docs, or websites"
     )
-
-    @field_validator("relevant_tags")
-    @classmethod
-    def validate_tags(cls, v: list[str]) -> list[str]:
-        if not (5 <= len(v) <= 7):
-            msg = "Must have between 5 and 7 tags"
-            raise ValueError(msg)
-
-        for tag in v:
-            if not tag or not tag.strip():
-                msg = "Tags cannot be empty"
-                raise ValueError(msg)
-            if " " in tag.strip():
-                msg = "Tags should use underscores instead of spaces"
-                raise ValueError(msg)
-
-        return [tag.strip().lower() for tag in v]
 
     @computed_field
     @property
