@@ -5,55 +5,52 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from aiogram.utils.formatting import Bold, Italic, Text, TextLink
+from aiogram.utils.formatting import Bold, Italic, Text, TextLink, as_list, as_marked_list
 
 if TYPE_CHECKING:
     from bot.integrations.ai import ImportantLink, RepositorySummary
     from bot.integrations.repositories import RepositoryInfo
 
-BULLET = "•"
+type TextNode = str | Text
 
 
 def render_post_caption(repository: RepositoryInfo, summary: RepositorySummary) -> str:
-    parts: list[Text | str] = []
-
     title = summary.project_name.strip() or repository.name
-    parts.append(Bold(title))
+    description = summary.enhanced_description.strip() or repository.description or ""
 
-    description = summary.enhanced_description.strip() or (repository.description or "")
+    sections: list[TextNode] = [Bold(title)]
+
     if description:
-        parts.extend(("\n\n", Italic(description), "\n"))
+        sections.extend(("", Italic(description)))
 
     if summary.key_features:
-        parts.extend(("\n", Bold("✨ Key Features:")))
-        for feature in summary.key_features:
-            cleaned = feature.strip()
-            if not cleaned:
-                continue
-            parts.append(f"\n{BULLET} {cleaned}")
-        parts.append("\n")
+        features = [f.strip() for f in summary.key_features if f.strip()]
+        if features:
+            sections.extend(("", as_marked_list(Bold("✨ Key Features:"), *features, marker="• ")))
 
-    links_section = _build_links_section(repository, summary.important_links)
-    if links_section:
-        parts.extend(links_section)
+    links = _build_links_section(repository, summary.important_links)
+    if links:
+        sections.extend(("", links))
 
-    content = Text(*parts)
-    return content.as_html()
+    return as_list(*sections).as_html()
 
 
-def _build_links_section(repository: RepositoryInfo, important_links: list[ImportantLink]) -> list[Text | str]:
-    pairs: list[tuple[str, str]] = []
-
-    pairs.append((f"{repository.platform.value.title()} Repository", str(repository.web_url)))
-
-    pairs.extend((link.label, str(link.url)) for link in important_links)
+def _build_links_section(repository: RepositoryInfo, important_links: list[ImportantLink]) -> Text | None:
+    pairs: list[tuple[str, str]] = [
+        (f"{repository.platform.value.title()} Repository", str(repository.web_url)),
+        *((link.label, str(link.url)) for link in important_links),
+    ]
 
     seen: set[str] = set()
-    parts: list[Text | str] = ["\n", Bold("🔗 Links:")]
+    link_nodes: list[TextNode] = []
+
     for label, url in pairs:
         if not url or url in seen:
             continue
         seen.add(url)
-        parts.extend(("\n", f"{BULLET} ", TextLink(label, url=url)))
+        link_nodes.append(TextLink(label, url=url))
 
-    return parts
+    if not link_nodes:
+        return None
+
+    return as_marked_list(Bold("🔗 Links:"), *link_nodes, marker="• ")

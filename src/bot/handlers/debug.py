@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from aiogram import Router, flags
 from aiogram.filters import CommandStart
-from aiogram.utils.formatting import Bold, Text, TextLink
+from aiogram.utils.formatting import Bold, Text, TextLink, as_key_value, as_list
 
 from bot.utils.deeplinks import extract_submission_id
 
@@ -16,9 +16,11 @@ if TYPE_CHECKING:
     from aiogram.types import Message
 
     from bot.container import BotDependencies
-    from bot.integrations.repositories import RepositoryInfo
+    from bot.integrations.repositories import RepositoryAuthor, RepositoryInfo, RepositoryReadme
 
 router = Router(name="preview-debug")
+
+type TextNode = str | Text
 
 
 @router.message(CommandStart(deep_link=True, deep_link_encoded=True))
@@ -37,70 +39,36 @@ async def handle_preview_debug_link(
         return
 
     content = _render_repository(submission_id, repository)
-    await message.answer(content, disable_web_page_preview=True)
+    await message.answer(**content.as_kwargs(), disable_web_page_preview=True)
 
 
-def _render_repository(submission_id: str, repository: RepositoryInfo) -> str:
+def _format_author(author: RepositoryAuthor) -> TextNode:
+    label = author.display_name or author.username
+    display = f"{label} (@{author.username})" if label != author.username else author.username
 
-    author_label = repository.author.display_name or repository.author.username
-    author_compound = (
-        f"{author_label} (@{repository.author.username})"
-        if author_label and author_label != repository.author.username
-        else repository.author.username
-    )
-    if repository.author.url:
-        author_repr: str | Text = TextLink(author_compound, url=str(repository.author.url))
-    else:
-        author_repr = author_compound
+    if author.url:
+        return TextLink(display, url=str(author.url))
+    return display
 
-    readme_repr: list[str | Text]
-    if repository.readme:
-        readme_repr = []
-        if repository.readme.source_url:
-            readme_repr.append(TextLink(repository.readme.path, url=str(repository.readme.source_url)))
-        else:
-            readme_repr.append(repository.readme.path)
-        readme_repr.append(f" ({len(repository.readme.content)} chars)")
-    else:
-        readme_repr = ["Not available"]
 
-    tags = ", ".join(repository.tags) if repository.tags else "—"
-    description = repository.description or "—"
+def _format_readme(readme: RepositoryReadme | None) -> Text:
+    if readme is None:
+        return Text("Not available")
 
-    parts: list[str | Text] = [
+    path_node: TextNode = TextLink(readme.path, url=str(readme.source_url)) if readme.source_url else readme.path
+    return Text(path_node, f" ({len(readme.content)} chars)")
+
+
+def _render_repository(submission_id: str, repository: RepositoryInfo) -> Text:
+    return as_list(
         Bold("Repository Data"),
-        "\n\n",
-        Bold("Submission ID"),
-        ": ",
-        submission_id,
-        "\n",
-        Bold("Name"),
-        ": ",
-        TextLink(repository.full_name, url=str(repository.web_url)),
-        "\n",
-        Bold("Platform"),
-        ": ",
-        repository.platform.value.title(),
-        "\n",
-        Bold("ID"),
-        ": ",
-        str(repository.id),
-        "\n",
-        Bold("Author"),
-        ": ",
-        author_repr,
-        "\n",
-        Bold("Description"),
-        ": ",
-        description,
-        "\n",
-        Bold("Tags"),
-        ": ",
-        tags,
-        "\n",
-        Bold("README"),
-        ": ",
-        *readme_repr,
-    ]
-
-    return Text(*parts).as_html()
+        "",
+        as_key_value("Submission ID", submission_id),
+        as_key_value("Name", TextLink(repository.full_name, url=str(repository.web_url))),
+        as_key_value("Platform", repository.platform.value.title()),
+        as_key_value("ID", str(repository.id)),
+        as_key_value("Author", _format_author(repository.author)),
+        as_key_value("Description", repository.description or "—"),
+        as_key_value("Tags", ", ".join(repository.tags) if repository.tags else "—"),
+        as_key_value("README", _format_readme(repository.readme)),
+    )

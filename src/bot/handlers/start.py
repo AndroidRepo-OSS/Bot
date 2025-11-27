@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from aiogram import Router, flags
 from aiogram.filters import CommandStart
-from aiogram.utils.markdown import hbold
+from aiogram.utils.formatting import Bold, Text
 
 if TYPE_CHECKING:
     from aiogram.types import Message
@@ -20,5 +20,5 @@ router = Router(name="basic")
 async def handle_start(message: Message) -> None:
     user = message.from_user
     display_name = user.full_name if user else "there"
-    greeting = f"Hello, {hbold(display_name)}!"
-    await message.answer(greeting)
+    greeting = Text("Hello, ", Bold(display_name), "!")
+    await message.answer(**greeting.as_kwargs())
