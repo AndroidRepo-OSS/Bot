@@ -1,0 +1,30 @@
+[project]
+name = "androidrepo"
+version = "0.1.0"
+description = "Telegram bot to automate posts in Android Repository channel"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Hitalo M." }]
+requires-python = ">=3.13"
+dependencies = [
+    "aiogram>=3.22.0",
+    "anyio>=4.11.0",
+    "pillow>=12.0.0",
+    "pydantic-settings>=2.5",
+    "pydantic>=2.5",
+    "aiohttp[speedups]>=3.12",
+    "structlog>=25.5.0",
+    "uvloop>=0.22.1",
+    "pydantic-ai>=1.22.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.9,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "bot"
+module-root = "src"
+
+[dependency-groups]
+dev = ["pre-commit>=4.5.0", "pyright>=1.1.407", "ruff>=0.14.6"]

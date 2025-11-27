@@ -1,0 +1,72 @@
+fix = true
+line-length = 120
+preview = true
+show-fixes = true
+unsafe-fixes = true
+
+[format]
+docstring-code-format = true
+skip-magic-trailing-comma = true
+
+[lint]
+future-annotations = true
+select = [
+    "ANN",
+    "ASYNC",
+    "BLE",
+    "FBT",
+    "A",
+    "C4",
+    "CPY",
+    "DTZ",
+    "EM",
+    "FA",
+    "INT",
+    "ISC",
+    "LOG",
+    "G",
+    "INP",
+    "PIE",
+    "T20",
+    "PYI",
+    "Q",
+    "RET",
+    "SIM",
+    "SLOT",
+    "TID",
+    "TC",
+    "PTH",
+    "I",
+    "N",
+    "PERF",
+    "E",
+    "W",
+    "F",
+    "PL",
+    "UP",
+    "FURB",
+    "RUF",
+    "TRY",
+    "FLY",
+]
+ignore = [
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    "PLR2004",
+    "PLR0917",
+    "PLR0913",
+    "PLR0914",
+]
+logger-objects = ["logging.get_logger"]
+
+[lint.isort]
+split-on-trailing-comma = false
+known-first-party = ["src"]
+
+[lint.flake8-copyright]
+author = "Hitalo M"
+notice-rgx = "(?i)Copyright \\(C\\) \\d{4}"
+
+[lint.flake8-tidy-imports]
+ban-relative-imports = "parents"
