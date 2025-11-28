@@ -116,7 +116,6 @@ class SubmissionData(BaseModel):
 
 
 @router.message(Command("post"))
-@flags.chat_action(action="upload_photo", initial_sleep=0.0)
 async def handle_post_command(
     message: Message, command: CommandObject, state: FSMContext, bot_dependencies: BotDependencies
 ) -> None:
@@ -134,7 +133,6 @@ async def handle_post_command(
 
 
 @router.message(PostStates.waiting_for_url)
-@flags.chat_action(action="upload_photo", initial_sleep=0.0)
 async def handle_repository_input(message: Message, state: FSMContext, bot_dependencies: BotDependencies) -> None:
     if not message.text:
         await message.answer("Please send the repository URL as plain text.")
@@ -264,7 +262,6 @@ async def handle_edit_callback(
 
 
 @router.message(PostStates.waiting_for_edit_instructions)
-@flags.chat_action(action="upload_photo", initial_sleep=0.0)
 async def handle_edit_instructions(
     message: Message, state: FSMContext, bot_dependencies: BotDependencies, bot: Bot
 ) -> None:

@@ -6,7 +6,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from aiogram.utils.callback_answer import CallbackAnswerMiddleware
-from aiogram.utils.chat_action import ChatActionMiddleware
 
 from bot.filters import ChatFilter, TopicFilter
 
@@ -25,11 +24,6 @@ def register_all(dp: Dispatcher, *, allowed_chat_id: int, post_topic_id: int) ->
     topic_filter = TopicFilter(post_topic_id)
     post.router.message.filter(topic_filter)
     post.router.callback_query.filter(topic_filter)
-
-    chat_action_middleware = ChatActionMiddleware()
-    debug.router.message.middleware(chat_action_middleware)
-    start.router.message.middleware(chat_action_middleware)
-    post.router.message.middleware(chat_action_middleware)
 
     callback_answer_middleware = CallbackAnswerMiddleware()
     post.router.callback_query.middleware(callback_answer_middleware)

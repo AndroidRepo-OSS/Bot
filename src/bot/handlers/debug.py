@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from aiogram import Router, flags
+from aiogram import Router
 from aiogram.filters import CommandStart
 from aiogram.utils.formatting import Bold, Text, TextLink, as_key_value, as_list
 
@@ -24,7 +24,6 @@ type TextNode = str | Text
 
 
 @router.message(CommandStart(deep_link=True, deep_link_encoded=True))
-@flags.chat_action(initial_sleep=0.0)
 async def handle_preview_debug_link(
     message: Message, command: CommandObject, bot_dependencies: BotDependencies
 ) -> None:

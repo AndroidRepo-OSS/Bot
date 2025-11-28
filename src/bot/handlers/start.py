@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from aiogram import Router, flags
+from aiogram import Router
 from aiogram.filters import CommandStart
 from aiogram.utils.formatting import Bold, Text
 
@@ -16,7 +16,6 @@ router = Router(name="basic")
 
 
 @router.message(CommandStart())
-@flags.chat_action(initial_sleep=0.0)
 async def handle_start(message: Message) -> None:
     user = message.from_user
     display_name = user.full_name if user else "there"
