@@ -18,6 +18,8 @@ User Message → Handler → Repository Fetcher → AI Summary Agent → Banner 
 - `src/bot/integrations/repositories/` - Abstract `BaseRepositoryFetcher` + platform implementations
 - `src/bot/integrations/ai/client.py` - `RepositorySummaryAgent` with pydantic-ai structured output
 - `src/bot/services/banner.py` - Pillow-based banner generation with Material Design colors
+- `src/bot/handlers/` - aiogram routers for message handling
+- `src/bot/utils/` - Utility functions (e.g. URL parsing, text truncation)
 
 ### Dependency Injection Pattern
 
