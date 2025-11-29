@@ -9,7 +9,7 @@ from aiogram.utils.callback_answer import CallbackAnswerMiddleware
 
 from bot.filters import ChatFilter, TopicFilter
 
-from . import debug, post, start
+from . import debug, errors, post, start
 
 if TYPE_CHECKING:
     from aiogram import Dispatcher
@@ -31,6 +31,9 @@ def register_all(dp: Dispatcher, *, allowed_chat_id: int, post_topic_id: int) ->
     dp.include_router(debug.router)
     dp.include_router(start.router)
     dp.include_router(post.router)
+
+    # Error handler must be registered last to catch errors from all routers
+    dp.include_router(errors.router)
 
 
 __all__ = ("register_all",)

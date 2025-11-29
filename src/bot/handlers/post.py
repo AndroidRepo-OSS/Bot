@@ -20,11 +20,11 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from anyio import create_task_group, to_thread
 from pydantic import BaseModel, ConfigDict
 
-from bot.integrations import PreviewEditError, RepositoryClientError, RepositorySummary, RepositorySummaryError
+from bot.integrations import RepositorySummary
 from bot.logging import get_logger
 from bot.utils.deeplinks import build_preview_payload
 from bot.utils.messages import render_post_caption
-from bot.utils.repositories import RepositoryUrlParseError, parse_repository_url, select_fetcher
+from bot.utils.repositories import parse_repository_url, select_fetcher
 
 if TYPE_CHECKING:
     from aiogram import Bot
@@ -36,8 +36,8 @@ if TYPE_CHECKING:
     from bot.integrations.repositories import RepositoryInfo
     from bot.services import BannerGenerator, PreviewDebugRegistry
 
-router = Router(name="post")
 logger = get_logger(__name__)
+router = Router(name="post")
 
 type MessageRef = tuple[int, int]
 
@@ -162,13 +162,7 @@ async def handle_publish_callback(
         return
 
     photo = BufferedInputFile(banner_bytes, filename=f"post-{submission.submission_id}.png")
-
-    try:
-        await bot.send_photo(chat_id=bot_dependencies.settings.post_channel_id, photo=photo, caption=submission.caption)
-    except TelegramBadRequest as exc:
-        await logger.aexception("Failed to publish post", exc_info=exc)
-        await callback.answer("Unable to publish post. Please try again.", show_alert=True)
-        return
+    await bot.send_photo(chat_id=bot_dependencies.settings.post_channel_id, photo=photo, caption=submission.caption)
 
     preview_message = callback.message if isinstance(callback.message, Message) else None
     await _cleanup_submission_messages(bot, submission, preview_message)
@@ -254,14 +248,9 @@ async def handle_edit_instructions(
     progress = await message.answer("[1/3] Understanding your edit request...")
     await _track_message(state, bot, progress, "edit_status", submission)
 
-    try:
-        updated_summary = await bot_dependencies.summary_agent.revise_summary(
-            repository=repository, summary=summary, edit_request=text
-        )
-    except PreviewEditError as exc:
-        await logger.awarning("Preview edit request failed", submission_id=submission.submission_id, error=str(exc))
-        await _update_progress(progress, "I couldn't apply that edit. Please try rephrasing your request.")
-        return
+    updated_summary = await bot_dependencies.summary_agent.revise_summary(
+        repository=repository, summary=summary, edit_request=text
+    )
 
     await _update_progress(progress, "[2/3] Updating banner...")
     banner_bytes = await _render_banner(bot_dependencies.banner_generator, repository, updated_summary)
@@ -269,9 +258,7 @@ async def handle_edit_instructions(
     await _update_progress(progress, "[3/3] Updating preview message...")
     caption = render_post_caption(repository, updated_summary)
 
-    if not await _update_preview_message(bot, submission, banner_bytes, caption, repository.name):
-        await _update_progress(progress, "Preview could not be updated. Please try again.")
-        return
+    await _update_preview_message(bot, submission, banner_bytes, caption, repository.name)
 
     await state.update_data(
         caption=caption,
@@ -287,30 +274,20 @@ async def handle_edit_instructions(
 async def _process_repository(
     message: Message, raw_url: str, state: FSMContext, bot_dependencies: BotDependencies
 ) -> None:
-    try:
-        locator = parse_repository_url(raw_url)
-    except RepositoryUrlParseError as exc:
-        await message.answer(str(exc))
-        return
+    locator = parse_repository_url(raw_url)
 
     progress = await message.answer("[1/3] Fetching repository metadata...")
 
-    try:
-        fetcher = select_fetcher(
-            locator, github_fetcher=bot_dependencies.github_fetcher, gitlab_fetcher=bot_dependencies.gitlab_fetcher
-        )
-        repository = await fetcher.fetch_repository(locator.owner, locator.name)
+    fetcher = select_fetcher(
+        locator, github_fetcher=bot_dependencies.github_fetcher, gitlab_fetcher=bot_dependencies.gitlab_fetcher
+    )
+    repository = await fetcher.fetch_repository(locator.owner, locator.name)
 
-        await _update_progress(progress, "[2/3] Generating AI summary...")
-        summary = await bot_dependencies.summary_agent.summarize(repository)
+    await _update_progress(progress, "[2/3] Generating AI summary...")
+    summary = await bot_dependencies.summary_agent.summarize(repository)
 
-        await _update_progress(progress, "[3/3] Rendering preview...")
-        banner_bytes = await _render_banner(bot_dependencies.banner_generator, repository, summary)
-    except (RepositoryClientError, RepositorySummaryError) as exc:
-        await logger.awarning("Processing failed", url=raw_url, error=str(exc))
-        msg = "Unable to load repository." if isinstance(exc, RepositoryClientError) else "Could not generate summary."
-        await _update_progress(progress, msg)
-        return
+    await _update_progress(progress, "[3/3] Rendering preview...")
+    banner_bytes = await _render_banner(bot_dependencies.banner_generator, repository, summary)
 
     caption = render_post_caption(repository, summary)
     submission_id = uuid4().hex
@@ -372,24 +349,17 @@ async def _render_banner(generator: BannerGenerator, repository: RepositoryInfo,
 
 async def _update_preview_message(
     bot: Bot, submission: SubmissionData, banner_bytes: bytes, caption: str, filename: str
-) -> bool:
+) -> None:
     photo = BufferedInputFile(banner_bytes, filename=f"{filename}.png")
     media = InputMediaPhoto(media=photo, caption=caption)
     keyboard = _build_preview_keyboard(submission.submission_id, submission.debug_url)
 
-    try:
-        await bot.edit_message_media(
-            chat_id=submission.preview_chat_id,
-            message_id=submission.preview_message_id,
-            media=media,
-            reply_markup=keyboard.as_markup(),
-        )
-    except TelegramBadRequest as exc:
-        await logger.aexception(
-            "Failed to update preview message", submission_id=submission.submission_id, error=str(exc)
-        )
-        return False
-    return True
+    await bot.edit_message_media(
+        chat_id=submission.preview_chat_id,
+        message_id=submission.preview_message_id,
+        media=media,
+        reply_markup=keyboard.as_markup(),
+    )
 
 
 async def _build_debug_link(bot: Bot | None, submission_id: str) -> str | None:
