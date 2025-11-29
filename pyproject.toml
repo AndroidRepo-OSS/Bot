@@ -15,7 +15,7 @@ dependencies = [
     "aiohttp[speedups]>=3.12",
     "structlog>=25.5.0",
     "uvloop>=0.22.1",
-    "pydantic-ai>=1.22.0",
+    "pydantic-ai-slim[openai]>=1.22.0",
 ]
 
 [build-system]

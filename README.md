@@ -1,3 +1,3 @@
-# AndroidRepo - Telegram Bot
+# Android Repository - Telegram Bot
 
-A Telegram bot that makes it easy to share Android projects in the Android Repository channel.
+This is the bot used by the Android Repository channel on Telegram ([@AndroidRepo](https://t.me/AndroidRepo)) to automate the process of publishing/sharing open source projects for Android devices.
