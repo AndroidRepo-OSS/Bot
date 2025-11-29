@@ -5,10 +5,13 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Any
+from typing import TYPE_CHECKING
 
 import structlog
 from structlog.dev import plain_traceback
+
+if TYPE_CHECKING:
+    from structlog.typing import Processor
 
 
 def setup_logging(level: int = logging.INFO) -> None:
@@ -29,7 +32,7 @@ def setup_logging(level: int = logging.INFO) -> None:
     root_logger.addHandler(handler)
     root_logger.setLevel(level)
 
-    processors: list[Any] = [
+    processors: list[Processor] = [
         structlog.stdlib.filter_by_level,
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
