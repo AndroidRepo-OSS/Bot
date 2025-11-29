@@ -3,22 +3,29 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict  # noqa: TC002
 
-from bot.integrations.repositories.models import RepositoryInfo  # noqa: TC001
+if TYPE_CHECKING:
+    from bot.integrations.repositories.models import RepositoryInfo
 
 
-class RepositorySummaryDependencies(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
+@dataclass(slots=True)
+class SummaryDependencies:
     repository: RepositoryInfo
     readme_excerpt: str
     links: list[str]
 
 
-class ImportantLink(BaseModel):
-    """A relevant external link for the project."""
+@dataclass(slots=True)
+class RevisionDependencies:
+    repository: RepositoryInfo
+    current_summary: RepositorySummary
 
+
+class ImportantLink(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, use_attribute_docstrings=True)
 
     label: str
@@ -29,8 +36,6 @@ class ImportantLink(BaseModel):
 
 
 class RepositorySummary(BaseModel):
-    """Marketing summary of an Android repository for the AndroidRepo Telegram channel."""
-
     model_config = ConfigDict(extra="forbid", frozen=True, use_attribute_docstrings=True)
 
     project_name: str
@@ -44,10 +49,3 @@ class RepositorySummary(BaseModel):
 
     important_links: list[ImportantLink] = []
     """Relevant external links (downloads, stores, docs). Exclude the main repository/README URL."""
-
-
-class RepositorySummaryRevisionDependencies(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    repository: RepositoryInfo
-    current_summary: RepositorySummary

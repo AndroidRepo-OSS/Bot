@@ -4,10 +4,11 @@
 from .ai import (
     PreviewEditError,
     RepositorySummary,
-    RepositorySummaryAgent,
-    RepositorySummaryDependencies,
     RepositorySummaryError,
-    RepositorySummaryRevisionDependencies,
+    RevisionAgent,
+    RevisionDependencies,
+    SummaryAgent,
+    SummaryDependencies,
 )
 from .repositories import (
     BaseRepositoryFetcher,
@@ -33,8 +34,9 @@ __all__ = (
     "RepositoryPlatform",
     "RepositoryReadme",
     "RepositorySummary",
-    "RepositorySummaryAgent",
-    "RepositorySummaryDependencies",
     "RepositorySummaryError",
-    "RepositorySummaryRevisionDependencies",
+    "RevisionAgent",
+    "RevisionDependencies",
+    "SummaryAgent",
+    "SummaryDependencies",
 )

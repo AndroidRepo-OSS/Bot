@@ -1,0 +1,117 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from bot.integrations.ai.errors import RepositorySummaryError
+from bot.integrations.ai.models import RepositorySummary, SummaryDependencies
+from bot.integrations.ai.prompts import SUMMARY_INSTRUCTIONS
+from bot.integrations.ai.utils import extract_links, extract_readme
+from bot.logging import get_logger
+
+from .base import BaseAgent
+
+logger = get_logger(__name__)
+
+if TYPE_CHECKING:
+    from pydantic_ai import RunContext
+
+    from bot.integrations.repositories.models import RepositoryInfo
+
+
+class SummaryAgent(BaseAgent[SummaryDependencies, RepositorySummary]):
+    __slots__ = ()
+
+    def __init__(self, *, api_key: str, base_url: str | None = None) -> None:
+        super().__init__(api_key=api_key, base_url=base_url, instructions=SUMMARY_INSTRUCTIONS)
+
+    @classmethod
+    def _get_output_type(cls) -> type[RepositorySummary]:
+        return RepositorySummary
+
+    @classmethod
+    def _get_deps_type(cls) -> type[SummaryDependencies]:
+        return SummaryDependencies
+
+    def _register_instructions(self) -> None:
+        @self._agent.instructions
+        def provide_repository_context(ctx: RunContext[SummaryDependencies]) -> str:
+            repo = ctx.deps.repository
+            parts = [
+                "## Repository Data",
+                "",
+                f"**Name:** {repo.name}",
+                f"**Full Name:** {repo.full_name}",
+                f"**Author:** {repo.author.display_name or repo.author.username}",
+                f"**Platform:** {repo.platform.value}",
+                f"**Description:** {repo.description or 'Not provided'}",
+            ]
+
+            if repo.tags:
+                parts.append(f"**Tags:** {', '.join(repo.tags)}")
+
+            parts.append(f"**Repository URL:** {repo.web_url}")
+
+            if ctx.deps.links:
+                parts.extend(["", "## Available Links (select relevant ones)"])
+                parts.extend(f"- {link}" for link in ctx.deps.links)
+
+            if ctx.deps.readme_excerpt:
+                parts.extend([
+                    "",
+                    "## README Content",
+                    "Use this to extract features, benefits, and additional context:",
+                    "",
+                    ctx.deps.readme_excerpt,
+                ])
+
+            return "\n".join(parts)
+
+    async def summarize(self, repository: RepositoryInfo) -> RepositorySummary:
+        await logger.ainfo(
+            "Starting repository summary generation",
+            repository=repository.full_name,
+            platform=repository.platform.value,
+            has_readme=bool(repository.readme and repository.readme.content),
+        )
+
+        readme = extract_readme(repository)
+        links = extract_links(readme)
+
+        await logger.adebug(
+            "Extracted README and links for summary",
+            repository=repository.full_name,
+            readme_length=len(readme),
+            links_count=len(links),
+        )
+
+        deps = SummaryDependencies(repository=repository, readme_excerpt=readme, links=links)
+
+        try:
+            await logger.adebug("Invoking AI agent for summary", repository=repository.full_name)
+            result = await self._agent.run(
+                "Generate a marketing summary for this Android repository. "
+                "Extract the project name, write a compelling description, "
+                "identify key features, and select relevant links.",
+                deps=deps,
+            )
+        except Exception as exc:
+            await logger.aerror(
+                "Failed to generate repository summary",
+                repository=repository.full_name,
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            raise RepositorySummaryError(original_error=exc) from exc
+
+        await logger.ainfo(
+            "Repository summary generated successfully",
+            repository=repository.full_name,
+            project_name=result.output.project_name,
+            features_count=len(result.output.key_features),
+            links_count=len(result.output.important_links),
+        )
+
+        return result.output

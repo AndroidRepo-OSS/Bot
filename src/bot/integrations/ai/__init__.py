@@ -1,21 +1,17 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
-from .client import RepositorySummaryAgent
-from .errors import PreviewEditError, RepositorySummaryError
-from .models import (
-    ImportantLink,
-    RepositorySummary,
-    RepositorySummaryDependencies,
-    RepositorySummaryRevisionDependencies,
-)
+from bot.integrations.ai.agents import RevisionAgent, SummaryAgent
+from bot.integrations.ai.errors import PreviewEditError, RepositorySummaryError
+from bot.integrations.ai.models import ImportantLink, RepositorySummary, RevisionDependencies, SummaryDependencies
 
 __all__ = (
     "ImportantLink",
     "PreviewEditError",
     "RepositorySummary",
-    "RepositorySummaryAgent",
-    "RepositorySummaryDependencies",
     "RepositorySummaryError",
-    "RepositorySummaryRevisionDependencies",
+    "RevisionAgent",
+    "RevisionDependencies",
+    "SummaryAgent",
+    "SummaryDependencies",
 )

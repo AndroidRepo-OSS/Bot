@@ -21,7 +21,6 @@ from anyio import create_task_group, to_thread
 from pydantic import BaseModel, ConfigDict
 
 from bot.integrations import RepositorySummary
-from bot.logging import get_logger
 from bot.utils.deeplinks import build_preview_payload
 from bot.utils.messages import render_post_caption
 from bot.utils.repositories import parse_repository_url, select_fetcher
@@ -36,7 +35,6 @@ if TYPE_CHECKING:
     from bot.integrations.repositories import RepositoryInfo
     from bot.services import BannerGenerator, PreviewDebugRegistry
 
-logger = get_logger(__name__)
 router = Router(name="post")
 
 type MessageRef = tuple[int, int]
@@ -248,7 +246,7 @@ async def handle_edit_instructions(
     progress = await message.answer("[1/3] Understanding your edit request...")
     await _track_message(state, bot, progress, "edit_status", submission)
 
-    updated_summary = await bot_dependencies.summary_agent.revise_summary(
+    updated_summary = await bot_dependencies.revision_agent.revise(
         repository=repository, summary=summary, edit_request=text
     )
 
@@ -342,9 +340,7 @@ async def _render_banner(generator: BannerGenerator, repository: RepositoryInfo,
         with generator.generate(summary.project_name or repository.name) as buffer:
             return buffer.getvalue()
 
-    result = await to_thread.run_sync(_generate)
-    await logger.ainfo("Generated banner", repo=repository.full_name)
-    return result
+    return await to_thread.run_sync(_generate)
 
 
 async def _update_preview_message(

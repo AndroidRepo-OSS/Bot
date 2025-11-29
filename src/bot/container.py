@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from aiohttp import ClientSession, ClientTimeout
 
-from .integrations.ai import RepositorySummaryAgent
+from .integrations.ai import RevisionAgent, SummaryAgent
 from .integrations.repositories import GitHubRepositoryFetcher, GitLabRepositoryFetcher
 from .services import BannerGenerator, PreviewDebugRegistry
 
@@ -43,7 +43,8 @@ class BotDependencies:
     session: ClientSession
     github_fetcher: GitHubRepositoryFetcher
     gitlab_fetcher: GitLabRepositoryFetcher
-    summary_agent: RepositorySummaryAgent
+    summary_agent: SummaryAgent
+    revision_agent: RevisionAgent
     banner_generator: BannerGenerator
     preview_registry: PreviewDebugRegistry
 
@@ -60,10 +61,10 @@ def setup_dependencies(dp: Dispatcher, settings: ContainerSettings) -> None:
         github_fetcher = GitHubRepositoryFetcher(session=session, token=settings.resolved_github_token)
         gitlab_fetcher = GitLabRepositoryFetcher(session=session, token=settings.resolved_gitlab_token)
 
-        summary_agent = RepositorySummaryAgent(
-            api_key=settings.resolved_openai_api_key,
-            base_url=str(settings.openai_base_url) if settings.openai_base_url else None,
-        )
+        api_key = settings.resolved_openai_api_key
+        base_url = str(settings.openai_base_url) if settings.openai_base_url else None
+        summary_agent = SummaryAgent(api_key=api_key, base_url=base_url)
+        revision_agent = RevisionAgent(api_key=api_key, base_url=base_url)
 
         banner_generator = BannerGenerator()
         preview_registry = PreviewDebugRegistry()
@@ -74,6 +75,7 @@ def setup_dependencies(dp: Dispatcher, settings: ContainerSettings) -> None:
             github_fetcher=github_fetcher,
             gitlab_fetcher=gitlab_fetcher,
             summary_agent=summary_agent,
+            revision_agent=revision_agent,
             banner_generator=banner_generator,
             preview_registry=preview_registry,
         )
