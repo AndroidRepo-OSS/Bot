@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any
 
 from aiohttp import ClientResponseError
 
@@ -86,16 +86,6 @@ class BaseRepositoryFetcher(ABC):
             if return_json:
                 return await response.json()
             return await response.text()
-
-    async def aclose(self) -> None:
-        if not self._session.closed:
-            await self._session.close()
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(self, *_exc_info: object) -> None:
-        await self.aclose()
 
     @abstractmethod
     async def fetch_repository(self, owner: str, name: str) -> RepositoryInfo: ...

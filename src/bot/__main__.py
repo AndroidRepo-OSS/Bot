@@ -45,7 +45,4 @@ if __name__ == "__main__":
     args = parse_args()
     log_level = logging.DEBUG if args.debug else logging.INFO
     setup_logging(level=log_level)
-    try:
-        anyio.run(main, backend="asyncio", backend_options={"use_uvloop": True})
-    except KeyboardInterrupt:
-        logger.info("Bot stopped!")
+    anyio.run(main, backend="asyncio", backend_options={"use_uvloop": True})
