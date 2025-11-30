@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from aiohttp import ClientResponseError
 
@@ -40,7 +40,7 @@ class BaseRepositoryFetcher(ABC):
             return sanitized[:max_length] + "\n\n[Content truncated...]"
         return sanitized
 
-    async def _make_request[T: (dict, list, bytes, str, None)](
+    async def _make_request(
         self,
         url: str,
         *,
@@ -49,7 +49,7 @@ class BaseRepositoryFetcher(ABC):
         return_json: bool = True,
         return_bytes: bool = False,
         ignore_404: bool = False,
-    ) -> T:
+    ) -> dict[str, Any] | list[Any] | bytes | str | None:
         if return_json and return_bytes:
             msg = "return_json and return_bytes cannot both be True"
             raise ValueError(msg)
@@ -62,7 +62,7 @@ class BaseRepositoryFetcher(ABC):
             if response.status == 404:
                 if ignore_404:
                     await logger.adebug("Resource not found (ignored)", platform=self._platform_name, url=url)
-                    return None  # type: ignore[return-value]
+                    return None
                 await logger.awarning("Repository not found", platform=self._platform_name, url=url)
                 raise RepositoryNotFoundError(self._platform_name)
 
@@ -82,10 +82,10 @@ class BaseRepositoryFetcher(ABC):
             await logger.adebug("API request successful", platform=self._platform_name, url=url, status=response.status)
 
             if return_bytes:
-                return await response.read()  # type: ignore[return-value]
+                return await response.read()
             if return_json:
-                return await response.json()  # type: ignore[return-value]
-            return await response.text()  # type: ignore[return-value]
+                return await response.json()
+            return await response.text()
 
     async def aclose(self) -> None:
         if not self._session.closed:
