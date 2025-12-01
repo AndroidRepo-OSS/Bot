@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from pydantic import AnyHttpUrl, SecretStr  # noqa: TC002
+from pydantic import SecretStr  # noqa: TC002
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,8 +13,7 @@ class BotSettings(BaseSettings):
     )
 
     token: SecretStr
-    openai_api_key: SecretStr
-    openai_base_url: AnyHttpUrl | None = None
+    ghmodels_api_key: SecretStr
     post_channel_id: int
     post_topic_id: int
     allowed_chat_id: int
@@ -26,8 +25,8 @@ class BotSettings(BaseSettings):
         return self.token.get_secret_value()
 
     @property
-    def resolved_openai_api_key(self) -> str:
-        return self.openai_api_key.get_secret_value()
+    def resolved_ghmodels_api_key(self) -> str:
+        return self.ghmodels_api_key.get_secret_value()
 
     @property
     def resolved_github_token(self) -> str | None:

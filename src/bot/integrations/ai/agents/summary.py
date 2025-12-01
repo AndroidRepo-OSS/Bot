@@ -24,8 +24,8 @@ if TYPE_CHECKING:
 class SummaryAgent(BaseAgent[SummaryDependencies, RepositorySummary]):
     __slots__ = ()
 
-    def __init__(self, *, api_key: str, base_url: str | None = None) -> None:
-        super().__init__(api_key=api_key, base_url=base_url, instructions=SUMMARY_INSTRUCTIONS)
+    def __init__(self, *, api_key: str) -> None:
+        super().__init__(api_key=api_key, instructions=SUMMARY_INSTRUCTIONS)
 
     @classmethod
     def _get_output_type(cls) -> type[RepositorySummary]:
