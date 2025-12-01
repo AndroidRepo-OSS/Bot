@@ -370,14 +370,14 @@ def _build_preview_keyboard(submission_id: str, debug_url: str | None) -> Inline
     builder = InlineKeyboardBuilder()
 
     for text, action in (
-        ("Publish", SubmissionAction.PUBLISH),
-        ("Edit", SubmissionAction.EDIT),
-        ("Cancel", SubmissionAction.CANCEL),
+        ("🚀 Publish", SubmissionAction.PUBLISH),
+        ("✏️ Edit", SubmissionAction.EDIT),
+        ("❌ Cancel", SubmissionAction.CANCEL),
     ):
         builder.button(text=text, callback_data=SubmissionCallback(action=action, submission_id=submission_id))
 
     if debug_url:
-        builder.button(text="Inspect Data", url=debug_url)
+        builder.button(text="🔍 Inspect Data", url=debug_url)
         rows = (2, 1, 1)
     else:
         rows = (2, 1)
