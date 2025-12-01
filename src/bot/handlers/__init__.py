@@ -9,7 +9,7 @@ from aiogram.utils.callback_answer import CallbackAnswerMiddleware
 
 from bot.filters import ChatFilter, TopicFilter
 
-from . import debug, errors, post, start
+from . import debug, errors, post
 
 if TYPE_CHECKING:
     from aiogram import Dispatcher
@@ -17,7 +17,6 @@ if TYPE_CHECKING:
 
 def register_all(dp: Dispatcher, *, allowed_chat_id: int, post_topic_id: int) -> None:
     chat_filter = ChatFilter(allowed_chat_id)
-    start.router.message.filter(chat_filter)
     post.router.message.filter(chat_filter)
     post.router.callback_query.filter(chat_filter)
     debug.router.message.filter(chat_filter)
@@ -31,7 +30,6 @@ def register_all(dp: Dispatcher, *, allowed_chat_id: int, post_topic_id: int) ->
     post.router.callback_query.middleware(callback_answer_middleware)
 
     dp.include_router(debug.router)
-    dp.include_router(start.router)
     dp.include_router(post.router)
 
     # Error handler must be registered last to catch errors from all routers
