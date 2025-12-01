@@ -15,8 +15,8 @@ from PIL import Image, ImageDraw, ImageFont
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-type RGBColor = tuple[int, int, int]
-type FontType = ImageFont.FreeTypeFont | ImageFont.ImageFont
+    type RGBColor = tuple[int, int, int]
+    type FontType = ImageFont.FreeTypeFont | ImageFont.ImageFont
 
 MATERIAL_COLORS: Final[tuple[str, ...]] = (
     "#1565C0",

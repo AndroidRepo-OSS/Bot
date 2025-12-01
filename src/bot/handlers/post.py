@@ -35,9 +35,9 @@ if TYPE_CHECKING:
     from bot.integrations.repositories import RepositoryInfo
     from bot.services import BannerGenerator, PreviewDebugRegistry
 
-router = Router(name="post")
+    type MessageRef = tuple[int, int]
 
-type MessageRef = tuple[int, int]
+router = Router(name="post")
 
 
 class SubmissionAction(StrEnum):

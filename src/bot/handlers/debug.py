@@ -18,9 +18,9 @@ if TYPE_CHECKING:
     from bot.container import BotDependencies
     from bot.integrations.repositories import RepositoryAuthor, RepositoryInfo, RepositoryReadme
 
-router = Router(name="preview-debug")
+    type TextNode = str | Text
 
-type TextNode = str | Text
+router = Router(name="preview-debug")
 
 
 @router.message(CommandStart(deep_link=True, deep_link_encoded=True))

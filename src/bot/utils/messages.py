@@ -5,13 +5,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from aiogram.utils.formatting import Bold, Italic, Text, TextLink, as_list, as_marked_list
+from aiogram.utils.formatting import Bold, Italic, TextLink, as_list, as_marked_list
 
 if TYPE_CHECKING:
+    from aiogram.utils.formatting import Text
+
     from bot.integrations.ai import ImportantLink, RepositorySummary
     from bot.integrations.repositories import RepositoryInfo
 
-type TextNode = str | Text
+    type TextNode = str | Text
 
 
 def render_post_caption(repository: RepositoryInfo, summary: RepositorySummary) -> str:
