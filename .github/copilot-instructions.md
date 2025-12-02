@@ -51,6 +51,11 @@ from __future__ import annotations
 - Exception classes: inherit `RuntimeError`, define attributes in `__slots__`
 - Line length: 120 chars (see `ruff.toml`)
 
+### Documentation Style
+- **Omit docstrings** - code should be self-documenting through clear naming
+- **Omit comments** - avoid unnecessary inline comments
+- **Exception**: Add comments only when absolutely necessary for understanding complex logic or non-obvious behavior
+
 ### Import Rules (enforced by ruff)
 - **Absolute imports** for cross-package: `from bot.integrations.ai import ...`
 - **Relative imports** only within same package: `from .errors import ...`
@@ -76,7 +81,7 @@ await logger.ainfo("Message", key=value)  # Use async logging methods
 uv run python -m bot          # Run bot
 uv run ruff check --fix .     # Lint with auto-fix
 uv run ruff format .          # Format code
-uv run pyright                # Type checking
+uv run ty check               # Type checking (ty from Astral)
 ```
 
 ## Adding Features

@@ -27,7 +27,7 @@ def parse_args() -> argparse.Namespace:
 
 
 async def main() -> None:
-    settings = BotSettings()  # pyright: ignore[reportCallIssue]
+    settings = BotSettings()  # ty: ignore[missing-argument]
 
     defaults = DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True)
     bot = Bot(token=settings.bot_token, default=defaults)
