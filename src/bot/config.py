@@ -16,8 +16,8 @@ class BotSettings(BaseSettings):
     ghmodels_api_key: SecretStr
     post_channel_id: int
     post_topic_id: int
+    logs_topic_id: int
     allowed_chat_id: int
-    logs_topic_id: int | None = None
     github_token: SecretStr | None = None
     gitlab_token: SecretStr | None = None
 

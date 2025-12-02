@@ -15,8 +15,8 @@ if TYPE_CHECKING:
     from aiogram.filters.command import CommandObject
     from aiogram.types import Message
 
-    from bot.container import BotDependencies
     from bot.integrations.repositories import RepositoryAuthor, RepositoryInfo, RepositoryReadme
+    from bot.services import PreviewDebugRegistry
 
     type TextNode = str | Text
 
@@ -25,14 +25,14 @@ router = Router(name="preview-debug")
 
 @router.message(CommandStart(deep_link=True, deep_link_encoded=True))
 async def handle_preview_debug_link(
-    message: Message, command: CommandObject, bot_dependencies: BotDependencies
+    message: Message, command: CommandObject, preview_registry: PreviewDebugRegistry
 ) -> None:
     submission_id = extract_submission_id(command.args or "")
     if not submission_id:
         await message.answer("This debug link is invalid or expired.")
         return
 
-    repository = bot_dependencies.preview_registry.get(submission_id)
+    repository = preview_registry.get(submission_id)
     if repository is None:
         await message.answer("No preview data found. It may have expired after publishing/cancelling.")
         return

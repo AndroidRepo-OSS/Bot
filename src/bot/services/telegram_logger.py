@@ -60,8 +60,7 @@ class TelegramLogger:
             f"📝 <b>Post Started</b>\n\n"
             f"<b>User:</b> {user_info}\n"
             f"<b>Project:</b> <code>{repository.full_name}</code>\n"
-            f"<b>URL:</b> {repository.web_url}\n"
-            f"<b>Platform:</b> {repository.platform.value.title()}\n\n"
+            f"<b>URL:</b> {repository.web_url}\n\n"
             f"{timestamp}"
         )
         await self._send_log(message)
@@ -74,8 +73,7 @@ class TelegramLogger:
             f"✅ <b>Post Published</b>\n\n"
             f"<b>User:</b> {user_info}\n"
             f"<b>Project:</b> <code>{repository.full_name}</code>\n"
-            f"<b>URL:</b> {repository.web_url}\n"
-            f"<b>Platform:</b> {repository.platform.value.title()}\n\n"
+            f"<b>URL:</b> {repository.web_url}\n\n"
             f"{timestamp}"
         )
         await self._send_log(message)

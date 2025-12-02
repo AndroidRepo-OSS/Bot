@@ -21,6 +21,7 @@ from anyio import create_task_group, to_thread
 from pydantic import BaseModel, ConfigDict
 
 from bot.integrations import RepositorySummary
+from bot.services import BannerGenerator
 from bot.utils.deeplinks import build_preview_payload
 from bot.utils.messages import render_post_caption
 from bot.utils.repositories import parse_repository_url, select_fetcher
@@ -31,9 +32,10 @@ if TYPE_CHECKING:
     from aiogram.fsm.context import FSMContext
     from aiogram.types import CallbackQuery
 
-    from bot.container import BotDependencies
-    from bot.integrations.repositories import RepositoryInfo
-    from bot.services import BannerGenerator, PreviewDebugRegistry
+    from bot.config import BotSettings
+    from bot.integrations.ai import RevisionAgent, SummaryAgent
+    from bot.integrations.repositories import GitHubRepositoryFetcher, GitLabRepositoryFetcher, RepositoryInfo
+    from bot.services import PreviewDebugRegistry, TelegramLogger
 
     type MessageRef = tuple[int, int]
 
@@ -118,13 +120,29 @@ class SubmissionData(BaseModel):
 
 @router.message(Command("post"))
 async def handle_post_command(
-    message: Message, command: CommandObject, state: FSMContext, bot_dependencies: BotDependencies
+    message: Message,
+    command: CommandObject,
+    state: FSMContext,
+    preview_registry: PreviewDebugRegistry,
+    summary_agent: SummaryAgent,
+    github_fetcher: GitHubRepositoryFetcher,
+    gitlab_fetcher: GitLabRepositoryFetcher,
+    telegram_logger: TelegramLogger,
 ) -> None:
-    await _reset_submission_state(state, bot_dependencies.preview_registry)
+    await _reset_submission_state(state, preview_registry)
     await state.update_data(command_chat_id=message.chat.id, command_message_id=message.message_id)
 
     if args := (command.args or "").strip():
-        await _process_repository_request(message, args, state, bot_dependencies)
+        await _process_repository_request(
+            message,
+            args,
+            state,
+            preview_registry=preview_registry,
+            summary_agent=summary_agent,
+            github_fetcher=github_fetcher,
+            gitlab_fetcher=gitlab_fetcher,
+            telegram_logger=telegram_logger,
+        )
         return
 
     await state.set_state(PostStates.waiting_for_url)
@@ -133,11 +151,28 @@ async def handle_post_command(
 
 
 @router.message(PostStates.waiting_for_url)
-async def handle_repository_input(message: Message, state: FSMContext, bot_dependencies: BotDependencies) -> None:
+async def handle_repository_input(
+    message: Message,
+    state: FSMContext,
+    preview_registry: PreviewDebugRegistry,
+    summary_agent: SummaryAgent,
+    github_fetcher: GitHubRepositoryFetcher,
+    gitlab_fetcher: GitLabRepositoryFetcher,
+    telegram_logger: TelegramLogger,
+) -> None:
     if not message.text:
         await message.answer("Please send the repository URL as plain text.")
         return
-    await _process_repository_request(message, message.text, state, bot_dependencies)
+    await _process_repository_request(
+        message,
+        message.text,
+        state,
+        preview_registry=preview_registry,
+        summary_agent=summary_agent,
+        github_fetcher=github_fetcher,
+        gitlab_fetcher=gitlab_fetcher,
+        telegram_logger=telegram_logger,
+    )
 
 
 @router.callback_query(SubmissionCallback.filter(F.action == SubmissionAction.PUBLISH))
@@ -147,26 +182,28 @@ async def handle_publish_callback(
     callback_data: SubmissionCallback,
     state: FSMContext,
     bot: Bot,
-    bot_dependencies: BotDependencies,
+    preview_registry: PreviewDebugRegistry,
+    settings: BotSettings,
+    telegram_logger: TelegramLogger,
 ) -> None:
     if not (submission := await _validate_submission(callback, callback_data, state)):
         return
 
     if not (banner_bytes := submission.banner_bytes):
         await callback.answer("Preview data is corrupted. Please start over.", show_alert=True)
-        await _reset_submission_state(state, bot_dependencies.preview_registry)
+        await _reset_submission_state(state, preview_registry)
         return
 
-    repository = bot_dependencies.preview_registry.get(submission.submission_id)
+    repository = preview_registry.get(submission.submission_id)
 
     photo = BufferedInputFile(banner_bytes, filename=f"post-{submission.submission_id}.png")
-    await bot.send_photo(chat_id=bot_dependencies.settings.post_channel_id, photo=photo, caption=submission.caption)
+    await bot.send_photo(chat_id=settings.post_channel_id, photo=photo, caption=submission.caption)
 
-    if repository and callback.from_user and bot_dependencies.telegram_logger:
-        await bot_dependencies.telegram_logger.log_post_published(callback.from_user, repository)
+    if repository and callback.from_user:
+        await telegram_logger.log_post_published(callback.from_user, repository)
 
     await _cleanup_submission(bot, submission, callback.message)
-    bot_dependencies.preview_registry.discard(submission.submission_id)
+    preview_registry.discard(submission.submission_id)
     await state.clear()
 
 
@@ -177,18 +214,19 @@ async def handle_cancel_callback(
     callback_data: SubmissionCallback,
     state: FSMContext,
     bot: Bot,
-    bot_dependencies: BotDependencies,
+    preview_registry: PreviewDebugRegistry,
+    telegram_logger: TelegramLogger,
 ) -> None:
     if not (submission := await _validate_submission(callback, callback_data, state)):
         return
 
-    repository = bot_dependencies.preview_registry.get(submission.submission_id)
+    repository = preview_registry.get(submission.submission_id)
 
-    if repository and callback.from_user and bot_dependencies.telegram_logger:
-        await bot_dependencies.telegram_logger.log_post_cancelled(callback.from_user, repository)
+    if repository and callback.from_user:
+        await telegram_logger.log_post_cancelled(callback.from_user, repository)
 
     await _cleanup_submission(bot, submission, callback.message)
-    bot_dependencies.preview_registry.discard(submission.submission_id)
+    preview_registry.discard(submission.submission_id)
     await state.clear()
 
 
@@ -199,12 +237,12 @@ async def handle_edit_callback(
     callback_data: SubmissionCallback,
     state: FSMContext,
     bot: Bot,
-    bot_dependencies: BotDependencies,
+    preview_registry: PreviewDebugRegistry,
 ) -> None:
     if not (submission := await _validate_submission(callback, callback_data, state)):
         return
 
-    if not bot_dependencies.preview_registry.get(submission.submission_id):
+    if not preview_registry.get(submission.submission_id):
         await callback.answer("Repository context is missing. Please restart /post.", show_alert=True)
         await state.clear()
         return
@@ -223,7 +261,12 @@ async def handle_edit_callback(
 
 @router.message(PostStates.waiting_for_edit_instructions)
 async def handle_edit_instructions(
-    message: Message, state: FSMContext, bot_dependencies: BotDependencies, bot: Bot
+    message: Message,
+    state: FSMContext,
+    preview_registry: PreviewDebugRegistry,
+    revision_agent: RevisionAgent,
+    bot: Bot,
+    telegram_logger: TelegramLogger,
 ) -> None:
     text = (message.text or "").strip()
     if not text:
@@ -236,7 +279,7 @@ async def handle_edit_instructions(
         await state.clear()
         return
 
-    repository = bot_dependencies.preview_registry.get(submission.submission_id)
+    repository = preview_registry.get(submission.submission_id)
     summary = submission.repository_summary
 
     if not repository or not summary:
@@ -250,17 +293,14 @@ async def handle_edit_instructions(
     progress = await message.answer("[1/3] Understanding your edit request...")
     await _track_message(state, bot, progress, "edit_status", submission)
 
-    updated_summary = await bot_dependencies.revision_agent.revise(
-        repository=repository, summary=summary, edit_request=text
-    )
+    updated_summary = await revision_agent.revise(repository=repository, summary=summary, edit_request=text)
 
-    if message.from_user and bot_dependencies.telegram_logger:
-        await bot_dependencies.telegram_logger.log_post_edited(message.from_user, repository, text)
+    if message.from_user and telegram_logger:
+        await telegram_logger.log_post_edited(message.from_user, repository, text)
 
     await _update_progress(progress, "[2/3] Updating visuals...")
-    banner_bytes, caption = await _render_and_build_caption(
-        bot_dependencies.banner_generator, repository, updated_summary
-    )
+    banner_generator = BannerGenerator()
+    banner_bytes, caption = await _render_and_build_caption(banner_generator, repository, updated_summary)
 
     await _update_progress(progress, "[3/3] Updating preview...")
     await _update_preview_message(bot, submission, banner_bytes, caption, repository.name)
@@ -277,27 +317,34 @@ async def handle_edit_instructions(
 
 
 async def _process_repository_request(
-    message: Message, raw_url: str, state: FSMContext, bot_dependencies: BotDependencies
+    message: Message,
+    raw_url: str,
+    state: FSMContext,
+    *,
+    preview_registry: PreviewDebugRegistry,
+    summary_agent: SummaryAgent,
+    github_fetcher: GitHubRepositoryFetcher,
+    gitlab_fetcher: GitLabRepositoryFetcher,
+    telegram_logger: TelegramLogger,
 ) -> None:
     locator = parse_repository_url(raw_url)
     progress = await message.answer("[1/3] Fetching repository metadata...")
 
-    fetcher = select_fetcher(
-        locator, github_fetcher=bot_dependencies.github_fetcher, gitlab_fetcher=bot_dependencies.gitlab_fetcher
-    )
+    fetcher = select_fetcher(locator, github_fetcher=github_fetcher, gitlab_fetcher=gitlab_fetcher)
     repository = await fetcher.fetch_repository(locator.owner, locator.name)
 
-    if message.from_user and bot_dependencies.telegram_logger:
-        await bot_dependencies.telegram_logger.log_post_started(message.from_user, repository)
+    if message.from_user:
+        await telegram_logger.log_post_started(message.from_user, repository)
 
     await _update_progress(progress, "[2/3] Generating AI summary...")
-    summary = await bot_dependencies.summary_agent.summarize(repository)
+    summary = await summary_agent.summarize(repository)
 
     await _update_progress(progress, "[3/3] Rendering preview...")
-    banner_bytes, caption = await _render_and_build_caption(bot_dependencies.banner_generator, repository, summary)
+    banner_generator = BannerGenerator()
+    banner_bytes, caption = await _render_and_build_caption(banner_generator, repository, summary)
 
     submission_id = uuid4().hex
-    bot_dependencies.preview_registry.save(submission_id, repository)
+    preview_registry.save(submission_id, repository)
 
     debug_url = await _build_debug_link(message.bot, submission_id)
     keyboard = _build_preview_keyboard(submission_id, debug_url)
