@@ -97,7 +97,8 @@ class GitHubRepositoryFetcher(BaseRepositoryFetcher):
             response = await self._make_request(f"{_GITHUB_API}/repos/{owner}/{name}")
             if not isinstance(response, dict):
                 raise RepositoryClientError(self._platform_name, details="Unexpected repository payload")
-            repo_data = cast("dict[str, Any]", response)
+
+            repo_data = response
 
         async def load_readme() -> None:
             nonlocal readme

@@ -100,7 +100,7 @@ class GitLabRepositoryFetcher(BaseRepositoryFetcher):
                 msg = "Unexpected project payload"
                 raise RepositoryClientError(self._platform_name, details=msg)
 
-            project_data = cast("dict[str, Any]", project_raw)
+            project_data = project_raw
 
             await logger.adebug("Loading README", owner=owner, name=name)
             readme = await self._fetch_readme(project_data)
