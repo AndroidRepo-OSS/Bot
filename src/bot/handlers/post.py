@@ -157,8 +157,13 @@ async def handle_publish_callback(
         await _reset_submission_state(state, bot_dependencies.preview_registry)
         return
 
+    repository = bot_dependencies.preview_registry.get(submission.submission_id)
+
     photo = BufferedInputFile(banner_bytes, filename=f"post-{submission.submission_id}.png")
     await bot.send_photo(chat_id=bot_dependencies.settings.post_channel_id, photo=photo, caption=submission.caption)
+
+    if repository and callback.from_user and bot_dependencies.telegram_logger:
+        await bot_dependencies.telegram_logger.log_post_published(callback.from_user, repository)
 
     await _cleanup_submission(bot, submission, callback.message)
     bot_dependencies.preview_registry.discard(submission.submission_id)
@@ -176,6 +181,11 @@ async def handle_cancel_callback(
 ) -> None:
     if not (submission := await _validate_submission(callback, callback_data, state)):
         return
+
+    repository = bot_dependencies.preview_registry.get(submission.submission_id)
+
+    if repository and callback.from_user and bot_dependencies.telegram_logger:
+        await bot_dependencies.telegram_logger.log_post_cancelled(callback.from_user, repository)
 
     await _cleanup_submission(bot, submission, callback.message)
     bot_dependencies.preview_registry.discard(submission.submission_id)
@@ -244,6 +254,9 @@ async def handle_edit_instructions(
         repository=repository, summary=summary, edit_request=text
     )
 
+    if message.from_user and bot_dependencies.telegram_logger:
+        await bot_dependencies.telegram_logger.log_post_edited(message.from_user, repository, text)
+
     await _update_progress(progress, "[2/3] Updating visuals...")
     banner_bytes, caption = await _render_and_build_caption(
         bot_dependencies.banner_generator, repository, updated_summary
@@ -273,6 +286,9 @@ async def _process_repository_request(
         locator, github_fetcher=bot_dependencies.github_fetcher, gitlab_fetcher=bot_dependencies.gitlab_fetcher
     )
     repository = await fetcher.fetch_repository(locator.owner, locator.name)
+
+    if message.from_user and bot_dependencies.telegram_logger:
+        await bot_dependencies.telegram_logger.log_post_started(message.from_user, repository)
 
     await _update_progress(progress, "[2/3] Generating AI summary...")
     summary = await bot_dependencies.summary_agent.summarize(repository)

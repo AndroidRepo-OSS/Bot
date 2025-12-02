@@ -33,7 +33,7 @@ async def main() -> None:
     bot = Bot(token=settings.bot_token, default=defaults)
 
     dp = Dispatcher(storage=MemoryStorage())
-    setup_dependencies(dp, settings=settings)
+    setup_dependencies(dp, bot, settings)
     register_all(dp, allowed_chat_id=settings.allowed_chat_id, post_topic_id=settings.post_topic_id)
 
     await logger.ainfo("Starting bot...")
