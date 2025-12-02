@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.utils.formatting import TextLink
 
 if TYPE_CHECKING:
     from aiogram import Bot
@@ -41,6 +42,11 @@ class TelegramLogger:
         username = f"@{user.username}" if user.username else f"ID: {user.id}"
         return f"{name} ({username})"
 
+    @staticmethod
+    def _format_project_link(repository: RepositoryInfo) -> str:
+        link = TextLink(repository.full_name, url=str(repository.web_url))
+        return link.as_html()
+
     async def _send_log(self, message: str) -> None:
         with suppress(TelegramBadRequest):
             await self._bot.send_message(
@@ -55,52 +61,38 @@ class TelegramLogger:
     async def log_post_started(self, user: User, repository: RepositoryInfo) -> None:
         timestamp = self._format_timestamp()
         user_info = self._format_user(user)
+        project_link = self._format_project_link(repository)
 
-        message = (
-            f"📝 <b>Post Started</b>\n\n"
-            f"<b>User:</b> {user_info}\n"
-            f"<b>Project:</b> <code>{repository.full_name}</code>\n"
-            f"<b>URL:</b> {repository.web_url}\n\n"
-            f"{timestamp}"
-        )
+        message = f"📝 <b>Post Started</b>\n\n<b>User:</b> {user_info}\n<b>Project:</b> {project_link}\n\n{timestamp}"
         await self._send_log(message)
 
     async def log_post_published(self, user: User, repository: RepositoryInfo) -> None:
         timestamp = self._format_timestamp()
         user_info = self._format_user(user)
+        project_link = self._format_project_link(repository)
 
-        message = (
-            f"✅ <b>Post Published</b>\n\n"
-            f"<b>User:</b> {user_info}\n"
-            f"<b>Project:</b> <code>{repository.full_name}</code>\n"
-            f"<b>URL:</b> {repository.web_url}\n\n"
-            f"{timestamp}"
-        )
+        message = f"✅ <b>Post Published</b>\n\n<b>User:</b> {user_info}\n<b>Project:</b> {project_link}\n\n{timestamp}"
         await self._send_log(message)
 
     async def log_post_cancelled(self, user: User, repository: RepositoryInfo) -> None:
         timestamp = self._format_timestamp()
         user_info = self._format_user(user)
+        project_link = self._format_project_link(repository)
 
-        message = (
-            f"❌ <b>Post Cancelled</b>\n\n"
-            f"<b>User:</b> {user_info}\n"
-            f"<b>Project:</b> <code>{repository.full_name}</code>\n"
-            f"<b>URL:</b> {repository.web_url}\n\n"
-            f"{timestamp}"
-        )
+        message = f"❌ <b>Post Cancelled</b>\n\n<b>User:</b> {user_info}\n<b>Project:</b> {project_link}\n\n{timestamp}"
         await self._send_log(message)
 
     async def log_post_edited(self, user: User, repository: RepositoryInfo, edit_request: str) -> None:
         timestamp = self._format_timestamp()
         user_info = self._format_user(user)
+        project_link = self._format_project_link(repository)
 
         truncated_request = edit_request[:200] + "..." if len(edit_request) > 200 else edit_request
 
         message = (
             f"✏️ <b>Post Edited</b>\n\n"
             f"<b>User:</b> {user_info}\n"
-            f"<b>Project:</b> <code>{repository.full_name}</code>\n"
+            f"<b>Project:</b> {project_link}\n"
             f"<b>Edit Request:</b> {truncated_request}\n\n"
             f"{timestamp}"
         )
