@@ -19,8 +19,6 @@ def register_all(dp: Dispatcher, *, allowed_chat_id: int, post_topic_id: int) ->
     chat_filter = ChatFilter(allowed_chat_id)
     post.router.message.filter(chat_filter)
     post.router.callback_query.filter(chat_filter)
-    debug.router.message.filter(chat_filter)
-    debug.router.callback_query.filter(chat_filter)
 
     topic_filter = TopicFilter(post_topic_id)
     post.router.message.filter(topic_filter)
