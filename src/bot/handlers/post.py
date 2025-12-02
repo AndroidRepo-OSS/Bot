@@ -121,11 +121,10 @@ async def handle_post_command(
     message: Message, command: CommandObject, state: FSMContext, bot_dependencies: BotDependencies
 ) -> None:
     await _reset_submission_state(state, bot_dependencies.preview_registry)
-
     await state.update_data(command_chat_id=message.chat.id, command_message_id=message.message_id)
 
     if args := (command.args or "").strip():
-        await _process_repository(message, args, state, bot_dependencies)
+        await _process_repository_request(message, args, state, bot_dependencies)
         return
 
     await state.set_state(PostStates.waiting_for_url)
@@ -138,7 +137,7 @@ async def handle_repository_input(message: Message, state: FSMContext, bot_depen
     if not message.text:
         await message.answer("Please send the repository URL as plain text.")
         return
-    await _process_repository(message, message.text, state, bot_dependencies)
+    await _process_repository_request(message, message.text, state, bot_dependencies)
 
 
 @router.callback_query(SubmissionCallback.filter(F.action == SubmissionAction.PUBLISH))
@@ -150,8 +149,7 @@ async def handle_publish_callback(
     bot: Bot,
     bot_dependencies: BotDependencies,
 ) -> None:
-    submission = await _validate_submission(callback, callback_data, state)
-    if not submission:
+    if not (submission := await _validate_submission(callback, callback_data, state)):
         return
 
     if not (banner_bytes := submission.banner_bytes):
@@ -162,8 +160,7 @@ async def handle_publish_callback(
     photo = BufferedInputFile(banner_bytes, filename=f"post-{submission.submission_id}.png")
     await bot.send_photo(chat_id=bot_dependencies.settings.post_channel_id, photo=photo, caption=submission.caption)
 
-    preview_message = callback.message if isinstance(callback.message, Message) else None
-    await _cleanup_submission_messages(bot, submission, preview_message)
+    await _cleanup_submission(bot, submission, callback.message)
     bot_dependencies.preview_registry.discard(submission.submission_id)
     await state.clear()
 
@@ -177,12 +174,10 @@ async def handle_cancel_callback(
     bot: Bot,
     bot_dependencies: BotDependencies,
 ) -> None:
-    submission = await _validate_submission(callback, callback_data, state)
-    if not submission:
+    if not (submission := await _validate_submission(callback, callback_data, state)):
         return
 
-    preview_message = callback.message if isinstance(callback.message, Message) else None
-    await _cleanup_submission_messages(bot, submission, preview_message)
+    await _cleanup_submission(bot, submission, callback.message)
     bot_dependencies.preview_registry.discard(submission.submission_id)
     await state.clear()
 
@@ -196,8 +191,7 @@ async def handle_edit_callback(
     bot: Bot,
     bot_dependencies: BotDependencies,
 ) -> None:
-    submission = await _validate_submission(callback, callback_data, state)
-    if not submission:
+    if not (submission := await _validate_submission(callback, callback_data, state)):
         return
 
     if not bot_dependencies.preview_registry.get(submission.submission_id):
@@ -241,7 +235,7 @@ async def handle_edit_instructions(
         return
 
     await _track_message(state, bot, message, "edit_request", submission)
-    await _try_delete(bot, submission.edit_prompt_chat_id, submission.edit_prompt_message_id)
+    await _safe_delete(bot, submission.edit_prompt_chat_id, submission.edit_prompt_message_id)
 
     progress = await message.answer("[1/3] Understanding your edit request...")
     await _track_message(state, bot, progress, "edit_status", submission)
@@ -250,12 +244,12 @@ async def handle_edit_instructions(
         repository=repository, summary=summary, edit_request=text
     )
 
-    await _update_progress(progress, "[2/3] Updating banner...")
-    banner_bytes = await _render_banner(bot_dependencies.banner_generator, repository, updated_summary)
+    await _update_progress(progress, "[2/3] Updating visuals...")
+    banner_bytes, caption = await _render_and_build_caption(
+        bot_dependencies.banner_generator, repository, updated_summary
+    )
 
-    await _update_progress(progress, "[3/3] Updating preview message...")
-    caption = render_post_caption(repository, updated_summary)
-
+    await _update_progress(progress, "[3/3] Updating preview...")
     await _update_preview_message(bot, submission, banner_bytes, caption, repository.name)
 
     await state.update_data(
@@ -269,11 +263,10 @@ async def handle_edit_instructions(
     await _update_progress(progress, "Preview updated! You can publish, edit again, or cancel.")
 
 
-async def _process_repository(
+async def _process_repository_request(
     message: Message, raw_url: str, state: FSMContext, bot_dependencies: BotDependencies
 ) -> None:
     locator = parse_repository_url(raw_url)
-
     progress = await message.answer("[1/3] Fetching repository metadata...")
 
     fetcher = select_fetcher(
@@ -285,9 +278,8 @@ async def _process_repository(
     summary = await bot_dependencies.summary_agent.summarize(repository)
 
     await _update_progress(progress, "[3/3] Rendering preview...")
-    banner_bytes = await _render_banner(bot_dependencies.banner_generator, repository, summary)
+    banner_bytes, caption = await _render_and_build_caption(bot_dependencies.banner_generator, repository, summary)
 
-    caption = render_post_caption(repository, summary)
     submission_id = uuid4().hex
     bot_dependencies.preview_registry.save(submission_id, repository)
 
@@ -313,7 +305,7 @@ async def _process_repository(
         debug_url=debug_url,
     )
 
-    await _delete_message(progress)
+    await _safe_delete(message.bot, progress.chat.id, progress.message_id)
 
 
 async def _validate_submission(
@@ -333,6 +325,14 @@ async def _reset_submission_state(state: FSMContext, registry: PreviewDebugRegis
     if submission := SubmissionData.from_state(data):
         registry.discard(submission.submission_id)
     await state.clear()
+
+
+async def _render_and_build_caption(
+    generator: BannerGenerator, repository: RepositoryInfo, summary: RepositorySummary
+) -> tuple[bytes, str]:
+    banner_bytes = await _render_banner(generator, repository, summary)
+    caption = render_post_caption(repository, summary)
+    return banner_bytes, caption
 
 
 async def _render_banner(generator: BannerGenerator, repository: RepositoryInfo, summary: RepositorySummary) -> bytes:
@@ -368,7 +368,6 @@ async def _build_debug_link(bot: Bot | None, submission_id: str) -> str | None:
 
 def _build_preview_keyboard(submission_id: str, debug_url: str | None) -> InlineKeyboardBuilder:
     builder = InlineKeyboardBuilder()
-
     for text, action in (
         ("🚀 Publish", SubmissionAction.PUBLISH),
         ("✏️ Edit", SubmissionAction.EDIT),
@@ -378,11 +377,9 @@ def _build_preview_keyboard(submission_id: str, debug_url: str | None) -> Inline
 
     if debug_url:
         builder.button(text="🔍 Inspect Data", url=debug_url)
-        rows = (2, 1, 1)
+        builder.adjust(2, 1, 1)
     else:
-        rows = (2, 1)
-
-    builder.adjust(*rows)
+        builder.adjust(2, 1)
     return builder
 
 
@@ -392,13 +389,13 @@ async def _track_message(
     if (old_chat := getattr(submission, f"{prefix}_chat_id", None)) and (
         old_msg := getattr(submission, f"{prefix}_message_id", None)
     ):
-        await _try_delete(bot, old_chat, old_msg)
+        await _safe_delete(bot, old_chat, old_msg)
 
     await state.update_data({f"{prefix}_chat_id": message.chat.id, f"{prefix}_message_id": message.message_id})
 
 
-async def _try_delete(bot: Bot, chat_id: int | None, message_id: int | None) -> None:
-    if not chat_id or not message_id:
+async def _safe_delete(bot: Bot | None, chat_id: int | None, message_id: int | None) -> None:
+    if not bot or not chat_id or not message_id:
         return
     with suppress(TelegramBadRequest):
         await bot.delete_message(chat_id=chat_id, message_id=message_id)
@@ -409,20 +406,15 @@ async def _update_progress(message: Message, text: str) -> None:
         await message.edit_text(text)
 
 
-async def _delete_message(message: Message | None) -> None:
-    if not message:
-        return
-    with suppress(TelegramBadRequest):
-        await message.delete()
+async def _cleanup_submission(bot: Bot, submission: SubmissionData, preview_message: Message | object) -> None:
+    msg_to_delete = preview_message if isinstance(preview_message, Message) else None
 
-
-async def _cleanup_submission_messages(bot: Bot, submission: SubmissionData, preview_message: Message | None) -> None:
-    if not preview_message and not submission.cleanup_targets:
+    if not msg_to_delete and not submission.cleanup_targets:
         return
 
     async with create_task_group() as tg:
-        if preview_message:
-            tg.start_soon(_delete_message, preview_message)
+        if msg_to_delete:
+            tg.start_soon(_safe_delete, bot, msg_to_delete.chat.id, msg_to_delete.message_id)
 
         for chat_id, message_id in submission.cleanup_targets:
-            tg.start_soon(_try_delete, bot, chat_id, message_id)
+            tg.start_soon(_safe_delete, bot, chat_id, message_id)
