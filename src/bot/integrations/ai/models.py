@@ -49,3 +49,10 @@ class RepositorySummary(BaseModel):
 
     important_links: list[ImportantLink] = []
     """Relevant external links (downloads, stores, docs). Exclude the main repository/README URL."""
+
+
+class RejectedRepository(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, use_attribute_docstrings=True)
+
+    reason: str
+    """Brief explanation of why the repository was rejected (not Android-related)"""

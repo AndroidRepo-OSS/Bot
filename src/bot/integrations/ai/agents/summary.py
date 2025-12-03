@@ -5,8 +5,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from bot.integrations.ai.errors import RepositorySummaryError
-from bot.integrations.ai.models import RepositorySummary, SummaryDependencies
+from bot.integrations.ai.errors import NonAndroidProjectError, RepositorySummaryError
+from bot.integrations.ai.models import RejectedRepository, RepositorySummary, SummaryDependencies
 from bot.integrations.ai.prompts import SUMMARY_INSTRUCTIONS
 from bot.integrations.ai.utils import extract_links, extract_readme
 from bot.logging import get_logger
@@ -20,16 +20,18 @@ if TYPE_CHECKING:
 
     from bot.integrations.repositories.models import RepositoryInfo
 
+type SummaryOutput = RepositorySummary | RejectedRepository
 
-class SummaryAgent(BaseAgent[SummaryDependencies, RepositorySummary]):
+
+class SummaryAgent(BaseAgent[SummaryDependencies, SummaryOutput]):
     __slots__ = ()
 
     def __init__(self, *, api_key: str) -> None:
         super().__init__(api_key=api_key, instructions=SUMMARY_INSTRUCTIONS)
 
     @classmethod
-    def _get_output_type(cls) -> type[RepositorySummary]:
-        return RepositorySummary
+    def _get_output_type(cls) -> type[SummaryOutput]:
+        return SummaryOutput
 
     @classmethod
     def _get_deps_type(cls) -> type[SummaryDependencies]:
@@ -92,8 +94,10 @@ class SummaryAgent(BaseAgent[SummaryDependencies, RepositorySummary]):
         try:
             await logger.adebug("Invoking AI agent for summary", repository=repository.full_name)
             result = await self._agent.run(
-                "Generate a marketing summary for this Android repository. "
-                "Extract the project name, write a compelling description, "
+                "Generate a summary for this Android project. "
+                "First, verify if this is an Android-related project. "
+                "If not, return a RejectedRepository with the reason. "
+                "Otherwise, extract the project name, write a compelling description, "
                 "identify key features, and select relevant links.",
                 deps=deps,
             )
@@ -106,12 +110,20 @@ class SummaryAgent(BaseAgent[SummaryDependencies, RepositorySummary]):
             )
             raise RepositorySummaryError(original_error=exc) from exc
 
+        output = result.output
+
+        if isinstance(output, RejectedRepository):
+            await logger.ainfo(
+                "Repository rejected as non-Android project", repository=repository.full_name, reason=output.reason
+            )
+            raise NonAndroidProjectError(reason=output.reason)
+
         await logger.ainfo(
             "Repository summary generated successfully",
             repository=repository.full_name,
-            project_name=result.output.project_name,
-            features_count=len(result.output.key_features),
-            links_count=len(result.output.important_links),
+            project_name=output.project_name,
+            features_count=len(output.key_features),
+            links_count=len(output.important_links),
         )
 
-        return result.output
+        return output

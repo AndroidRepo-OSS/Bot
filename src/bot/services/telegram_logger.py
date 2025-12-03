@@ -97,3 +97,19 @@ class TelegramLogger:
             f"{timestamp}"
         )
         await self._send_log(message)
+
+    async def log_post_rejected(self, user: User, repository: RepositoryInfo, reason: str) -> None:
+        timestamp = self._format_timestamp()
+        user_info = self._format_user(user)
+        project_link = self._format_project_link(repository)
+
+        truncated_reason = reason[:200] + "..." if len(reason) > 200 else reason
+
+        message = (
+            f"🚫 <b>Post Rejected (Non-Android)</b>\n\n"
+            f"<b>User:</b> {user_info}\n"
+            f"<b>Project:</b> {project_link}\n"
+            f"<b>Reason:</b> {truncated_reason}\n\n"
+            f"{timestamp}"
+        )
+        await self._send_log(message)

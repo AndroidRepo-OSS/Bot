@@ -10,6 +10,14 @@ class RepositorySummaryError(RuntimeError):
         super().__init__("Unable to generate repository summary with the configured models")
 
 
+class NonAndroidProjectError(RuntimeError):
+    __slots__ = ("reason",)
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(f"Repository is not an Android project: {reason}")
+
+
 class PreviewEditError(RuntimeError):
     __slots__ = ("original_error",)
 

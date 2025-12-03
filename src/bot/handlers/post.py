@@ -17,10 +17,11 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import BufferedInputFile, InputMediaPhoto, Message
 from aiogram.utils.deep_linking import create_start_link
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from anyio import create_task_group, to_thread
+from anyio import create_task_group, sleep, to_thread
 from pydantic import BaseModel, ConfigDict
 
 from bot.integrations import RepositorySummary
+from bot.integrations.ai import NonAndroidProjectError
 from bot.services import BannerGenerator
 from bot.utils.deeplinks import build_preview_payload
 from bot.utils.messages import render_post_caption
@@ -337,7 +338,33 @@ async def _process_repository_request(
         await telegram_logger.log_post_started(message.from_user, repository)
 
     await _update_progress(progress, "[2/3] Generating AI summary...")
-    summary = await summary_agent.summarize(repository)
+
+    try:
+        summary = await summary_agent.summarize(repository)
+    except NonAndroidProjectError as exc:
+        await _safe_delete(message.bot, progress.chat.id, progress.message_id)
+        error_msg = await message.answer(
+            f"❌ <b>This repository doesn't appear to be Android-related.</b>\n\n"
+            f"<i>{exc.reason}</i>\n\n"
+            "Only Android apps, tools, and related projects can be shared."
+        )
+
+        if message.from_user:
+            await telegram_logger.log_post_rejected(message.from_user, repository, exc.reason)
+
+        state_data = await state.get_data()
+
+        await sleep(10)
+        async with create_task_group() as tg:
+            tg.start_soon(_safe_delete, message.bot, message.chat.id, message.message_id)
+            tg.start_soon(_safe_delete, message.bot, error_msg.chat.id, error_msg.message_id)
+            if prompt_id := state_data.get("prompt_message_id"):
+                tg.start_soon(_safe_delete, message.bot, state_data.get("prompt_chat_id"), prompt_id)
+            if command_id := state_data.get("command_message_id"):
+                tg.start_soon(_safe_delete, message.bot, state_data.get("command_chat_id"), command_id)
+
+        await state.clear()
+        return
 
     await _update_progress(progress, "[3/3] Rendering preview...")
     banner_generator = BannerGenerator()
