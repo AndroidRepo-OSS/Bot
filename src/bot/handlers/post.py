@@ -85,6 +85,8 @@ class SubmissionData(BaseModel):
 
     summary: dict[str, object] | None = None
     debug_url: str | None = None
+    summary_model: str | None = None
+    revision_model: str | None = None
 
     @classmethod
     def from_state(cls, data: dict[str, object]) -> SubmissionData | None:
@@ -195,7 +197,8 @@ async def handle_publish_callback(
         await _reset_submission_state(state, preview_registry)
         return
 
-    repository = preview_registry.get(submission.submission_id)
+    preview_entry = preview_registry.get(submission.submission_id)
+    repository = preview_entry.repository if preview_entry else None
 
     photo = BufferedInputFile(banner_bytes, filename=f"post-{submission.submission_id}.png")
     await bot.send_photo(chat_id=settings.post_channel_id, photo=photo, caption=submission.caption)
@@ -221,7 +224,8 @@ async def handle_cancel_callback(
     if not (submission := await _validate_submission(callback, callback_data, state)):
         return
 
-    repository = preview_registry.get(submission.submission_id)
+    preview_entry = preview_registry.get(submission.submission_id)
+    repository = preview_entry.repository if preview_entry else None
 
     if repository and callback.from_user:
         await telegram_logger.log_post_cancelled(callback.from_user, repository)
@@ -280,7 +284,8 @@ async def handle_edit_instructions(
         await state.clear()
         return
 
-    repository = preview_registry.get(submission.submission_id)
+    preview_entry = preview_registry.get(submission.submission_id)
+    repository = preview_entry.repository if preview_entry else None
     summary = submission.repository_summary
 
     if not repository or not summary:
@@ -294,7 +299,10 @@ async def handle_edit_instructions(
     progress = await message.answer("[1/3] Understanding your edit request...")
     await _track_message(state, bot, progress, "edit_status", submission)
 
-    updated_summary = await revision_agent.revise(repository=repository, summary=summary, edit_request=text)
+    revision_result = await revision_agent.revise(repository=repository, summary=summary, edit_request=text)
+    updated_summary = revision_result.summary
+
+    preview_registry.set_revision_model(submission.submission_id, revision_result.model_name)
 
     if message.from_user and telegram_logger:
         await telegram_logger.log_post_edited(message.from_user, repository, text)
@@ -312,6 +320,8 @@ async def handle_edit_instructions(
         summary=updated_summary.model_dump(mode="json"),
         edit_prompt_chat_id=None,
         edit_prompt_message_id=None,
+        summary_model=submission.summary_model,
+        revision_model=revision_result.model_name,
     )
     await state.set_state(PostStates.waiting_for_confirmation)
     await _update_progress(progress, "Preview updated! You can publish, edit again, or cancel.")
@@ -340,7 +350,8 @@ async def _process_repository_request(
     await _update_progress(progress, "[2/3] Generating AI summary...")
 
     try:
-        summary = await summary_agent.summarize(repository)
+        summary_result = await summary_agent.summarize(repository)
+        summary = summary_result.summary
     except NonAndroidProjectError as exc:
         await _safe_delete(message.bot, progress.chat.id, progress.message_id)
         error_msg = await message.answer(
@@ -371,7 +382,7 @@ async def _process_repository_request(
     banner_bytes, caption = await _render_and_build_caption(banner_generator, repository, summary)
 
     submission_id = uuid4().hex
-    preview_registry.save(submission_id, repository)
+    preview_registry.save(submission_id, repository, summary_model=summary_result.model_name)
 
     debug_url = await _build_debug_link(message.bot, submission_id)
     keyboard = _build_preview_keyboard(submission_id, debug_url)
@@ -393,6 +404,7 @@ async def _process_repository_request(
         original_message_id=message.message_id,
         summary=summary.model_dump(mode="json"),
         debug_url=debug_url,
+        summary_model=summary_result.model_name,
     )
 
     await _safe_delete(message.bot, progress.chat.id, progress.message_id)

@@ -9,7 +9,7 @@ from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.openai import OpenAIChatModel
 
 from bot.integrations.ai.errors import PreviewEditError
-from bot.integrations.ai.models import RepositorySummary, RevisionDependencies
+from bot.integrations.ai.models import RepositorySummary, RevisionDependencies, RevisionResult
 from bot.integrations.ai.prompts import REVISION_INSTRUCTIONS
 from bot.logging import get_logger
 
@@ -80,7 +80,7 @@ class RevisionAgent(BaseAgent[RevisionDependencies, RepositorySummary]):
 
     async def revise(
         self, *, repository: RepositoryInfo, summary: RepositorySummary, edit_request: str
-    ) -> RepositorySummary:
+    ) -> RevisionResult:
         await logger.ainfo(
             "Starting preview revision",
             repository=repository.full_name,
@@ -116,6 +116,7 @@ class RevisionAgent(BaseAgent[RevisionDependencies, RepositorySummary]):
             new_project_name=result.output.project_name,
             new_features_count=len(result.output.key_features),
             new_links_count=len(result.output.important_links),
+            model_name=result.response.model_name,
         )
 
-        return result.output
+        return RevisionResult(summary=result.output, model_name=result.response.model_name or "unknown")

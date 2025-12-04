@@ -15,8 +15,9 @@ if TYPE_CHECKING:
     from aiogram.filters.command import CommandObject
     from aiogram.types import Message
 
-    from bot.integrations.repositories import RepositoryAuthor, RepositoryInfo, RepositoryReadme
+    from bot.integrations.repositories import RepositoryAuthor, RepositoryReadme
     from bot.services import PreviewDebugRegistry
+    from bot.services.preview_registry import PreviewDebugEntry
 
     type TextNode = str | Text
 
@@ -32,12 +33,12 @@ async def handle_preview_debug_link(
         await message.answer("This debug link is invalid or expired.")
         return
 
-    repository = preview_registry.get(submission_id)
-    if repository is None:
+    preview_entry = preview_registry.get(submission_id)
+    if preview_entry is None:
         await message.answer("No preview data found. It may have expired after publishing/cancelling.")
         return
 
-    content = _render_repository(submission_id, repository)
+    content = _render_repository(submission_id, preview_entry)
     await message.answer(**content.as_kwargs(), disable_web_page_preview=True)
 
 
@@ -58,8 +59,9 @@ def _format_readme(readme: RepositoryReadme | None) -> Text:
     return Text(path_node, f" ({len(readme.content)} chars)")
 
 
-def _render_repository(submission_id: str, repository: RepositoryInfo) -> Text:
-    return as_list(
+def _render_repository(submission_id: str, entry: PreviewDebugEntry) -> Text:
+    repository = entry.repository
+    rows: list[Text | str] = [
         Bold("Repository Data"),
         "",
         as_key_value("Submission ID", submission_id),
@@ -70,4 +72,11 @@ def _render_repository(submission_id: str, repository: RepositoryInfo) -> Text:
         as_key_value("Description", repository.description or "—"),
         as_key_value("Tags", ", ".join(repository.tags) if repository.tags else "—"),
         as_key_value("README", _format_readme(repository.readme)),
-    )
+    ]
+
+    if entry.summary_model:
+        rows.append(as_key_value("LLM (summary)", entry.summary_model))
+    if entry.revision_model:
+        rows.append(as_key_value("LLM (revision)", entry.revision_model))
+
+    return as_list(*rows)

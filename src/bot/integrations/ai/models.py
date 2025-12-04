@@ -25,6 +25,18 @@ class RevisionDependencies:
     current_summary: RepositorySummary
 
 
+@dataclass(slots=True)
+class SummaryResult:
+    summary: RepositorySummary
+    model_name: str
+
+
+@dataclass(slots=True)
+class RevisionResult:
+    summary: RepositorySummary
+    model_name: str
+
+
 class ImportantLink(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, use_attribute_docstrings=True)
 

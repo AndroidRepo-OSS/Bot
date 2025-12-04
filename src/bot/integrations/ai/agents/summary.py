@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from bot.integrations.ai.errors import NonAndroidProjectError, RepositorySummaryError
-from bot.integrations.ai.models import RejectedRepository, RepositorySummary, SummaryDependencies
+from bot.integrations.ai.models import RejectedRepository, RepositorySummary, SummaryDependencies, SummaryResult
 from bot.integrations.ai.prompts import SUMMARY_INSTRUCTIONS
 from bot.integrations.ai.utils import extract_links, extract_readme
 from bot.logging import get_logger
@@ -71,7 +71,7 @@ class SummaryAgent(BaseAgent[SummaryDependencies, SummaryOutput]):
 
             return "\n".join(parts)
 
-    async def summarize(self, repository: RepositoryInfo) -> RepositorySummary:
+    async def summarize(self, repository: RepositoryInfo) -> SummaryResult:
         await logger.ainfo(
             "Starting repository summary generation",
             repository=repository.full_name,
@@ -111,6 +111,7 @@ class SummaryAgent(BaseAgent[SummaryDependencies, SummaryOutput]):
             raise RepositorySummaryError(original_error=exc) from exc
 
         output = result.output
+        model_name = result.response.model_name or "unknown"
 
         if isinstance(output, RejectedRepository):
             await logger.ainfo(
@@ -126,4 +127,4 @@ class SummaryAgent(BaseAgent[SummaryDependencies, SummaryOutput]):
             links_count=len(output.important_links),
         )
 
-        return output
+        return SummaryResult(summary=output, model_name=model_name)
