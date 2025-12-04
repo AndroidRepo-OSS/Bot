@@ -5,6 +5,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from pydantic_ai.models.fallback import FallbackModel
+from pydantic_ai.models.openai import OpenAIChatModel
+
 from bot.integrations.ai.errors import PreviewEditError
 from bot.integrations.ai.models import RepositorySummary, RevisionDependencies
 from bot.integrations.ai.prompts import REVISION_INSTRUCTIONS
@@ -16,6 +19,7 @@ logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from pydantic_ai import RunContext
+    from pydantic_ai.providers.github import GitHubProvider
 
     from bot.integrations.repositories.models import RepositoryInfo
 
@@ -33,6 +37,13 @@ class RevisionAgent(BaseAgent[RevisionDependencies, RepositorySummary]):
     @classmethod
     def _get_deps_type(cls) -> type[RevisionDependencies]:
         return RevisionDependencies
+
+    @staticmethod
+    def _create_model(provider: GitHubProvider) -> FallbackModel:
+        return FallbackModel(
+            OpenAIChatModel("openai/gpt-5-mini", provider=provider),
+            OpenAIChatModel("openai/gpt-4.1-mini", provider=provider),
+        )
 
     def _register_instructions(self) -> None:
         @self._agent.instructions

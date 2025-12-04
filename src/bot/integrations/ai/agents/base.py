@@ -23,12 +23,7 @@ class BaseAgent[TDeps, TOutput](ABC):
         logger.debug("Initializing AI agent", agent_class=self.__class__.__name__)
 
         provider = GitHubProvider(api_key=api_key)
-        model = FallbackModel(
-            OpenAIChatModel("openai/gpt-5", provider=provider),
-            OpenAIChatModel("openai/gpt-5-mini", provider=provider),
-            OpenAIChatModel("openai/gpt-4.1", provider=provider),
-            OpenAIChatModel("openai/gpt-4.1-mini", provider=provider),
-        )
+        model = self._create_model(provider)
 
         self._agent: Agent[TDeps, TOutput] = Agent(
             model=model,
@@ -54,6 +49,15 @@ class BaseAgent[TDeps, TOutput](ABC):
     @classmethod
     @abstractmethod
     def _get_deps_type(cls) -> type[TDeps]: ...
+
+    @staticmethod
+    def _create_model(provider: GitHubProvider) -> FallbackModel:
+        return FallbackModel(
+            OpenAIChatModel("openai/gpt-5", provider=provider),
+            OpenAIChatModel("openai/gpt-5-mini", provider=provider),
+            OpenAIChatModel("openai/gpt-4.1", provider=provider),
+            OpenAIChatModel("openai/gpt-4.1-mini", provider=provider),
+        )
 
     @abstractmethod
     def _register_instructions(self) -> None: ...
