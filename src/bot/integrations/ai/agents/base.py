@@ -24,8 +24,10 @@ class BaseAgent[TDeps, TOutput](ABC):
 
         provider = GitHubProvider(api_key=api_key)
         model = FallbackModel(
+            OpenAIChatModel("openai/gpt-5", provider=provider),
             OpenAIChatModel("openai/gpt-5-mini", provider=provider),
             OpenAIChatModel("openai/gpt-4.1", provider=provider),
+            OpenAIChatModel("openai/gpt-4.1-mini", provider=provider),
         )
 
         self._agent: Agent[TDeps, TOutput] = Agent(
