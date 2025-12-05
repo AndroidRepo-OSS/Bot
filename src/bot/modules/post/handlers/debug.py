@@ -3,13 +3,12 @@
 
 from __future__ import annotations
 
+import string
 from typing import TYPE_CHECKING
 
 from aiogram import Router
 from aiogram.filters import CommandStart
 from aiogram.utils.formatting import Bold, Text, TextLink, as_key_value, as_list
-
-from bot.utils.deeplinks import extract_submission_id
 
 if TYPE_CHECKING:
     from aiogram.filters.command import CommandObject
@@ -28,7 +27,7 @@ router = Router(name="preview-debug")
 async def handle_preview_debug_link(
     message: Message, command: CommandObject, preview_registry: PreviewDebugRegistry
 ) -> None:
-    submission_id = extract_submission_id(command.args or "")
+    submission_id = _extract_submission_id(command.args or "")
     if not submission_id:
         await message.answer("This debug link is invalid or expired.")
         return
@@ -40,6 +39,15 @@ async def handle_preview_debug_link(
 
     content = _render_repository(submission_id, preview_entry)
     await message.answer(**content.as_kwargs(), disable_web_page_preview=True)
+
+
+def _extract_submission_id(payload: str) -> str | None:
+    if not payload.startswith("preview-"):
+        return None
+    candidate = payload.removeprefix("preview-")
+    if len(candidate) == 32 and all(ch in string.hexdigits for ch in candidate):
+        return candidate
+    return None
 
 
 def _format_author(author: RepositoryAuthor) -> TextNode:

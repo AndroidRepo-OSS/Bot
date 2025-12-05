@@ -79,7 +79,6 @@ def _split_owner_repo(platform: RepositoryPlatform, segments: list[str]) -> tupl
         name = segments[1]
         return owner, _normalize_repo_name(name)
 
-    # GitLab supports nested groups and /-/ routing segments
     filtered: list[str] = []
     for segment in segments:
         if segment == "-":

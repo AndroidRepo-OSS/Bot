@@ -26,7 +26,7 @@ def render_post_caption(repository: RepositoryInfo, summary: RepositorySummary) 
         sections.extend(("", Italic(description)))
 
     if summary.key_features:
-        features = [f.strip() for f in summary.key_features if f.strip()]
+        features = [feature.strip() for feature in summary.key_features if feature.strip()]
         if features:
             sections.extend(("", as_marked_list(Bold("✨ Key Features:"), *features, marker="• ")))
 

@@ -14,8 +14,8 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from .config import BotSettings
 from .container import setup_dependencies
-from .handlers import register_all
 from .logging import get_logger, setup_logging
+from .modules import register_modules
 
 logger = get_logger(__name__)
 
@@ -34,7 +34,7 @@ async def main() -> None:
 
     dp = Dispatcher(storage=MemoryStorage())
     setup_dependencies(dp, bot, settings)
-    register_all(dp, allowed_chat_id=settings.allowed_chat_id, post_topic_id=settings.post_topic_id)
+    register_modules(dp, allowed_chat_id=settings.allowed_chat_id, post_topic_id=settings.post_topic_id)
 
     await logger.ainfo("Starting bot...")
     allowed_updates = dp.resolve_used_update_types()
