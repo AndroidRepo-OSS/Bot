@@ -8,14 +8,17 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from aiogram import Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
 from aiogram.types import BufferedInputFile
 
-from bot.integrations.ai import NonAndroidProjectError
+from bot.integrations.ai import NonAndroidProjectError, RepositorySummaryError
+from bot.integrations.repositories.errors import RepositoryClientError
+from bot.logging import get_logger
 from bot.modules.post.utils.messages import render_post_caption
 from bot.modules.post.utils.models import PostStates
 from bot.modules.post.utils.preview import build_debug_link, build_preview_keyboard, render_banner
-from bot.modules.post.utils.repositories import parse_repository_url, select_fetcher
+from bot.modules.post.utils.repositories import RepositoryUrlParseError, parse_repository_url, select_fetcher
 from bot.modules.post.utils.session import cleanup_messages, reset_submission_state, safe_delete, update_progress
 
 if TYPE_CHECKING:
@@ -23,50 +26,18 @@ if TYPE_CHECKING:
     from aiogram.fsm.context import FSMContext
     from aiogram.types import Message
 
-    from bot.integrations.ai import SummaryAgent
-    from bot.integrations.ai.models import RepositorySummary, SummaryResult
+    from bot.integrations.ai import SummaryAgent, SummaryResult
     from bot.integrations.repositories import GitHubRepositoryFetcher, GitLabRepositoryFetcher, RepositoryInfo
-    from bot.modules.post.utils.repositories import RepositoryLocator
     from bot.services import PreviewDebugRegistry, TelegramLogger
 
 
 router = Router(name="post-command")
+logger = get_logger(__name__)
 
 
 @router.message(Command("post"))
-async def handle_post_command(
-    message: Message,
-    command: CommandObject,
-    state: FSMContext,
-    preview_registry: PreviewDebugRegistry,
-    summary_agent: SummaryAgent,
-    github_fetcher: GitHubRepositoryFetcher,
-    gitlab_fetcher: GitLabRepositoryFetcher,
-    telegram_logger: TelegramLogger,
-) -> None:
-    await reset_submission_state(state, preview_registry)
-    await state.update_data(command_chat_id=message.chat.id, command_message_id=message.message_id)
-
-    if args := (command.args or "").strip():
-        await process_repository_request(
-            message,
-            args,
-            state,
-            preview_registry=preview_registry,
-            summary_agent=summary_agent,
-            github_fetcher=github_fetcher,
-            gitlab_fetcher=gitlab_fetcher,
-            telegram_logger=telegram_logger,
-        )
-        return
-
-    await state.set_state(PostStates.waiting_for_url)
-    prompt = await message.answer("Send the GitHub or GitLab repository URL you want to share.")
-    await state.update_data(prompt_chat_id=prompt.chat.id, prompt_message_id=prompt.message_id)
-
-
 @router.message(PostStates.waiting_for_url)
-async def handle_repository_input(
+async def handle_post(
     message: Message,
     state: FSMContext,
     preview_registry: PreviewDebugRegistry,
@@ -74,52 +45,77 @@ async def handle_repository_input(
     github_fetcher: GitHubRepositoryFetcher,
     gitlab_fetcher: GitLabRepositoryFetcher,
     telegram_logger: TelegramLogger,
+    command: CommandObject | None = None,
 ) -> None:
-    if not message.text:
-        await message.answer("Please send the repository URL as plain text.")
+    raw_url = await _extract_raw_url(command, message, state, preview_registry)
+    if raw_url is None:
         return
 
-    await process_repository_request(
-        message,
-        message.text,
-        state,
-        preview_registry=preview_registry,
-        summary_agent=summary_agent,
-        github_fetcher=github_fetcher,
-        gitlab_fetcher=gitlab_fetcher,
-        telegram_logger=telegram_logger,
-    )
+    try:
+        locator = parse_repository_url(raw_url)
+    except RepositoryUrlParseError as exc:
+        await logger.awarning("Invalid repository URL", error=str(exc))
+        error_msg = await message.answer(f"❌ Invalid repository URL: {exc.reason}")
+        await _cleanup_rejected_submission(message, error_msg, state)
+        return
 
-
-async def process_repository_request(
-    message: Message,
-    raw_url: str,
-    state: FSMContext,
-    *,
-    preview_registry: PreviewDebugRegistry,
-    summary_agent: SummaryAgent,
-    github_fetcher: GitHubRepositoryFetcher,
-    gitlab_fetcher: GitLabRepositoryFetcher,
-    telegram_logger: TelegramLogger,
-) -> None:
-    locator = parse_repository_url(raw_url)
     progress = await message.answer("[1/3] Fetching repository...")
 
-    repository = await _fetch_repository(locator, github_fetcher=github_fetcher, gitlab_fetcher=gitlab_fetcher)
+    try:
+        try:
+            fetcher = select_fetcher(locator, github_fetcher=github_fetcher, gitlab_fetcher=gitlab_fetcher)
+            repository = await fetcher.fetch_repository(locator.owner, locator.name)
+        except RepositoryClientError as exc:
+            await logger.awarning(
+                "Repository client error", platform=exc.platform, status=exc.status, details=exc.details
+            )
+            error_msg = await message.answer(f"❌ Failed to fetch repository: {exc}")
+            await _cleanup_rejected_submission(message, error_msg, state)
+            return
 
-    if message.from_user:
-        await telegram_logger.log_post_started(message.from_user, repository)
+        if message.from_user:
+            await telegram_logger.log_post_started(message.from_user, repository)
 
-    await update_progress(progress, "[2/3] Generating AI summary...")
+        await update_progress(progress, "[2/3] Generating AI summary...")
 
-    summary_result = await _summarize_repository(message, state, telegram_logger, repository, progress, summary_agent)
-    if not summary_result:
-        return
+        try:
+            summary_result = await _summarize_repository(
+                message, state, telegram_logger, repository, progress, summary_agent
+            )
+        except RepositorySummaryError as exc:
+            await logger.awarning("Summary generation failed", original_error=str(exc.original_error))
+            error_msg = await message.answer("Could not generate summary. Please try again later.")
+            await _cleanup_rejected_submission(message, error_msg, state)
+            return
+        if not summary_result:
+            return
 
-    await update_progress(progress, "[3/3] Rendering preview...")
-    await _render_and_store_preview(message, state, repository, summary_result, preview_registry=preview_registry)
+        await update_progress(progress, "[3/3] Rendering preview...")
 
-    await safe_delete(message.bot, progress.chat.id, progress.message_id)
+        try:
+            submission_id, caption, banner_bytes, preview, debug_url = await _render_preview(
+                message, repository, summary_result, preview_registry=preview_registry
+            )
+        except (OSError, TelegramAPIError) as exc:
+            error_msg = await message.answer(f"❌ Failed rendering preview: {exc}")
+            await _cleanup_rejected_submission(message, error_msg, state)
+            return
+
+        await state.set_state(PostStates.waiting_for_confirmation)
+        await state.update_data(
+            submission_id=submission_id,
+            caption=caption,
+            banner_b64=base64.b64encode(banner_bytes).decode("ascii"),
+            preview_chat_id=preview.chat.id,
+            preview_message_id=preview.message_id,
+            original_chat_id=message.chat.id,
+            original_message_id=message.message_id,
+            summary=summary_result.summary.model_dump(mode="json"),
+            debug_url=debug_url,
+            summary_model=summary_result.model_name,
+        )
+    finally:
+        await safe_delete(message.bot, progress.chat.id, progress.message_id)
 
 
 async def _cleanup_rejected_submission(message: Message, error_message: Message, state: FSMContext) -> None:
@@ -135,32 +131,25 @@ async def _cleanup_rejected_submission(message: Message, error_message: Message,
     await state.clear()
 
 
-async def _fetch_repository(
-    locator: RepositoryLocator, *, github_fetcher: GitHubRepositoryFetcher, gitlab_fetcher: GitLabRepositoryFetcher
-) -> RepositoryInfo:
-    fetcher = select_fetcher(locator, github_fetcher=github_fetcher, gitlab_fetcher=gitlab_fetcher)
-    return await fetcher.fetch_repository(locator.owner, locator.name)
+async def _extract_raw_url(
+    command: CommandObject | None, message: Message, state: FSMContext, preview_registry: PreviewDebugRegistry
+) -> str | None:
+    if command is None:
+        if not message.text:
+            await message.answer("Please send the repository URL as plain text.")
+            return None
+        return message.text
 
+    await reset_submission_state(state, preview_registry)
+    await state.update_data(command_chat_id=message.chat.id, command_message_id=message.message_id)
 
-async def _reject_non_android(
-    message: Message,
-    state: FSMContext,
-    telegram_logger: TelegramLogger,
-    repository: RepositoryInfo,
-    exc: NonAndroidProjectError,
-    progress: Message,
-) -> None:
-    await safe_delete(message.bot, progress.chat.id, progress.message_id)
-    error_msg = await message.answer(
-        "❌ <b>This repository doesn't appear to be Android-related.</b>\n\n"
-        f"<i>{exc.reason}</i>\n\n"
-        "Only Android apps, tools, and related projects can be shared."
-    )
+    if args := (command.args or "").strip():
+        return args
 
-    if message.from_user:
-        await telegram_logger.log_post_rejected(message.from_user, repository, exc.reason)
-
-    await _cleanup_rejected_submission(message, error_msg, state)
+    await state.set_state(PostStates.waiting_for_url)
+    prompt = await message.answer("Send the GitHub or GitLab repository URL you want to share.")
+    await state.update_data(prompt_chat_id=prompt.chat.id, prompt_message_id=prompt.message_id)
+    return None
 
 
 async def _summarize_repository(
@@ -174,8 +163,17 @@ async def _summarize_repository(
     try:
         return await summary_agent.summarize(repository)
     except NonAndroidProjectError as exc:
-        await _reject_non_android(message, state, telegram_logger, repository, exc, progress)
-        return None
+        await safe_delete(message.bot, progress.chat.id, progress.message_id)
+        error_msg = await message.answer(
+            "❌ <b>This repository doesn't appear to be Android-related.</b>\n\n"
+            f"<i>{exc.reason}</i>\n\n"
+            "Only Android apps, tools, and related projects can be shared."
+        )
+
+        if message.from_user:
+            await telegram_logger.log_post_rejected(message.from_user, repository, exc.reason)
+
+        await _cleanup_rejected_submission(message, error_msg, state)
 
 
 async def _render_preview(
@@ -201,55 +199,3 @@ async def _render_preview(
     )
 
     return submission_id, caption, banner_bytes, preview, debug_url
-
-
-async def _render_and_store_preview(
-    message: Message,
-    state: FSMContext,
-    repository: RepositoryInfo,
-    summary_result: SummaryResult,
-    *,
-    preview_registry: PreviewDebugRegistry,
-) -> None:
-    submission_id, caption, banner_bytes, preview, debug_url = await _render_preview(
-        message, repository, summary_result, preview_registry=preview_registry
-    )
-
-    await _store_submission_state(
-        state,
-        submission_id,
-        caption=caption,
-        banner_bytes=banner_bytes,
-        preview=preview,
-        message=message,
-        summary=summary_result.summary,
-        debug_url=debug_url,
-        summary_model=summary_result.model_name,
-    )
-
-
-async def _store_submission_state(
-    state: FSMContext,
-    submission_id: str,
-    *,
-    caption: str,
-    banner_bytes: bytes,
-    preview: Message,
-    message: Message,
-    summary: RepositorySummary,
-    debug_url: str | None,
-    summary_model: str,
-) -> None:
-    await state.set_state(PostStates.waiting_for_confirmation)
-    await state.update_data(
-        submission_id=submission_id,
-        caption=caption,
-        banner_b64=base64.b64encode(banner_bytes).decode("ascii"),
-        preview_chat_id=preview.chat.id,
-        preview_message_id=preview.message_id,
-        original_chat_id=message.chat.id,
-        original_message_id=message.message_id,
-        summary=summary.model_dump(mode="json"),
-        debug_url=debug_url,
-        summary_model=summary_model,
-    )

@@ -12,8 +12,6 @@ from bot.integrations.repositories import RepositoryPlatform
 if TYPE_CHECKING:
     from bot.integrations.repositories import BaseRepositoryFetcher, GitHubRepositoryFetcher, GitLabRepositoryFetcher
 
-SUPPORTED_SCHEMES = ("http", "https")
-
 
 class RepositoryUrlParseError(RuntimeError):
     __slots__ = ("reason", "url")
@@ -40,7 +38,7 @@ def parse_repository_url(raw_url: str) -> RepositoryLocator:
         candidate = f"https://{candidate}"
 
     parsed = urlparse(candidate)
-    if parsed.scheme.lower() not in SUPPORTED_SCHEMES:
+    if parsed.scheme.lower() not in {"http", "https"}:
         raise RepositoryUrlParseError(raw_url, "Unsupported URL scheme. Use http or https.")
 
     host = (parsed.hostname or "").lower()

@@ -9,6 +9,7 @@ from bot.integrations.ai.models import (
     RepositorySummary,
     RevisionDependencies,
     SummaryDependencies,
+    SummaryResult,
 )
 
 __all__ = (
@@ -22,4 +23,5 @@ __all__ = (
     "RevisionDependencies",
     "SummaryAgent",
     "SummaryDependencies",
+    "SummaryResult",
 )

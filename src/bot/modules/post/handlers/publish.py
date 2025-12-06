@@ -6,8 +6,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from aiogram import F, Router, flags
+from aiogram.exceptions import TelegramRetryAfter
 from aiogram.types import BufferedInputFile
 
+from bot.logging import get_logger
 from bot.modules.post.utils.models import SubmissionAction, SubmissionCallback
 from bot.modules.post.utils.session import cleanup_messages, validate_submission
 
@@ -22,6 +24,7 @@ if TYPE_CHECKING:
 
 
 router = Router(name="post-publish")
+logger = get_logger(__name__)
 
 
 @router.callback_query(SubmissionCallback.filter(F.action == SubmissionAction.PUBLISH))
@@ -44,27 +47,21 @@ async def handle_publish_callback(
         await state.clear()
         return
 
-    await _publish_to_channel(bot, settings, preview_registry, telegram_logger, submission, banner_bytes, callback)
-    await _finalize_submission(bot, state, preview_registry, submission, callback)
-
-
-async def _publish_to_channel(
-    bot: Bot,
-    settings: BotSettings,
-    preview_registry: PreviewDebugRegistry,
-    telegram_logger: TelegramLogger,
-    submission: SubmissionData,
-    banner_bytes: bytes,
-    callback: CallbackQuery,
-) -> None:
     preview_entry = preview_registry.get(submission.submission_id)
     repository = preview_entry.repository if preview_entry else None
 
     photo = BufferedInputFile(banner_bytes, filename=f"post-{submission.submission_id}.png")
-    await bot.send_photo(chat_id=settings.post_channel_id, photo=photo, caption=submission.caption)
+    try:
+        await bot.send_photo(chat_id=settings.post_channel_id, photo=photo, caption=submission.caption)
+    except TelegramRetryAfter as exc:
+        await logger.awarning("Telegram rate limit hit while publishing", retry_after=exc.retry_after)
+        await callback.answer(f"Rate limited. Try again in {exc.retry_after} seconds.", show_alert=True)
+        return
 
     if repository and callback.from_user:
         await telegram_logger.log_post_published(callback.from_user, repository)
+
+    await _finalize_submission(bot, state, preview_registry, submission, callback)
 
 
 @router.callback_query(SubmissionCallback.filter(F.action == SubmissionAction.CANCEL))
@@ -80,28 +77,13 @@ async def handle_cancel_callback(
     if not (submission := await validate_submission(callback, callback_data, state)):
         return
 
-    await _log_cancellation(preview_registry, telegram_logger, submission, callback)
-    await _finalize_submission(bot, state, preview_registry, submission, callback)
-
-
-async def _log_cancellation(
-    preview_registry: PreviewDebugRegistry,
-    telegram_logger: TelegramLogger,
-    submission: SubmissionData,
-    callback: CallbackQuery,
-) -> None:
     preview_entry = preview_registry.get(submission.submission_id)
     repository = preview_entry.repository if preview_entry else None
 
     if repository and callback.from_user:
         await telegram_logger.log_post_cancelled(callback.from_user, repository)
 
-
-async def _cleanup_submission(bot: Bot, submission: SubmissionData, *, callback: CallbackQuery | None) -> None:
-    targets = list(submission.cleanup_targets)
-    if callback and callback.message:
-        targets.append((callback.message.chat.id, callback.message.message_id))
-    await cleanup_messages(bot, targets)
+    await _finalize_submission(bot, state, preview_registry, submission, callback)
 
 
 async def _finalize_submission(
@@ -111,6 +93,10 @@ async def _finalize_submission(
     submission: SubmissionData,
     callback: CallbackQuery,
 ) -> None:
-    await _cleanup_submission(bot, submission, callback=callback)
+    targets = list(submission.cleanup_targets)
+    if callback and callback.message:
+        targets.append((callback.message.chat.id, callback.message.message_id))
+    await cleanup_messages(bot, targets)
+
     preview_registry.discard(submission.submission_id)
     await state.clear()

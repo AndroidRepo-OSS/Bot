@@ -9,7 +9,7 @@ from aiogram.utils.callback_answer import CallbackAnswerMiddleware
 
 from bot.filters import ChatFilter, TopicFilter
 
-from .handlers import command, debug, edit, errors, publish
+from .handlers import command, debug, edit, publish
 
 if TYPE_CHECKING:
     from aiogram import Dispatcher
@@ -25,7 +25,7 @@ def setup_post(dp: Dispatcher, *, allowed_chat_id: int, post_topic_id: int) -> N
         router.callback_query.middleware(CallbackAnswerMiddleware())
         dp.include_router(router)
 
-    dp.include_routers(debug.router, errors.router)
+    dp.include_router(debug.router)
 
 
 __all__ = ("setup_post",)

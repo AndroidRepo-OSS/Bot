@@ -37,12 +37,14 @@ async def reset_submission_state(state: FSMContext, registry: PreviewDebugRegist
     submission = await load_submission(state)
     if submission:
         registry.discard(submission.submission_id)
+
     await state.clear()
 
 
 async def safe_delete(bot: Bot | None, chat_id: int | None, message_id: int | None) -> None:
     if not bot or not chat_id or not message_id:
         return
+
     with suppress(TelegramBadRequest):
         await bot.delete_message(chat_id=chat_id, message_id=message_id)
 

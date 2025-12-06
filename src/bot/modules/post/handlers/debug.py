@@ -44,6 +44,7 @@ async def handle_preview_debug_link(
 def _extract_submission_id(payload: str) -> str | None:
     if not payload.startswith("preview-"):
         return None
+
     candidate = payload.removeprefix("preview-")
     if len(candidate) == 32 and all(ch in string.hexdigits for ch in candidate):
         return candidate

@@ -7,8 +7,11 @@ import base64
 from typing import TYPE_CHECKING
 
 from aiogram import F, Router, flags
+from aiogram.exceptions import TelegramAPIError
 from aiogram.types import Message
 
+from bot.integrations.ai import PreviewEditError
+from bot.logging import get_logger
 from bot.modules.post.utils.messages import render_post_caption
 from bot.modules.post.utils.models import PostStates, SubmissionAction, SubmissionCallback, SubmissionData
 from bot.modules.post.utils.preview import render_banner, update_preview_message
@@ -25,6 +28,7 @@ if TYPE_CHECKING:
 
 
 router = Router(name="post-edit")
+logger = get_logger(__name__)
 
 
 @router.callback_query(SubmissionCallback.filter(F.action == SubmissionAction.EDIT))
@@ -114,7 +118,13 @@ async def _apply_revision(
     preview_registry: PreviewDebugRegistry,
     telegram_logger: TelegramLogger,
 ) -> None:
-    revision_result = await revision_agent.revise(repository=repository, summary=summary, edit_request=text)
+    try:
+        revision_result = await revision_agent.revise(repository=repository, summary=summary, edit_request=text)
+    except PreviewEditError as exc:
+        await logger.awarning("Preview edit failed", original_error=str(exc.original_error))
+        await update_progress(progress, "I couldn't apply that edit. Please rephrase your request.")
+        return
+
     updated_summary = revision_result.summary
 
     preview_registry.set_revision_model(submission.submission_id, revision_result.model_name)
@@ -123,11 +133,16 @@ async def _apply_revision(
         await telegram_logger.log_post_edited(progress.from_user, repository, text)
 
     await update_progress(progress, "[2/3] Updating visuals...")
-    banner_bytes = await render_banner(repository, updated_summary)
-    caption = render_post_caption(repository, updated_summary)
+    try:
+        banner_bytes = await render_banner(repository, updated_summary)
+        caption = render_post_caption(repository, updated_summary)
 
-    await update_progress(progress, "[3/3] Updating preview...")
-    await update_preview_message(bot, submission, banner_bytes, caption)
+        await update_progress(progress, "[3/3] Updating preview...")
+        await update_preview_message(bot, submission, banner_bytes, caption)
+    except (OSError, TelegramAPIError) as exc:
+        await logger.aerror("Failed to update preview", exception=str(exc))
+        await update_progress(progress, "Failed to update preview. Please try again later.")
+        return
 
     await state.update_data(
         caption=caption,
