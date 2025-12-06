@@ -9,7 +9,6 @@ from . import command, debug, edit, publish
 
 post_router = Router(name="post")
 post_router.include_router(command.router)
-post_router.include_router(debug.router)
 post_router.include_router(edit.router)
 post_router.include_router(publish.router)
 
