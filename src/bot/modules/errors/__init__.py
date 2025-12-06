@@ -5,14 +5,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .handlers import router
+from .handlers import telegram, unexpected
 
 if TYPE_CHECKING:
     from aiogram import Dispatcher
 
 
 def setup_errors(dp: Dispatcher) -> None:
-    dp.include_router(router)
+    dp.include_routers(telegram.router, unexpected.router)
 
 
 __all__ = ("setup_errors",)
