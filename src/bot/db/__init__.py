@@ -4,7 +4,14 @@
 from .base import Base
 from .models import Post
 from .repositories import BaseRepository, PostsRepository
-from .session import AsyncSessionMaker, create_engine, create_session_maker, init_models
+from .session import (
+    AsyncSessionMaker,
+    apply_sqlite_pragmas,
+    create_engine,
+    create_session_maker,
+    init_models,
+    vacuum_and_analyze,
+)
 
 __all__ = (
     "AsyncSessionMaker",
@@ -12,7 +19,9 @@ __all__ = (
     "BaseRepository",
     "Post",
     "PostsRepository",
+    "apply_sqlite_pragmas",
     "create_engine",
     "create_session_maker",
     "init_models",
+    "vacuum_and_analyze",
 )

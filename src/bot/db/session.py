@@ -26,3 +26,17 @@ def create_session_maker(engine: AsyncEngine) -> AsyncSessionMaker:
 async def init_models(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+
+async def apply_sqlite_pragmas(engine: AsyncEngine) -> None:
+    async with engine.connect() as connection:
+        autocommit_connection = await connection.execution_options(isolation_level="AUTOCOMMIT")
+        await autocommit_connection.exec_driver_sql("PRAGMA journal_mode=WAL;")
+        await autocommit_connection.exec_driver_sql("PRAGMA synchronous=NORMAL;")
+
+
+async def vacuum_and_analyze(engine: AsyncEngine) -> None:
+    async with engine.connect() as connection:
+        autocommit_connection = await connection.execution_options(isolation_level="AUTOCOMMIT")
+        await autocommit_connection.exec_driver_sql("VACUUM")
+        await autocommit_connection.exec_driver_sql("ANALYZE")

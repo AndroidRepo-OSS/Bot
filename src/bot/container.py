@@ -7,7 +7,14 @@ from typing import TYPE_CHECKING
 
 from aiohttp import ClientSession, ClientTimeout
 
-from .db import PostsRepository, create_engine, create_session_maker, init_models
+from .db import (
+    PostsRepository,
+    apply_sqlite_pragmas,
+    create_engine,
+    create_session_maker,
+    init_models,
+    vacuum_and_analyze,
+)
 from .integrations.ai import RevisionAgent, SummaryAgent
 from .integrations.repositories import GitHubRepositoryFetcher, GitLabRepositoryFetcher
 from .services import PreviewDebugRegistry, TelegramLogger
@@ -45,6 +52,9 @@ def setup_dependencies(dp: Dispatcher, bot: Bot, settings: BotSettings) -> None:
         db_engine = create_engine(settings.database_url)
         db_session_maker = create_session_maker(db_engine)
         await init_models(db_engine)
+        if settings.database_url.startswith("sqlite"):
+            await apply_sqlite_pragmas(db_engine)
+            await vacuum_and_analyze(db_engine)
 
         dp["db_engine"] = db_engine
         dp["db_session_maker"] = db_session_maker
@@ -61,6 +71,7 @@ def setup_dependencies(dp: Dispatcher, bot: Bot, settings: BotSettings) -> None:
         if session is not None:
             await session.close()
             session = None
+
         if db_engine is not None:
             await db_engine.dispose()
             db_engine = None
