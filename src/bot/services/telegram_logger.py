@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.utils.formatting import TextLink
+from aiogram.utils.formatting import Bold, Text, TextLink, as_key_value, as_list
 
 if TYPE_CHECKING:
     from aiogram import Bot
@@ -27,99 +27,102 @@ class TelegramLogger:
         self._topic_id = topic_id
 
     @staticmethod
-    def _format_timestamp() -> str:
-        now_utc = datetime.now(UTC)
-        now_brasilia = now_utc.astimezone(ZoneInfo("America/Sao_Paulo"))
-
-        utc_str = now_utc.strftime("%d/%m/%Y %H:%M:%S")
-        brasilia_str = now_brasilia.strftime("%d/%m/%Y %H:%M:%S")
-
-        return f"<b>UTC:</b> {utc_str}\n<b>Brasília:</b> {brasilia_str}"
+    def _truncate(text: str, length: int = 200) -> str:
+        return text[:length] + "..." if len(text) > length else text
 
     @staticmethod
-    def _format_user(user: User) -> str:
-        name = user.full_name
-        username = f"@{user.username}" if user.username else f"ID: {user.id}"
-        return f"{name} ({username})"
-
-    @staticmethod
-    def _format_project_link(repository: RepositoryInfo) -> str:
-        link = TextLink(repository.full_name, url=str(repository.web_url))
-        return link.as_html()
-
-    @staticmethod
-    def _format_datetime(dt: datetime) -> str:
+    def _format_datetime(dt: datetime) -> Text:
         aware = dt if dt.tzinfo else dt.replace(tzinfo=UTC)
         utc_str = aware.astimezone(UTC).strftime("%d/%m/%Y %H:%M:%S")
         brasilia_str = aware.astimezone(ZoneInfo("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
-        return f"<b>UTC:</b> {utc_str}\n<b>Brasília:</b> {brasilia_str}"
+        return as_list(as_key_value("UTC", utc_str), as_key_value("Brasília", brasilia_str))
 
-    async def _send_log(self, message: str) -> None:
+    @classmethod
+    def _format_timestamp(cls) -> Text:
+        return cls._format_datetime(datetime.now(UTC))
+
+    @staticmethod
+    def _format_user(user: User | None) -> Text | str:
+        if not user:
+            return "Unknown user"
+        name = user.full_name
+        username = f"@{user.username}" if user.username else f"ID: {user.id}"
+        return Text(name, " (", username, ")")
+
+    @staticmethod
+    def _format_project_link(repository: RepositoryInfo) -> TextLink:
+        return TextLink(repository.full_name, url=str(repository.web_url))
+
+    def _build_message(
+        self, header: Text, user_info: Text | str | None = None, repository: RepositoryInfo | None = None, *extras: Text
+    ) -> Text:
+        parts = [header]
+        details = []
+
+        if user_info:
+            details.append(as_key_value("User", user_info))
+
+        if repository:
+            details.append(as_key_value("Project", self._format_project_link(repository)))
+
+        if extras:
+            details.extend(extras)
+
+        if details:
+            parts.append(as_list(*details))
+
+        parts.append(self._format_timestamp())
+        return as_list(*parts, sep="\n\n")
+
+    async def _send_log(self, message: Text) -> None:
         with suppress(TelegramBadRequest):
+            text, entities = message.render()
             await self._bot.send_message(
-                chat_id=self._chat_id, message_thread_id=self._topic_id, text=message, disable_notification=True
+                chat_id=self._chat_id,
+                message_thread_id=self._topic_id,
+                text=text,
+                entities=entities,
+                disable_notification=True,
+                parse_mode=None,
             )
 
     async def log_bot_started(self) -> None:
-        timestamp = self._format_timestamp()
-        message = f"🤖 <b>Bot Started</b>\n\n{timestamp}"
-        await self._send_log(message)
+        await self._send_log(self._build_message(Text("🤖 ", Bold("Bot Started"))))
 
     async def log_post_started(self, user: User, repository: RepositoryInfo) -> None:
-        timestamp = self._format_timestamp()
-        user_info = self._format_user(user)
-        project_link = self._format_project_link(repository)
-
-        message = f"📝 <b>Post Started</b>\n\n<b>User:</b> {user_info}\n<b>Project:</b> {project_link}\n\n{timestamp}"
-        await self._send_log(message)
+        await self._send_log(
+            self._build_message(Text("📝 ", Bold("Post Started")), self._format_user(user), repository)
+        )
 
     async def log_post_published(self, user: User, repository: RepositoryInfo) -> None:
-        timestamp = self._format_timestamp()
-        user_info = self._format_user(user)
-        project_link = self._format_project_link(repository)
-
-        message = f"✅ <b>Post Published</b>\n\n<b>User:</b> {user_info}\n<b>Project:</b> {project_link}\n\n{timestamp}"
-        await self._send_log(message)
+        await self._send_log(
+            self._build_message(Text("✅ ", Bold("Post Published")), self._format_user(user), repository)
+        )
 
     async def log_post_cancelled(self, user: User, repository: RepositoryInfo) -> None:
-        timestamp = self._format_timestamp()
-        user_info = self._format_user(user)
-        project_link = self._format_project_link(repository)
-
-        message = f"❌ <b>Post Cancelled</b>\n\n<b>User:</b> {user_info}\n<b>Project:</b> {project_link}\n\n{timestamp}"
-        await self._send_log(message)
+        await self._send_log(
+            self._build_message(Text("❌ ", Bold("Post Cancelled")), self._format_user(user), repository)
+        )
 
     async def log_post_edited(self, user: User, repository: RepositoryInfo, edit_request: str) -> None:
-        timestamp = self._format_timestamp()
-        user_info = self._format_user(user)
-        project_link = self._format_project_link(repository)
-
-        truncated_request = edit_request[:200] + "..." if len(edit_request) > 200 else edit_request
-
-        message = (
-            f"✏️ <b>Post Edited</b>\n\n"
-            f"<b>User:</b> {user_info}\n"
-            f"<b>Project:</b> {project_link}\n"
-            f"<b>Edit Request:</b> {truncated_request}\n\n"
-            f"{timestamp}"
+        await self._send_log(
+            self._build_message(
+                Text("✏️ ", Bold("Post Edited")),
+                self._format_user(user),
+                repository,
+                as_key_value("Edit Request", self._truncate(edit_request)),
+            )
         )
-        await self._send_log(message)
 
     async def log_post_rejected(self, user: User, repository: RepositoryInfo, reason: str) -> None:
-        timestamp = self._format_timestamp()
-        user_info = self._format_user(user)
-        project_link = self._format_project_link(repository)
-
-        truncated_reason = reason[:200] + "..." if len(reason) > 200 else reason
-
-        message = (
-            f"🚫 <b>Post Rejected (Non-Android)</b>\n\n"
-            f"<b>User:</b> {user_info}\n"
-            f"<b>Project:</b> {project_link}\n"
-            f"<b>Reason:</b> {truncated_reason}\n\n"
-            f"{timestamp}"
+        await self._send_log(
+            self._build_message(
+                Text("🚫 ", Bold("Post Rejected (Non-Android)")),
+                self._format_user(user),
+                repository,
+                as_key_value("Reason", self._truncate(reason)),
+            )
         )
-        await self._send_log(message)
 
     async def log_post_recently_posted(
         self,
@@ -131,21 +134,13 @@ class TelegramLogger:
         channel_message_id: int,
         channel_link: str,
     ) -> None:
-        timestamp = self._format_timestamp()
-        project_link = self._format_project_link(repository)
-        user_info = self._format_user(user) if user else "Unknown user"
-
-        last_ts = self._format_datetime(last_posted_at)
-        next_ts = self._format_datetime(next_allowed_at)
-        message_link = TextLink(f"#{channel_message_id}", url=channel_link).as_html()
-
-        message = (
-            f"⏳ <b>Post Blocked (recent)</b>\n\n"
-            f"<b>User:</b> {user_info}\n"
-            f"<b>Project:</b> {project_link}\n"
-            f"<b>Last posted:</b>\n{last_ts}\n"
-            f"<b>Next allowed:</b>\n{next_ts}\n"
-            f"<b>Channel message:</b> {message_link}\n\n"
-            f"{timestamp}"
+        await self._send_log(
+            self._build_message(
+                Text("⏳ ", Bold("Post Blocked (recent)")),
+                self._format_user(user),
+                repository,
+                Text(Bold("Last posted:"), "\n", self._format_datetime(last_posted_at)),
+                Text(Bold("Next allowed:"), "\n", self._format_datetime(next_allowed_at)),
+                as_key_value("Channel message", TextLink(f"#{channel_message_id}", url=channel_link)),
+            )
         )
-        await self._send_log(message)
