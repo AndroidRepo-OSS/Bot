@@ -53,19 +53,20 @@ async def cleanup_messages(
     bot: Bot | None, targets: Iterable[tuple[int | None, int | None]], *, delay: float | None = None
 ) -> None:
     valid_targets = [(chat_id, message_id) for chat_id, message_id in targets if chat_id and message_id]
-    if not valid_targets:
+    unique_targets = list(dict.fromkeys(valid_targets))
+    if not unique_targets:
         return
 
     if delay:
         await sleep(delay)
 
-    if len(valid_targets) == 1:
-        chat_id, message_id = valid_targets[0]
+    if len(unique_targets) == 1:
+        chat_id, message_id = unique_targets[0]
         await safe_delete(bot, chat_id, message_id)
         return
 
     async with create_task_group() as tg:
-        for chat_id, message_id in valid_targets:
+        for chat_id, message_id in unique_targets:
             tg.start_soon(safe_delete, bot, chat_id, message_id)
 
 

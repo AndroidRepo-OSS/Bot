@@ -19,6 +19,7 @@ class BotSettings(BaseSettings):
     logs_topic_id: int
     allowed_chat_id: int
     database_url: str = "sqlite+aiosqlite:///data/bot.sqlite3"
+    nasa_api_key: SecretStr
     github_token: SecretStr | None = None
     gitlab_token: SecretStr | None = None
 
@@ -29,6 +30,10 @@ class BotSettings(BaseSettings):
     @property
     def resolved_ghmodels_api_key(self) -> str:
         return self.ghmodels_api_key.get_secret_value()
+
+    @property
+    def resolved_nasa_api_key(self) -> str:
+        return self.nasa_api_key.get_secret_value()
 
     @property
     def resolved_github_token(self) -> str | None:

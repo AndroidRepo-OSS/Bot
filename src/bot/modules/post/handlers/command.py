@@ -31,7 +31,9 @@ if TYPE_CHECKING:
 
     from bot.config import BotSettings
     from bot.db import PostsRepository
+    from bot.db.models.post import Post
     from bot.integrations.ai import SummaryAgent, SummaryResult
+    from bot.integrations.nasa import NasaApodService
     from bot.integrations.repositories import GitHubRepositoryFetcher, GitLabRepositoryFetcher, RepositoryInfo
     from bot.services import PreviewDebugRegistry, TelegramLogger
 
@@ -52,6 +54,7 @@ async def handle_post(
     telegram_logger: TelegramLogger,
     posts_repository: PostsRepository,
     settings: BotSettings,
+    nasa_apod_service: NasaApodService,
     command: CommandObject | None = None,
 ) -> None:
     raw_url = await _extract_raw_url(command, message, state, preview_registry)
@@ -81,20 +84,37 @@ async def handle_post(
         if message.from_user:
             await telegram_logger.log_post_started(message.from_user, repository)
 
-        if recent := await posts_repository.get_recent_post(
-            platform=locator.platform, owner=locator.owner, name=locator.name, months=3
-        ):
-            next_allowed = recent.posted_at + timedelta(days=90)
-            link = build_channel_message_link(settings.post_channel_id, recent.channel_message_id)
+        recent_post: Post | None = None
+        already_posted = False
+
+        async def load_recent_post() -> None:
+            nonlocal recent_post
+            recent_post = await posts_repository.get_recent_post(
+                platform=locator.platform, owner=locator.owner, name=locator.name, months=3
+            )
+
+        async def load_already_posted() -> None:
+            nonlocal already_posted
+            already_posted = await posts_repository.is_posted(
+                platform=locator.platform, owner=locator.owner, name=locator.name
+            )
+
+        async with create_task_group() as tg:
+            tg.start_soon(load_recent_post)
+            tg.start_soon(load_already_posted)
+
+        if recent_post:
+            next_allowed = recent_post.posted_at + timedelta(days=90)
+            link = build_channel_message_link(settings.post_channel_id, recent_post.channel_message_id)
             keyboard = InlineKeyboardMarkup(
                 inline_keyboard=[[InlineKeyboardButton(text="See previous post", url=link)]]
             )
             await telegram_logger.log_post_recently_posted(
                 message.from_user,
                 repository,
-                last_posted_at=recent.posted_at,
+                last_posted_at=recent_post.posted_at,
                 next_allowed_at=next_allowed,
-                channel_message_id=recent.channel_message_id,
+                channel_message_id=recent_post.channel_message_id,
                 channel_link=link,
             )
             await _reject_submission(
@@ -105,9 +125,6 @@ async def handle_post(
             )
             return
 
-        already_posted = await posts_repository.is_posted(
-            platform=locator.platform, owner=locator.owner, name=locator.name
-        )
         if already_posted:
             await message.answer("ℹ️ This repository was already posted. Publishing will refresh its record.")
 
@@ -128,7 +145,11 @@ async def handle_post(
 
         try:
             submission_id, caption, banner_bytes, preview, debug_url = await _render_preview(
-                message, repository, summary_result, preview_registry=preview_registry
+                message,
+                repository,
+                summary_result,
+                preview_registry=preview_registry,
+                nasa_apod_service=nasa_apod_service,
             )
         except (OSError, TelegramAPIError) as exc:
             await _reject_submission(message, state, f"❌ Failed rendering preview: {exc}")
@@ -221,12 +242,13 @@ async def _render_preview(
     summary_result: SummaryResult,
     *,
     preview_registry: PreviewDebugRegistry,
+    nasa_apod_service: NasaApodService,
 ) -> tuple[str, str, bytes, Message, str | None]:
     banner_bytes: bytes | None = None
 
     async def render_banner_task() -> None:
         nonlocal banner_bytes
-        banner_bytes = await render_banner(repository, summary_result.summary)
+        banner_bytes = await render_banner(repository, summary_result.summary, nasa_apod_service)
 
     async with create_task_group() as tg:
         tg.start_soon(render_banner_task)

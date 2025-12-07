@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from aiogram import Bot
 
     from bot.integrations.ai import RepositorySummary
+    from bot.integrations.nasa import NasaApodService
     from bot.integrations.repositories import RepositoryInfo
     from bot.modules.post.utils.models import SubmissionData
 
@@ -26,8 +27,11 @@ if TYPE_CHECKING:
 _banner_generator = BannerGenerator()
 
 
-async def render_banner(repository: RepositoryInfo, summary: RepositorySummary) -> bytes:
-    return await to_thread.run_sync(_banner_generator.generate, summary.project_name or repository.name)
+async def render_banner(
+    repository: RepositoryInfo, summary: RepositorySummary, nasa_apod_service: NasaApodService
+) -> bytes:
+    background = await nasa_apod_service.fetch_image()
+    return await to_thread.run_sync(_banner_generator.generate, summary.project_name or repository.name, background)
 
 
 async def build_debug_link(bot: Bot | None, payload: str) -> str | None:

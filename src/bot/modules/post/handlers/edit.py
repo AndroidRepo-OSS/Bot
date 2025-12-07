@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from aiogram.types import CallbackQuery
 
     from bot.integrations.ai import RepositorySummary, RevisionAgent
+    from bot.integrations.nasa import NasaApodService
     from bot.integrations.repositories import RepositoryInfo
     from bot.services import PreviewDebugRegistry, TelegramLogger
 
@@ -70,6 +71,7 @@ async def handle_edit_instructions(
     revision_agent: RevisionAgent,
     bot: Bot,
     telegram_logger: TelegramLogger,
+    nasa_apod_service: NasaApodService,
 ) -> None:
     text = (message.text or "").strip()
     if not text:
@@ -91,7 +93,17 @@ async def handle_edit_instructions(
     await _track_message(state, bot, progress, "edit_status", submission)
 
     await _apply_revision(
-        state, bot, progress, submission, repository, summary, text, revision_agent, preview_registry, telegram_logger
+        state,
+        bot,
+        progress,
+        submission,
+        repository,
+        summary,
+        text,
+        revision_agent,
+        preview_registry,
+        telegram_logger,
+        nasa_apod_service,
     )
 
 
@@ -117,6 +129,7 @@ async def _apply_revision(
     revision_agent: RevisionAgent,
     preview_registry: PreviewDebugRegistry,
     telegram_logger: TelegramLogger,
+    nasa_apod_service: NasaApodService,
 ) -> None:
     try:
         revision_result = await revision_agent.revise(repository=repository, summary=summary, edit_request=text)
@@ -138,7 +151,7 @@ async def _apply_revision(
         banner_b64 = submission.banner_b64
 
         if banner_bytes is None:
-            banner_bytes = await render_banner(repository, updated_summary)
+            banner_bytes = await render_banner(repository, updated_summary, nasa_apod_service)
             banner_b64 = base64.b64encode(banner_bytes).decode("ascii")
 
         caption = render_post_caption(repository, updated_summary)

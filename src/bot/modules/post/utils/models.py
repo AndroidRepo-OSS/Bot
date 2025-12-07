@@ -10,7 +10,7 @@ from typing import Annotated
 
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.state import State, StatesGroup
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from bot.integrations.ai import RepositorySummary
 from bot.integrations.repositories import RepositoryPlatform  # noqa: TC001
@@ -41,6 +41,9 @@ class SubmissionCallback(CallbackData, prefix="post"):
 
 class SubmissionData(BaseModel):
     __slots__ = ()
+
+    _banner_bytes_cache: bytes | None = PrivateAttr(default=None)
+    _repository_summary_cache: RepositorySummary | None = PrivateAttr(default=None)
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
@@ -80,16 +83,25 @@ class SubmissionData(BaseModel):
 
     @property
     def banner_bytes(self) -> bytes | None:
+        if self._banner_bytes_cache is not None:
+            return self._banner_bytes_cache
+
         with suppress(ValueError):
-            return base64.b64decode(self.banner_b64, validate=True)
+            decoded = base64.b64decode(self.banner_b64, validate=True)
+            self._banner_bytes_cache = decoded
+            return decoded
         return None
 
     @property
     def repository_summary(self) -> RepositorySummary | None:
+        if self._repository_summary_cache is not None:
+            return self._repository_summary_cache
         if self.summary is None:
             return None
         with suppress(Exception):
-            return RepositorySummary.model_validate(self.summary)
+            parsed = RepositorySummary.model_validate(self.summary)
+            self._repository_summary_cache = parsed
+            return parsed
         return None
 
     @property
