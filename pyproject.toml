@@ -5,7 +5,7 @@ description = "Telegram bot to automate posts in Android Repository channel"
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Hitalo M." }]
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
     "aiogram>=3.22.0",
     "anyio>=4.11.0",

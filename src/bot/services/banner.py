@@ -129,7 +129,7 @@ class BannerGenerator:
                 logo.convert("RGBA").resize((size, size), Image.Resampling.LANCZOS) as logo_resized,
             ):
                 image.paste(logo_resized, position, logo_resized)
-        except (FileNotFoundError, OSError, ValueError):
+        except FileNotFoundError, OSError, ValueError:
             pass
 
     @staticmethod
@@ -150,7 +150,7 @@ class BannerGenerator:
         try:
             bbox = font.getbbox(text)
             return int(bbox[2] - bbox[0]), int(bbox[3] - bbox[1])
-        except (AttributeError, OSError):
+        except AttributeError, OSError:
             return len(text) * 10, 20
 
     def _line_height(self, font_path: Path, font_size: int) -> int:
