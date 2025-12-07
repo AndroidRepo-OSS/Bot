@@ -12,13 +12,14 @@ from aiogram import Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
 from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
+from anyio import create_task_group
 
 from bot.integrations.ai import NonAndroidProjectError, RepositorySummaryError
 from bot.integrations.repositories.errors import RepositoryClientError
 from bot.logging import get_logger
 from bot.modules.post.utils.links import build_channel_message_link
 from bot.modules.post.utils.messages import render_post_caption
-from bot.modules.post.utils.models import PostStates
+from bot.modules.post.utils.models import PostStates, SubmissionData
 from bot.modules.post.utils.preview import build_debug_link, build_preview_keyboard, render_banner
 from bot.modules.post.utils.repositories import RepositoryUrlParseError, parse_repository_url, select_fetcher
 from bot.modules.post.utils.session import cleanup_messages, reset_submission_state, safe_delete, update_progress
@@ -61,8 +62,7 @@ async def handle_post(
         locator = parse_repository_url(raw_url)
     except RepositoryUrlParseError as exc:
         await logger.awarning("Invalid repository URL", error=str(exc))
-        error_msg = await message.answer(f"❌ Invalid repository URL: {exc.reason}")
-        await _cleanup_rejected_submission(message, error_msg, state)
+        await _reject_submission(message, state, f"❌ Invalid repository URL: {exc.reason}")
         return
 
     progress = await message.answer("[1/3] Fetching repository...")
@@ -75,8 +75,7 @@ async def handle_post(
             await logger.awarning(
                 "Repository client error", platform=exc.platform, status=exc.status, details=exc.details
             )
-            error_msg = await message.answer(f"❌ Failed to fetch repository: {exc}")
-            await _cleanup_rejected_submission(message, error_msg, state)
+            await _reject_submission(message, state, f"❌ Failed to fetch repository: {exc}")
             return
 
         if message.from_user:
@@ -90,10 +89,6 @@ async def handle_post(
             keyboard = InlineKeyboardMarkup(
                 inline_keyboard=[[InlineKeyboardButton(text="See previous post", url=link)]]
             )
-            error_msg = await message.answer(
-                "❌ This repository was already posted in the last 3 months. Please wait before reposting.",
-                reply_markup=keyboard,
-            )
             await telegram_logger.log_post_recently_posted(
                 message.from_user,
                 repository,
@@ -102,7 +97,12 @@ async def handle_post(
                 channel_message_id=recent.channel_message_id,
                 channel_link=link,
             )
-            await _cleanup_rejected_submission(message, error_msg, state)
+            await _reject_submission(
+                message,
+                state,
+                "❌ This repository was already posted in the last 3 months. Please wait before reposting.",
+                reply_markup=keyboard,
+            )
             return
 
         already_posted = await posts_repository.is_posted(
@@ -119,8 +119,7 @@ async def handle_post(
             )
         except RepositorySummaryError as exc:
             await logger.awarning("Summary generation failed", original_error=str(exc.original_error))
-            error_msg = await message.answer("Could not generate summary. Please try again later.")
-            await _cleanup_rejected_submission(message, error_msg, state)
+            await _reject_submission(message, state, "Could not generate summary. Please try again later.")
             return
         if not summary_result:
             return
@@ -132,8 +131,7 @@ async def handle_post(
                 message, repository, summary_result, preview_registry=preview_registry
             )
         except (OSError, TelegramAPIError) as exc:
-            error_msg = await message.answer(f"❌ Failed rendering preview: {exc}")
-            await _cleanup_rejected_submission(message, error_msg, state)
+            await _reject_submission(message, state, f"❌ Failed rendering preview: {exc}")
             return
 
         await state.set_state(PostStates.waiting_for_confirmation)
@@ -157,16 +155,19 @@ async def handle_post(
 
 
 async def _cleanup_rejected_submission(message: Message, error_message: Message, state: FSMContext) -> None:
-    state_data = await state.get_data()
-    targets = [
-        (message.chat.id, message.message_id),
-        (error_message.chat.id, error_message.message_id),
-        (state_data.get("prompt_chat_id"), state_data.get("prompt_message_id")),
-        (state_data.get("command_chat_id"), state_data.get("command_message_id")),
-    ]
+    submission = SubmissionData.from_state(await state.get_data())
+    extra_targets = submission.cleanup_targets if submission else []
+    targets = [(message.chat.id, message.message_id), (error_message.chat.id, error_message.message_id), *extra_targets]
 
     await cleanup_messages(message.bot, targets, delay=10)
     await state.clear()
+
+
+async def _reject_submission(
+    message: Message, state: FSMContext, text: str, *, reply_markup: InlineKeyboardMarkup | None = None
+) -> None:
+    error_message = await message.answer(text, reply_markup=reply_markup)
+    await _cleanup_rejected_submission(message, error_message, state)
 
 
 async def _extract_raw_url(
@@ -221,8 +222,17 @@ async def _render_preview(
     *,
     preview_registry: PreviewDebugRegistry,
 ) -> tuple[str, str, bytes, Message, str | None]:
-    banner_bytes = await render_banner(repository, summary_result.summary)
-    caption = render_post_caption(repository, summary_result.summary)
+    banner_bytes: bytes | None = None
+
+    async def render_banner_task() -> None:
+        nonlocal banner_bytes
+        banner_bytes = await render_banner(repository, summary_result.summary)
+
+    async with create_task_group() as tg:
+        tg.start_soon(render_banner_task)
+        caption = render_post_caption(repository, summary_result.summary)
+
+    assert banner_bytes is not None
 
     submission_id = uuid4().hex
     preview_registry.save(submission_id, repository, summary_model=summary_result.model_name)

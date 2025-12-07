@@ -59,6 +59,11 @@ async def cleanup_messages(
     if delay:
         await sleep(delay)
 
+    if len(valid_targets) == 1:
+        chat_id, message_id = valid_targets[0]
+        await safe_delete(bot, chat_id, message_id)
+        return
+
     async with create_task_group() as tg:
         for chat_id, message_id in valid_targets:
             tg.start_soon(safe_delete, bot, chat_id, message_id)
