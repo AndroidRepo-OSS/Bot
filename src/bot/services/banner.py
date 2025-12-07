@@ -99,8 +99,10 @@ class BannerGenerator:
             int(c1[2] * inv_factor + c2[2] * factor),
         )
 
-    def _calculate_gradient_colors(self, base_color: str) -> list[RGBColor]:
-        base_rgb = self._hex_to_rgb(base_color)
+    @staticmethod
+    @lru_cache(maxsize=64)
+    def _calculate_gradient_colors(base_color: str, height: int) -> tuple[RGBColor, ...]:
+        base_rgb = BannerGenerator._hex_to_rgb(base_color)
         lighter_rgb: RGBColor = (
             min(255, int(base_rgb[0] * 1.3)),
             min(255, int(base_rgb[1] * 1.3)),
@@ -108,29 +110,34 @@ class BannerGenerator:
         )
         darker_rgb: RGBColor = (int(base_rgb[0] * 0.6), int(base_rgb[1] * 0.6), int(base_rgb[2] * 0.6))
 
-        height = self.config.height
-        return [
-            self._blend_color(lighter_rgb, base_rgb, (y / height) * 2)
+        return tuple(
+            BannerGenerator._blend_color(lighter_rgb, base_rgb, (y / height) * 2)
             if (y / height) < GRADIENT_MIDPOINT
-            else self._blend_color(base_rgb, darker_rgb, ((y / height) - GRADIENT_MIDPOINT) * 2)
+            else BannerGenerator._blend_color(base_rgb, darker_rgb, ((y / height) - GRADIENT_MIDPOINT) * 2)
             for y in range(height)
-        ]
+        )
 
-    def _create_gradient_background(self, base_color: str) -> Image.Image:
-        with Image.new("RGB", (1, self.config.height)) as column:
-            column.putdata(self._calculate_gradient_colors(base_color))
-            return column.resize((self.config.width, self.config.height), Image.Resampling.BILINEAR)
+    @classmethod
+    @lru_cache(maxsize=len(MATERIAL_COLORS))
+    def _create_gradient_background(cls, base_color: str, width: int, height: int) -> Image.Image:
+        column = Image.new("RGB", (1, height))
+        column.putdata(cls._calculate_gradient_colors(base_color, height))
+        return column.resize((width, height), Image.Resampling.BILINEAR)
 
     @staticmethod
-    def _add_channel_logo(image: Image.Image, position: tuple[int, int], size: int = 50) -> None:
+    @lru_cache(maxsize=8)
+    def _load_logo(size: int) -> Image.Image | None:
         try:
-            with (
-                Image.open(CHANNEL_LOGO_PATH) as logo,
-                logo.convert("RGBA").resize((size, size), Image.Resampling.LANCZOS) as logo_resized,
-            ):
-                image.paste(logo_resized, position, logo_resized)
+            with Image.open(CHANNEL_LOGO_PATH) as logo:
+                return logo.convert("RGBA").resize((size, size), Image.Resampling.LANCZOS)
         except FileNotFoundError, OSError, ValueError:
-            pass
+            return None
+
+    @classmethod
+    def _add_channel_logo(cls, image: Image.Image, position: tuple[int, int], size: int = 50) -> None:
+        logo = cls._load_logo(size)
+        if logo is not None:
+            image.paste(logo, position, logo)
 
     @staticmethod
     @lru_cache(maxsize=8)
@@ -153,8 +160,10 @@ class BannerGenerator:
         except AttributeError, OSError:
             return len(text) * 10, 20
 
-    def _line_height(self, font_path: Path, font_size: int) -> int:
-        return self._get_text_dimensions("Ag", font_path, font_size)[1] + LINE_HEIGHT_PADDING
+    @staticmethod
+    @lru_cache(maxsize=64)
+    def _line_height(font_path: Path, font_size: int) -> int:
+        return BannerGenerator._get_text_dimensions("Ag", font_path, font_size)[1] + LINE_HEIGHT_PADDING
 
     def _wrap_text(self, text: str, max_width: int, font_path: Path, font_size: int) -> list[str]:
         words = text.split()
@@ -243,9 +252,9 @@ class BannerGenerator:
         draw.text((footer_x, footer_y), self.config.footer_text, fill=self.config.text_color, font=footer_font)
         self._add_channel_logo(image, (int(logo_x), int(logo_y)), self.config.logo_size)
 
-    def generate(self, title_text: str) -> BytesIO:
+    def generate(self, title_text: str) -> bytes:
         bg_color = secrets.choice(MATERIAL_COLORS)
-        image = self._create_gradient_background(bg_color)
+        image = self._create_gradient_background(bg_color, self.config.width, self.config.height).copy()
 
         try:
             draw = ImageDraw.Draw(image)
@@ -254,7 +263,6 @@ class BannerGenerator:
 
             buffer = BytesIO()
             image.save(buffer, format="PNG", optimize=True, compress_level=9)
-            buffer.seek(0)
-            return buffer
+            return buffer.getvalue()
         finally:
             image.close()

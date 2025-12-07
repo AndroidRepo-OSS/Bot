@@ -134,7 +134,13 @@ async def _apply_revision(
 
     await update_progress(progress, "[2/3] Updating visuals...")
     try:
-        banner_bytes = await render_banner(repository, updated_summary)
+        banner_bytes = submission.banner_bytes
+        banner_b64 = submission.banner_b64
+
+        if banner_bytes is None:
+            banner_bytes = await render_banner(repository, updated_summary)
+            banner_b64 = base64.b64encode(banner_bytes).decode("ascii")
+
         caption = render_post_caption(repository, updated_summary)
 
         await update_progress(progress, "[3/3] Updating preview...")
@@ -146,7 +152,7 @@ async def _apply_revision(
 
     await state.update_data(
         caption=caption,
-        banner_b64=base64.b64encode(banner_bytes).decode("ascii"),
+        banner_b64=banner_b64,
         summary=updated_summary.model_dump(mode="json"),
         edit_prompt_chat_id=None,
         edit_prompt_message_id=None,
