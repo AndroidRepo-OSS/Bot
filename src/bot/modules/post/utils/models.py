@@ -13,6 +13,7 @@ from aiogram.fsm.state import State, StatesGroup
 from pydantic import BaseModel, ConfigDict, Field
 
 from bot.integrations.ai import RepositorySummary
+from bot.integrations.repositories import RepositoryPlatform  # noqa: TC001
 
 
 class SubmissionAction(StrEnum):
@@ -67,6 +68,9 @@ class SubmissionData(BaseModel):
     debug_url: Annotated[str | None, Field(description="Deep link for preview debugging")] = None
     summary_model: Annotated[str | None, Field(description="Model used for the summary step")] = None
     revision_model: Annotated[str | None, Field(description="Model used for the revision step")] = None
+    repository_platform: Annotated[RepositoryPlatform | None, Field(description="Platform of the repository")] = None
+    repository_owner: Annotated[str | None, Field(description="Owner or namespace of the repository")] = None
+    repository_name: Annotated[str | None, Field(description="Repository name")] = None
 
     @classmethod
     def from_state(cls, data: dict[str, object]) -> SubmissionData | None:
@@ -87,6 +91,12 @@ class SubmissionData(BaseModel):
         with suppress(Exception):
             return RepositorySummary.model_validate(self.summary)
         return None
+
+    @property
+    def repository_identity(self) -> tuple[RepositoryPlatform, str, str] | None:
+        if not (self.repository_platform and self.repository_owner and self.repository_name):
+            return None
+        return self.repository_platform, self.repository_owner, self.repository_name
 
     @property
     def cleanup_targets(self) -> list[tuple[int, int]]:

@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from aiogram.types import CallbackQuery
 
     from bot.config import BotSettings
+    from bot.db import PostsRepository
     from bot.modules.post.utils.models import SubmissionData
     from bot.services import PreviewDebugRegistry, TelegramLogger
 
@@ -37,6 +38,7 @@ async def handle_publish_callback(
     preview_registry: PreviewDebugRegistry,
     settings: BotSettings,
     telegram_logger: TelegramLogger,
+    posts_repository: PostsRepository,
 ) -> None:
     if not (submission := await validate_submission(callback, callback_data, state)):
         return
@@ -52,7 +54,7 @@ async def handle_publish_callback(
 
     photo = BufferedInputFile(banner_bytes, filename=f"post-{submission.submission_id}.png")
     try:
-        await bot.send_photo(chat_id=settings.post_channel_id, photo=photo, caption=submission.caption)
+        sent = await bot.send_photo(chat_id=settings.post_channel_id, photo=photo, caption=submission.caption)
     except TelegramRetryAfter as exc:
         await logger.awarning("Telegram rate limit hit while publishing", retry_after=exc.retry_after)
         await callback.answer(f"Rate limited. Try again in {exc.retry_after} seconds.", show_alert=True)
@@ -60,6 +62,12 @@ async def handle_publish_callback(
 
     if repository and callback.from_user:
         await telegram_logger.log_post_published(callback.from_user, repository)
+
+    if submission.repository_identity:
+        platform, owner, name = submission.repository_identity
+        await posts_repository.record_post(
+            platform=platform, owner=owner, name=name, channel_message_id=sent.message_id
+        )
 
     await _finalize_submission(bot, state, preview_registry, submission, callback)
 

@@ -11,3 +11,4 @@ wheels/
 
 # Bot
 data/config.env
+data/bot.sqlite3

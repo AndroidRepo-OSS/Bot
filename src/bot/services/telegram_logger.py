@@ -47,6 +47,13 @@ class TelegramLogger:
         link = TextLink(repository.full_name, url=str(repository.web_url))
         return link.as_html()
 
+    @staticmethod
+    def _format_datetime(dt: datetime) -> str:
+        aware = dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+        utc_str = aware.astimezone(UTC).strftime("%d/%m/%Y %H:%M:%S")
+        brasilia_str = aware.astimezone(ZoneInfo("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
+        return f"<b>UTC:</b> {utc_str}\n<b>Brasília:</b> {brasilia_str}"
+
     async def _send_log(self, message: str) -> None:
         with suppress(TelegramBadRequest):
             await self._bot.send_message(
@@ -110,6 +117,35 @@ class TelegramLogger:
             f"<b>User:</b> {user_info}\n"
             f"<b>Project:</b> {project_link}\n"
             f"<b>Reason:</b> {truncated_reason}\n\n"
+            f"{timestamp}"
+        )
+        await self._send_log(message)
+
+    async def log_post_recently_posted(
+        self,
+        user: User | None,
+        repository: RepositoryInfo,
+        *,
+        last_posted_at: datetime,
+        next_allowed_at: datetime,
+        channel_message_id: int,
+        channel_link: str,
+    ) -> None:
+        timestamp = self._format_timestamp()
+        project_link = self._format_project_link(repository)
+        user_info = self._format_user(user) if user else "Unknown user"
+
+        last_ts = self._format_datetime(last_posted_at)
+        next_ts = self._format_datetime(next_allowed_at)
+        message_link = TextLink(f"#{channel_message_id}", url=channel_link).as_html()
+
+        message = (
+            f"⏳ <b>Post Blocked (recent)</b>\n\n"
+            f"<b>User:</b> {user_info}\n"
+            f"<b>Project:</b> {project_link}\n"
+            f"<b>Last posted:</b>\n{last_ts}\n"
+            f"<b>Next allowed:</b>\n{next_ts}\n"
+            f"<b>Channel message:</b> {message_link}\n\n"
             f"{timestamp}"
         )
         await self._send_log(message)

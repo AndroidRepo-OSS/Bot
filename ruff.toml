@@ -57,6 +57,7 @@ ignore = [
     "PLR0917",
     "PLR0913",
     "PLR0914",
+    "PLR0911",
 ]
 logger-objects = ["logging.get_logger"]
 

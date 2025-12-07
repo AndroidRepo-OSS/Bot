@@ -18,6 +18,7 @@ class BotSettings(BaseSettings):
     post_topic_id: int
     logs_topic_id: int
     allowed_chat_id: int
+    database_url: str = "sqlite+aiosqlite:///data/bot.sqlite3"
     github_token: SecretStr | None = None
     gitlab_token: SecretStr | None = None
 

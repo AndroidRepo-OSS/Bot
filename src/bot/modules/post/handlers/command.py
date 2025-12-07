@@ -4,17 +4,19 @@
 from __future__ import annotations
 
 import base64
+from datetime import timedelta
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from aiogram import Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
-from aiogram.types import BufferedInputFile
+from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot.integrations.ai import NonAndroidProjectError, RepositorySummaryError
 from bot.integrations.repositories.errors import RepositoryClientError
 from bot.logging import get_logger
+from bot.modules.post.utils.links import build_channel_message_link
 from bot.modules.post.utils.messages import render_post_caption
 from bot.modules.post.utils.models import PostStates
 from bot.modules.post.utils.preview import build_debug_link, build_preview_keyboard, render_banner
@@ -26,6 +28,8 @@ if TYPE_CHECKING:
     from aiogram.fsm.context import FSMContext
     from aiogram.types import Message
 
+    from bot.config import BotSettings
+    from bot.db import PostsRepository
     from bot.integrations.ai import SummaryAgent, SummaryResult
     from bot.integrations.repositories import GitHubRepositoryFetcher, GitLabRepositoryFetcher, RepositoryInfo
     from bot.services import PreviewDebugRegistry, TelegramLogger
@@ -45,6 +49,8 @@ async def handle_post(
     github_fetcher: GitHubRepositoryFetcher,
     gitlab_fetcher: GitLabRepositoryFetcher,
     telegram_logger: TelegramLogger,
+    posts_repository: PostsRepository,
+    settings: BotSettings,
     command: CommandObject | None = None,
 ) -> None:
     raw_url = await _extract_raw_url(command, message, state, preview_registry)
@@ -75,6 +81,35 @@ async def handle_post(
 
         if message.from_user:
             await telegram_logger.log_post_started(message.from_user, repository)
+
+        if recent := await posts_repository.get_recent_post(
+            platform=locator.platform, owner=locator.owner, name=locator.name, months=3
+        ):
+            next_allowed = recent.posted_at + timedelta(days=90)
+            link = build_channel_message_link(settings.post_channel_id, recent.channel_message_id)
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text="See previous post", url=link)]]
+            )
+            error_msg = await message.answer(
+                "❌ This repository was already posted in the last 3 months. Please wait before reposting.",
+                reply_markup=keyboard,
+            )
+            await telegram_logger.log_post_recently_posted(
+                message.from_user,
+                repository,
+                last_posted_at=recent.posted_at,
+                next_allowed_at=next_allowed,
+                channel_message_id=recent.channel_message_id,
+                channel_link=link,
+            )
+            await _cleanup_rejected_submission(message, error_msg, state)
+            return
+
+        already_posted = await posts_repository.is_posted(
+            platform=locator.platform, owner=locator.owner, name=locator.name
+        )
+        if already_posted:
+            await message.answer("ℹ️ This repository was already posted. Publishing will refresh its record.")
 
         await update_progress(progress, "[2/3] Generating AI summary...")
 
@@ -113,6 +148,9 @@ async def handle_post(
             summary=summary_result.summary.model_dump(mode="json"),
             debug_url=debug_url,
             summary_model=summary_result.model_name,
+            repository_platform=locator.platform,
+            repository_owner=locator.owner,
+            repository_name=locator.name,
         )
     finally:
         await safe_delete(message.bot, progress.chat.id, progress.message_id)

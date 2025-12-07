@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
+
+from sqlalchemy import select
+
+from bot.db.models import Post
+
+from .base import BaseRepository
+
+if TYPE_CHECKING:
+    from sqlalchemy import Select
+
+    from bot.db import AsyncSessionMaker
+    from bot.integrations.repositories import RepositoryPlatform
+
+
+class PostsRepository(BaseRepository[Post]):
+    __slots__ = ()
+
+    def __init__(self, session_maker: AsyncSessionMaker) -> None:
+        super().__init__(session_maker)
+
+    async def is_posted(self, *, platform: RepositoryPlatform, owner: str, name: str) -> bool:
+        async with self._session_maker() as session:
+            stmt = self._base_select(platform=platform, owner=owner, name=name).limit(1)
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none() is not None
+
+    async def record_post(
+        self, *, platform: RepositoryPlatform, owner: str, name: str, channel_message_id: int
+    ) -> Post:
+        async with self._session_maker() as session:
+            result = await session.execute(self._base_select(platform=platform, owner=owner, name=name).limit(1))
+            post = result.scalar_one_or_none()
+            now = datetime.now(UTC)
+
+            if post:
+                post.channel_message_id = channel_message_id
+                post.posted_at = now
+            else:
+                post = Post(
+                    platform=platform, owner=owner, name=name, channel_message_id=channel_message_id, posted_at=now
+                )
+                session.add(post)
+
+            await session.commit()
+            await session.refresh(post)
+            return post
+
+    async def get_recent_post(
+        self, *, platform: RepositoryPlatform, owner: str, name: str, months: int = 3
+    ) -> Post | None:
+        cutoff = datetime.now(UTC) - timedelta(days=months * 30)
+        async with self._session_maker() as session:
+            stmt = self._base_select(platform=platform, owner=owner, name=name).where(Post.posted_at >= cutoff).limit(1)
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
+    @staticmethod
+    def _base_select(*, platform: RepositoryPlatform, owner: str, name: str) -> Select[tuple[Post]]:
+        return select(Post).where(Post.platform == platform, Post.owner == owner, Post.name == name)

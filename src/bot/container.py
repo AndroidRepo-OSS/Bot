@@ -7,14 +7,17 @@ from typing import TYPE_CHECKING
 
 from aiohttp import ClientSession, ClientTimeout
 
+from .db import PostsRepository, create_engine, create_session_maker, init_models
 from .integrations.ai import RevisionAgent, SummaryAgent
 from .integrations.repositories import GitHubRepositoryFetcher, GitLabRepositoryFetcher
 from .services import PreviewDebugRegistry, TelegramLogger
 
 if TYPE_CHECKING:
     from aiogram import Bot, Dispatcher
+    from sqlalchemy.ext.asyncio import AsyncEngine
 
     from .config import BotSettings
+    from .db import AsyncSessionMaker
 
 
 def setup_dependencies(dp: Dispatcher, bot: Bot, settings: BotSettings) -> None:
@@ -26,16 +29,26 @@ def setup_dependencies(dp: Dispatcher, bot: Bot, settings: BotSettings) -> None:
     dp["revision_agent"] = RevisionAgent(api_key=ai_api_key)
 
     session: ClientSession | None = None
+    db_engine: AsyncEngine | None = None
+    db_session_maker: AsyncSessionMaker | None = None
 
     @dp.startup()
     async def on_startup() -> None:
-        nonlocal session
+        nonlocal session, db_engine, db_session_maker
         session = ClientSession(timeout=ClientTimeout(total=30))
 
         github_fetcher = GitHubRepositoryFetcher(session=session, token=settings.resolved_github_token)
         gitlab_fetcher = GitLabRepositoryFetcher(session=session, token=settings.resolved_gitlab_token)
         dp["github_fetcher"] = github_fetcher
         dp["gitlab_fetcher"] = gitlab_fetcher
+
+        db_engine = create_engine(settings.database_url)
+        db_session_maker = create_session_maker(db_engine)
+        await init_models(db_engine)
+
+        dp["db_engine"] = db_engine
+        dp["db_session_maker"] = db_session_maker
+        dp["posts_repository"] = PostsRepository(db_session_maker)
 
         telegram_logger = TelegramLogger(bot=bot, chat_id=settings.allowed_chat_id, topic_id=settings.logs_topic_id)
         dp["telegram_logger"] = telegram_logger
@@ -44,7 +57,11 @@ def setup_dependencies(dp: Dispatcher, bot: Bot, settings: BotSettings) -> None:
 
     @dp.shutdown()
     async def on_shutdown() -> None:
-        nonlocal session
+        nonlocal session, db_engine, db_session_maker
         if session is not None:
             await session.close()
             session = None
+        if db_engine is not None:
+            await db_engine.dispose()
+            db_engine = None
+        db_session_maker = None
