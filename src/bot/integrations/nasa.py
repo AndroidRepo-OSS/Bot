@@ -25,7 +25,11 @@ class NasaApodService:
         if not metadata:
             return None
 
-        url = metadata.get("hdurl") or metadata.get("url")
+        media_type = metadata.get("media_type")
+        if media_type == "image":
+            url = metadata.get("hdurl") or metadata.get("url")
+        else:
+            url = metadata.get("thumbnail_url") or metadata.get("url")
         if not isinstance(url, str):
             return None
 
@@ -33,20 +37,27 @@ class NasaApodService:
 
     async def _fetch_metadata(self) -> dict[str, object] | None:
         try:
-            async with self.session.get(APOD_ENDPOINT, params={"api_key": self.api_key}) as response:
+            async with self.session.get(
+                APOD_ENDPOINT, params={"api_key": self.api_key, "count": 1, "thumbs": "true"}
+            ) as response:
                 if response.status != 200:
                     return None
                 payload = await response.json()
         except ClientError, ContentTypeError, OSError, ValueError:
             return None
 
-        if not isinstance(payload, dict):
-            return None
+        candidates: list[dict[str, object]] = []
+        if isinstance(payload, list):
+            candidates = [item for item in payload if isinstance(item, dict)]
+        elif isinstance(payload, dict):
+            candidates = [payload]
 
-        if payload.get("media_type") != "image":
-            return None
+        for candidate in candidates:
+            media_type = candidate.get("media_type")
+            if media_type in {"image", "video"}:
+                return candidate
 
-        return payload
+        return None
 
     async def _download_image(self, url: str) -> bytes | None:
         try:
