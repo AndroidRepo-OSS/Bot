@@ -176,8 +176,23 @@ async def handle_post(
 
 
 async def _cleanup_rejected_submission(message: Message, error_message: Message, state: FSMContext) -> None:
-    submission = SubmissionData.from_state(await state.get_data())
-    extra_targets = submission.cleanup_targets if submission else []
+    state_data = await state.get_data()
+    submission = SubmissionData.from_state(state_data)
+
+    def _fallback_targets(data: dict[str, object]) -> list[tuple[int, int]]:
+        keys = (("command_chat_id", "command_message_id"), ("prompt_chat_id", "prompt_message_id"))
+        targets: list[tuple[int, int]] = []
+
+        for chat_key, message_key in keys:
+            chat_id = data.get(chat_key)
+            message_id = data.get(message_key)
+
+            if isinstance(chat_id, int) and isinstance(message_id, int):
+                targets.append((chat_id, message_id))
+
+        return targets
+
+    extra_targets = submission.cleanup_targets if submission else _fallback_targets(state_data)
     targets = [(message.chat.id, message.message_id), (error_message.chat.id, error_message.message_id), *extra_targets]
 
     await cleanup_messages(message.bot, targets, delay=10)
