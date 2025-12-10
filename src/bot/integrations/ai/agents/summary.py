@@ -6,7 +6,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from bot.integrations.ai.errors import NonAndroidProjectError, RepositorySummaryError
-from bot.integrations.ai.models import RejectedRepository, RepositorySummary, SummaryDependencies, SummaryResult
+from bot.integrations.ai.models import (
+    ALLOWED_SUMMARY_TAGS,
+    RejectedRepository,
+    RepositorySummary,
+    SummaryDependencies,
+    SummaryResult,
+)
 from bot.integrations.ai.prompts import SUMMARY_INSTRUCTIONS
 from bot.integrations.ai.utils import extract_links, extract_readme
 from bot.logging import get_logger
@@ -54,6 +60,9 @@ class SummaryAgent(BaseAgent[SummaryDependencies, SummaryOutput]):
             if repo.tags:
                 parts.append(f"**Tags:** {', '.join(repo.tags)}")
 
+            parts.extend(["", "## Allowed Tags (choose 2-4)"])
+            parts.extend(f"- {tag}" for tag in ctx.deps.available_tags)
+
             parts.append(f"**Repository URL:** {repo.web_url}")
 
             if ctx.deps.links:
@@ -89,7 +98,9 @@ class SummaryAgent(BaseAgent[SummaryDependencies, SummaryOutput]):
             links_count=len(links),
         )
 
-        deps = SummaryDependencies(repository=repository, readme_excerpt=readme, links=links)
+        deps = SummaryDependencies(
+            repository=repository, readme_excerpt=readme, links=links, available_tags=ALLOWED_SUMMARY_TAGS
+        )
 
         try:
             await logger.adebug("Invoking AI agent for summary", repository=repository.full_name)
@@ -98,7 +109,8 @@ class SummaryAgent(BaseAgent[SummaryDependencies, SummaryOutput]):
                 "First, verify if this is an Android-related project. "
                 "If not, return a RejectedRepository with the reason. "
                 "Otherwise, extract the project name, write a compelling description, "
-                "identify key features, and select relevant links.",
+                "identify key features, select relevant links, and choose 2-4 tags "
+                "from the allowed list that best fit the project.",
                 deps=deps,
             )
         except Exception as exc:
@@ -125,6 +137,7 @@ class SummaryAgent(BaseAgent[SummaryDependencies, SummaryOutput]):
             project_name=output.project_name,
             features_count=len(output.key_features),
             links_count=len(output.important_links),
+            tags_count=len(output.tags),
         )
 
         return SummaryResult(summary=output, model_name=model_name)

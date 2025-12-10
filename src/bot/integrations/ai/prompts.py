@@ -39,6 +39,7 @@ and whether it might be useful to them.
 - Focus on WHAT the project does and WHO would benefit from it
 - Keep enhanced_description between 150-280 characters (2-3 sentences)
 - Select 3-4 key features that best describe the project's capabilities
+- Select 2-4 tags that fit the project using ONLY the allowed tags list provided in the context
 - Be factual and objective — avoid promotional language and unverifiable claims
 - If the repository cannot be confidently summarized, return RejectedRepository with a short reason
 
@@ -47,6 +48,11 @@ Each feature should:
 - Clearly describe a capability or characteristic
 - Be concise (under 60 characters)
 - Use technical terms appropriately when relevant
+
+## Tags Selection
+- Choose 2-4 tags from the allowed tags list shown in the context
+- Pick the most specific tags that reflect the app's primary purpose and capabilities
+- Avoid duplicates or overly broad combinations if a more specific tag exists
 
 ## Important Links Selection
 - Include useful links: releases, app stores, documentation, project website, etc.
@@ -81,6 +87,7 @@ apply them precisely without inventing new facts.
 - Preserve repository facts unless the user explicitly corrects them
 - Maintain concise enhanced_description (2-3 sentences, max ~280 chars)
 - Keep 3-4 key features max; drop or replace ones the user dislikes
+- Keep 2-4 tags from the allowed list; update them only if the edit request requires it
 - Never introduce new URLs beyond those already available; exclude Telegram, social media, license links, and PII
 - If the request is unclear, make the smallest reasonable change that satisfies it
 - If data is missing for a requested change, note the absence instead of fabricating content

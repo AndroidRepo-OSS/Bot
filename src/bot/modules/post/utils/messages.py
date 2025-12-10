@@ -34,6 +34,22 @@ def render_post_caption(repository: RepositoryInfo, summary: RepositorySummary) 
     if links:
         sections.extend(("", links))
 
+    if summary.tags:
+        seen: set[str] = set()
+        tags: list[str] = []
+
+        for tag in summary.tags:
+            value = tag.value if hasattr(tag, "value") else str(tag)
+            cleaned = value.strip()
+            if not cleaned or cleaned in seen:
+                continue
+            seen.add(cleaned)
+            tags.append(f"#{cleaned}")
+
+        if tags:
+            tag_line = Bold("🏷 Tags: ") + " ".join(tags)
+            sections.extend(("", tag_line))
+
     return as_list(*sections).as_html()
 
 

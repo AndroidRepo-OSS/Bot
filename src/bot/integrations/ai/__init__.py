@@ -4,21 +4,25 @@
 from bot.integrations.ai.agents import RevisionAgent, SummaryAgent
 from bot.integrations.ai.errors import NonAndroidProjectError, PreviewEditError, RepositorySummaryError
 from bot.integrations.ai.models import (
+    ALLOWED_SUMMARY_TAGS,
     ImportantLink,
     RejectedRepository,
     RepositorySummary,
+    RepositoryTag,
     RevisionDependencies,
     SummaryDependencies,
     SummaryResult,
 )
 
 __all__ = (
+    "ALLOWED_SUMMARY_TAGS",
     "ImportantLink",
     "NonAndroidProjectError",
     "PreviewEditError",
     "RejectedRepository",
     "RepositorySummary",
     "RepositorySummaryError",
+    "RepositoryTag",
     "RevisionAgent",
     "RevisionDependencies",
     "SummaryAgent",

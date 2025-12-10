@@ -9,7 +9,7 @@ from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.openai import OpenAIChatModel
 
 from bot.integrations.ai.errors import PreviewEditError
-from bot.integrations.ai.models import RepositorySummary, RevisionDependencies, RevisionResult
+from bot.integrations.ai.models import ALLOWED_SUMMARY_TAGS, RepositorySummary, RevisionDependencies, RevisionResult
 from bot.integrations.ai.prompts import REVISION_INSTRUCTIONS
 from bot.logging import get_logger
 
@@ -75,6 +75,15 @@ class RevisionAgent(BaseAgent[RevisionDependencies, RepositorySummary]):
             else:
                 parts.append("- (none provided)")
 
+            parts.extend(["", "**Tags:**"])
+            if summary.tags:
+                parts.extend(f"- {tag.value}" for tag in summary.tags)
+            else:
+                parts.append("- (none provided)")
+
+            parts.extend(["", "## Allowed Tags (choose 2-4)"])
+            parts.extend(f"- {tag}" for tag in ALLOWED_SUMMARY_TAGS)
+
             parts.extend(["", "Use the user's edit request to adjust this preview."])
             return "\n".join(parts)
 
@@ -116,6 +125,7 @@ class RevisionAgent(BaseAgent[RevisionDependencies, RepositorySummary]):
             new_project_name=result.output.project_name,
             new_features_count=len(result.output.key_features),
             new_links_count=len(result.output.important_links),
+            new_tags_count=len(result.output.tags),
             model_name=result.response.model_name,
         )
 
