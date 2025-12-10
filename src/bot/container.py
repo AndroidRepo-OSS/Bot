@@ -32,9 +32,9 @@ def setup_dependencies(dp: Dispatcher, bot: Bot, settings: BotSettings) -> None:
     dp["settings"] = settings
     dp["preview_registry"] = PreviewDebugRegistry()
 
-    ai_api_key = settings.resolved_ghmodels_api_key
-    dp["summary_agent"] = SummaryAgent(api_key=ai_api_key)
-    dp["revision_agent"] = RevisionAgent(api_key=ai_api_key)
+    gh_token = settings.resolved_github_token
+    dp["summary_agent"] = SummaryAgent(api_key=gh_token)
+    dp["revision_agent"] = RevisionAgent(api_key=gh_token)
 
     session: ClientSession | None = None
     db_engine: AsyncEngine | None = None
@@ -45,7 +45,7 @@ def setup_dependencies(dp: Dispatcher, bot: Bot, settings: BotSettings) -> None:
         nonlocal session, db_engine, db_session_maker
         session = ClientSession(timeout=ClientTimeout(total=30))
 
-        github_fetcher = GitHubRepositoryFetcher(session=session, token=settings.resolved_github_token)
+        github_fetcher = GitHubRepositoryFetcher(session=session, token=gh_token)
         gitlab_fetcher = GitLabRepositoryFetcher(session=session, token=settings.resolved_gitlab_token)
         dp["github_fetcher"] = github_fetcher
         dp["gitlab_fetcher"] = gitlab_fetcher

@@ -13,14 +13,13 @@ class BotSettings(BaseSettings):
     )
 
     token: SecretStr
-    ghmodels_api_key: SecretStr
     post_channel_id: int
     post_topic_id: int
     logs_topic_id: int
     allowed_chat_id: int
     database_url: str = "sqlite+aiosqlite:///data/bot.sqlite3"
     nasa_api_key: SecretStr
-    github_token: SecretStr | None = None
+    github_token: SecretStr
     gitlab_token: SecretStr | None = None
 
     @property
@@ -28,16 +27,12 @@ class BotSettings(BaseSettings):
         return self.token.get_secret_value()
 
     @property
-    def resolved_ghmodels_api_key(self) -> str:
-        return self.ghmodels_api_key.get_secret_value()
-
-    @property
     def resolved_nasa_api_key(self) -> str:
         return self.nasa_api_key.get_secret_value()
 
     @property
-    def resolved_github_token(self) -> str | None:
-        return self.github_token.get_secret_value() if self.github_token else None
+    def resolved_github_token(self) -> str:
+        return self.github_token.get_secret_value()
 
     @property
     def resolved_gitlab_token(self) -> str | None:
