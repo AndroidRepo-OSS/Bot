@@ -47,33 +47,33 @@ class SubmissionData(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
-    submission_id: Annotated[str, Field(description="Unique identifier for this submission")]
-    caption: Annotated[str, Field(description="HTML caption rendered for the Telegram post")]
-    banner_b64: Annotated[str, Field(description="Base64-encoded preview banner image")]
-    preview_chat_id: Annotated[int, Field(description="Chat ID where the preview lives")]
-    preview_message_id: Annotated[int, Field(description="Message ID of the preview post")]
-    original_chat_id: Annotated[int, Field(description="Chat ID of the user's command message")]
-    original_message_id: Annotated[int, Field(description="Message ID of the user's command message")]
+    submission_id: Annotated[str, Field(min_length=1, description="Unique identifier for this submission")]
+    caption: Annotated[str, Field(min_length=1, max_length=4096, description="HTML caption for Telegram post")]
+    banner_b64: Annotated[str, Field(min_length=1, description="Base64-encoded preview banner image")]
+    preview_chat_id: Annotated[int, Field(gt=0, description="Chat ID where the preview lives")]
+    preview_message_id: Annotated[int, Field(gt=0, description="Message ID of the preview post")]
+    original_chat_id: Annotated[int, Field(gt=0, description="Chat ID of the user's command message")]
+    original_message_id: Annotated[int, Field(gt=0, description="Message ID of the user's command message")]
 
-    prompt_chat_id: Annotated[int | None, Field(description="Chat ID of the URL prompt message")] = None
-    prompt_message_id: Annotated[int | None, Field(description="Message ID of the URL prompt message")] = None
-    command_chat_id: Annotated[int | None, Field(description="Chat ID of the original /post command")] = None
-    command_message_id: Annotated[int | None, Field(description="Message ID of the original /post command")] = None
+    prompt_chat_id: Annotated[int | None, Field(default=None, description="Chat ID of the URL prompt message")]
+    prompt_message_id: Annotated[int | None, Field(default=None, gt=0, description="Message ID of the URL prompt")]
+    command_chat_id: Annotated[int | None, Field(default=None, description="Chat ID of the original /post command")]
+    command_message_id: Annotated[int | None, Field(default=None, gt=0, description="Message ID of /post command")]
 
-    edit_prompt_chat_id: Annotated[int | None, Field(description="Chat ID of the edit prompt message")] = None
-    edit_prompt_message_id: Annotated[int | None, Field(description="Message ID of the edit prompt message")] = None
-    edit_request_chat_id: Annotated[int | None, Field(description="Chat ID of the edit request message")] = None
-    edit_request_message_id: Annotated[int | None, Field(description="Message ID of the edit request message")] = None
-    edit_status_chat_id: Annotated[int | None, Field(description="Chat ID of the edit status message")] = None
-    edit_status_message_id: Annotated[int | None, Field(description="Message ID of the edit status message")] = None
+    edit_prompt_chat_id: Annotated[int | None, Field(default=None, description="Chat ID of the edit prompt")]
+    edit_prompt_message_id: Annotated[int | None, Field(default=None, gt=0, description="Message ID of edit prompt")]
+    edit_request_chat_id: Annotated[int | None, Field(default=None, description="Chat ID of the edit request")]
+    edit_request_message_id: Annotated[int | None, Field(default=None, gt=0, description="Message ID of edit request")]
+    edit_status_chat_id: Annotated[int | None, Field(default=None, description="Chat ID of the edit status")]
+    edit_status_message_id: Annotated[int | None, Field(default=None, gt=0, description="Message ID of edit status")]
 
-    summary: Annotated[dict[str, object] | None, Field(description="Serialized repository summary payload")] = None
-    debug_url: Annotated[str | None, Field(description="Deep link for preview debugging")] = None
-    summary_model: Annotated[str | None, Field(description="Model used for the summary step")] = None
-    revision_model: Annotated[str | None, Field(description="Model used for the revision step")] = None
-    repository_platform: Annotated[RepositoryPlatform | None, Field(description="Platform of the repository")] = None
-    repository_owner: Annotated[str | None, Field(description="Owner or namespace of the repository")] = None
-    repository_name: Annotated[str | None, Field(description="Repository name")] = None
+    summary: Annotated[dict[str, object] | None, Field(default=None, description="Serialized repository summary")]
+    debug_url: Annotated[str | None, Field(default=None, description="Deep link for preview debugging")]
+    summary_model: Annotated[str | None, Field(default=None, description="Model used for the summary step")]
+    revision_model: Annotated[str | None, Field(default=None, description="Model used for the revision step")]
+    repository_platform: Annotated[RepositoryPlatform | None, Field(default=None, description="Repository platform")]
+    repository_owner: Annotated[str | None, Field(default=None, min_length=1, description="Repository owner/namespace")]
+    repository_name: Annotated[str | None, Field(default=None, min_length=1, description="Repository name")]
 
     @classmethod
     def from_state(cls, data: dict[str, object]) -> SubmissionData | None:
