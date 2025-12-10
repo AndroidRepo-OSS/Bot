@@ -50,9 +50,9 @@ class SubmissionData(BaseModel):
     submission_id: Annotated[str, Field(min_length=1, description="Unique identifier for this submission")]
     caption: Annotated[str, Field(min_length=1, max_length=4096, description="HTML caption for Telegram post")]
     banner_b64: Annotated[str, Field(min_length=1, description="Base64-encoded preview banner image")]
-    preview_chat_id: Annotated[int, Field(gt=0, description="Chat ID where the preview lives")]
+    preview_chat_id: Annotated[int, Field(description="Chat ID where the preview lives")]
     preview_message_id: Annotated[int, Field(gt=0, description="Message ID of the preview post")]
-    original_chat_id: Annotated[int, Field(gt=0, description="Chat ID of the user's command message")]
+    original_chat_id: Annotated[int, Field(description="Chat ID of the user's command message")]
     original_message_id: Annotated[int, Field(gt=0, description="Message ID of the user's command message")]
 
     prompt_chat_id: Annotated[int | None, Field(default=None, description="Chat ID of the URL prompt message")]
