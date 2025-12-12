@@ -2,5 +2,6 @@
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
 from .post import Post
+from .post_tags import PostTags
 
-__all__ = ("Post",)
+__all__ = ("Post", "PostTags")

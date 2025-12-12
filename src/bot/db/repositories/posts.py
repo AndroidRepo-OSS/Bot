@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
-from bot.db.models import Post
+from bot.db.models import Post, PostTags
 
 from .base import BaseRepository
 
@@ -60,6 +60,59 @@ class PostsRepository(BaseRepository[Post]):
             stmt = self._base_select(platform=platform, owner=owner, name=name).where(Post.posted_at >= cutoff).limit(1)
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
+
+    async def get_tags(self, *, platform: RepositoryPlatform, owner: str, name: str) -> list[str]:
+        async with self._session_maker() as session:
+            stmt = select(PostTags.tags).where(
+                PostTags.platform == platform, PostTags.owner == owner, PostTags.name == name
+            )
+            result = await session.execute(stmt.limit(1))
+            tags = result.scalar_one_or_none() or []
+
+        if not tags:
+            return []
+
+        seen: set[str] = set()
+        unique_tags: list[str] = []
+
+        for tag in tags:
+            if not isinstance(tag, str):
+                continue
+
+            cleaned = tag.strip()
+            if cleaned and cleaned not in seen:
+                seen.add(cleaned)
+                unique_tags.append(cleaned)
+
+        return unique_tags
+
+    async def upsert_tags(self, *, platform: RepositoryPlatform, owner: str, name: str, tags: list[str]) -> None:
+        seen: set[str] = set()
+        unique_tags: list[str] = []
+
+        for tag in tags:
+            if not isinstance(tag, str):
+                continue
+
+            cleaned = tag.strip()
+            if cleaned and cleaned not in seen:
+                seen.add(cleaned)
+                unique_tags.append(cleaned)
+
+        if not unique_tags:
+            return
+
+        async with self._session_maker() as session:
+            stmt = select(PostTags).where(PostTags.platform == platform, PostTags.owner == owner, PostTags.name == name)
+            result = await session.execute(stmt.limit(1))
+            record = result.scalar_one_or_none()
+
+            if record:
+                record.tags = unique_tags
+            else:
+                session.add(PostTags(platform=platform, owner=owner, name=name, tags=unique_tags))
+
+            await session.commit()
 
     @staticmethod
     def _base_select(*, platform: RepositoryPlatform, owner: str, name: str) -> Select[tuple[Post]]:

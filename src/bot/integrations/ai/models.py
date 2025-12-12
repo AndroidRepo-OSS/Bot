@@ -94,6 +94,7 @@ class SummaryDependencies:
     readme_excerpt: str
     links: list[str]
     available_tags: tuple[str, ...]
+    reuse_tags: tuple[str, ...] | None = None
 
 
 @dataclass(slots=True)

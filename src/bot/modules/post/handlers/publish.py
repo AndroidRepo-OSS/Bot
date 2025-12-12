@@ -49,6 +49,9 @@ async def handle_publish_callback(
         await state.clear()
         return
 
+    summary = submission.repository_summary
+    tags_to_store = [tag.value for tag in summary.tags] if summary else []
+
     preview_entry = preview_registry.get(submission.submission_id)
     repository = preview_entry.repository if preview_entry else None
 
@@ -68,6 +71,8 @@ async def handle_publish_callback(
         await posts_repository.record_post(
             platform=platform, owner=owner, name=name, channel_message_id=sent.message_id
         )
+        if tags_to_store:
+            await posts_repository.upsert_tags(platform=platform, owner=owner, name=name, tags=tags_to_store)
 
     await _finalize_submission(bot, state, preview_registry, submission, callback)
 

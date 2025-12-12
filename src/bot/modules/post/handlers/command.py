@@ -86,6 +86,7 @@ async def handle_post(
 
         recent_post: Post | None = None
         already_posted = False
+        stored_tags: list[str] = []
 
         async def load_recent_post() -> None:
             nonlocal recent_post
@@ -99,9 +100,16 @@ async def handle_post(
                 platform=locator.platform, owner=locator.owner, name=locator.name
             )
 
+        async def load_stored_tags() -> None:
+            nonlocal stored_tags
+            stored_tags = await posts_repository.get_tags(
+                platform=locator.platform, owner=locator.owner, name=locator.name
+            )
+
         async with create_task_group() as tg:
             tg.start_soon(load_recent_post)
             tg.start_soon(load_already_posted)
+            tg.start_soon(load_stored_tags)
 
         if recent_post:
             next_allowed = recent_post.posted_at + timedelta(days=90)
@@ -132,7 +140,7 @@ async def handle_post(
 
         try:
             summary_result = await _summarize_repository(
-                message, state, telegram_logger, repository, progress, summary_agent
+                message, state, telegram_logger, repository, progress, summary_agent, stored_tags
             )
         except RepositorySummaryError as exc:
             await logger.awarning("Summary generation failed", original_error=str(exc.original_error))
@@ -234,9 +242,12 @@ async def _summarize_repository(
     repository: RepositoryInfo,
     progress: Message,
     summary_agent: SummaryAgent,
+    stored_tags: list[str],
 ) -> SummaryResult | None:
+    reuse_tags = tuple(stored_tags) if stored_tags else None
+
     try:
-        return await summary_agent.summarize(repository)
+        summary_result = await summary_agent.summarize(repository, reuse_tags=reuse_tags)
     except NonAndroidProjectError as exc:
         await safe_delete(message.bot, progress.chat.id, progress.message_id)
         error_msg = await message.answer(
@@ -249,6 +260,9 @@ async def _summarize_repository(
             await telegram_logger.log_post_rejected(message.from_user, repository, exc.reason)
 
         await _cleanup_rejected_submission(message, error_msg, state)
+        return None
+
+    return summary_result
 
 
 async def _render_preview(

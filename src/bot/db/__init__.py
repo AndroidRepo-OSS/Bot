@@ -2,7 +2,7 @@
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
 from .base import Base
-from .models import Post
+from .models import Post, PostTags
 from .repositories import BaseRepository, PostsRepository
 from .session import (
     AsyncSessionMaker,
@@ -18,6 +18,7 @@ __all__ = (
     "Base",
     "BaseRepository",
     "Post",
+    "PostTags",
     "PostsRepository",
     "apply_sqlite_pragmas",
     "create_engine",

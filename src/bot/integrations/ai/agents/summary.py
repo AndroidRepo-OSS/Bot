@@ -60,8 +60,17 @@ class SummaryAgent(BaseAgent[SummaryDependencies, SummaryOutput]):
             if repo.tags:
                 parts.append(f"**Tags:** {', '.join(repo.tags)}")
 
-            parts.extend(["", "## Allowed Tags (choose 2-4)"])
-            parts.extend(f"- {tag}" for tag in ctx.deps.available_tags)
+            if ctx.deps.reuse_tags:
+                parts.extend([
+                    "",
+                    "## Reuse Tags (MANDATORY)",
+                    "This project was previously posted. You MUST use exactly these tags:",
+                ])
+                parts.extend(f"- {tag}" for tag in ctx.deps.reuse_tags)
+                parts.append("Do NOT select different tags; use only the ones listed above.")
+            else:
+                parts.extend(["", "## Allowed Tags (choose 2-4)"])
+                parts.extend(f"- {tag}" for tag in ctx.deps.available_tags)
 
             parts.append(f"**Repository URL:** {repo.web_url}")
 
@@ -80,12 +89,15 @@ class SummaryAgent(BaseAgent[SummaryDependencies, SummaryOutput]):
 
             return "\n".join(parts)
 
-    async def summarize(self, repository: RepositoryInfo) -> SummaryResult:
+    async def summarize(
+        self, repository: RepositoryInfo, *, reuse_tags: tuple[str, ...] | None = None
+    ) -> SummaryResult:
         await logger.ainfo(
             "Starting repository summary generation",
             repository=repository.full_name,
             platform=repository.platform.value,
             has_readme=bool(repository.readme and repository.readme.content),
+            reuse_tags_count=len(reuse_tags) if reuse_tags else 0,
         )
 
         readme = extract_readme(repository)
@@ -99,7 +111,11 @@ class SummaryAgent(BaseAgent[SummaryDependencies, SummaryOutput]):
         )
 
         deps = SummaryDependencies(
-            repository=repository, readme_excerpt=readme, links=links, available_tags=ALLOWED_SUMMARY_TAGS
+            repository=repository,
+            readme_excerpt=readme,
+            links=links,
+            available_tags=ALLOWED_SUMMARY_TAGS if not reuse_tags else (),
+            reuse_tags=reuse_tags,
         )
 
         try:
