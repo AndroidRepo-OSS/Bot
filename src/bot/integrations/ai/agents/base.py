@@ -7,9 +7,8 @@ from abc import ABC, abstractmethod
 
 from pydantic_ai import Agent
 from pydantic_ai.models.fallback import FallbackModel
-from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings
 from pydantic_ai.providers.github import GitHubProvider
-from pydantic_ai.settings import ModelSettings
 
 from bot.logging import get_logger
 
@@ -31,7 +30,7 @@ class BaseAgent[TDeps, TOutput](ABC):
             deps_type=self._get_deps_type(),
             instructions=instructions,
             retries=2,
-            model_settings=ModelSettings(max_tokens=4000),
+            model_settings=OpenAIChatModelSettings(max_tokens=4000, openai_reasoning_effort="high"),
         )
         self._register_instructions()
 
