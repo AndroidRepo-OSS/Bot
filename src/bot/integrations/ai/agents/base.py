@@ -29,8 +29,7 @@ class BaseAgent[TDeps, TOutput](ABC):
             output_type=self._get_output_type(),
             deps_type=self._get_deps_type(),
             instructions=instructions,
-            retries=2,
-            model_settings=OpenAIChatModelSettings(max_tokens=4000, openai_reasoning_effort="high"),
+            model_settings=OpenAIChatModelSettings(openai_reasoning_effort="high"),
         )
         self._register_instructions()
 
