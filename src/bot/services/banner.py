@@ -3,19 +3,43 @@
 
 from __future__ import annotations
 
+import secrets
 from dataclasses import dataclass
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageFont
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    type RGBColor = tuple[int, int, int]
     type FontType = ImageFont.FreeTypeFont | ImageFont.ImageFont
-    type BackgroundImageInput = Image.Image | bytes | bytearray | BytesIO
+
+MATERIAL_COLORS: Final[tuple[str, ...]] = (
+    "#1565C0",
+    "#0D47A1",
+    "#1976D2",
+    "#283593",
+    "#303F9F",
+    "#512DA8",
+    "#5E35B1",
+    "#7B1FA2",
+    "#8E24AA",
+    "#AD1457",
+    "#C2185B",
+    "#D32F2F",
+    "#E64A19",
+    "#F57C00",
+    "#FF8F00",
+    "#388E3C",
+    "#00695C",
+    "#0097A7",
+    "#455A64",
+    "#546E7A",
+)
 
 PROJECT_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
 DATA_DIR: Final[Path] = PROJECT_ROOT / "data"
@@ -23,13 +47,13 @@ FONT_BOLD_PATH: Final[Path] = DATA_DIR / "Inter-Bold.ttf"
 FONT_REGULAR_PATH: Final[Path] = DATA_DIR / "Inter-Regular.ttf"
 CHANNEL_LOGO_PATH: Final[Path] = DATA_DIR / "channel_logo.png"
 
+GRADIENT_MIDPOINT: Final[float] = 0.5
 FONT_SIZE_STEP: Final[int] = 10
 LINE_HEIGHT_PADDING: Final[int] = 10
 TITLE_VERTICAL_OFFSET: Final[int] = 30
 FOOTER_PADDING: Final[int] = 15
 LOGO_VERTICAL_OFFSET: Final[int] = 5
 RESERVED_HEIGHT: Final[int] = 400
-BACKGROUND_DARKEN_FACTOR: Final[float] = 0.35
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -60,30 +84,55 @@ class BannerGenerator:
     def __init__(self, config: BannerConfig | None = None) -> None:
         self.config = config or BannerConfig()
 
-    def _prepare_background(self, background_image: BackgroundImageInput | None) -> Image.Image:
-        if background_image is not None:
-            try:
-                if isinstance(background_image, Image.Image):
-                    source = background_image
-                else:
-                    binary_image = (
-                        background_image if isinstance(background_image, BytesIO) else BytesIO(background_image)
-                    )
-                    with Image.open(binary_image) as source_stream:
-                        source = source_stream.copy()
+    @staticmethod
+    @lru_cache(maxsize=32)
+    def _hex_to_rgb(hex_color: str) -> RGBColor:
+        hex_clean = hex_color.lstrip("#")
+        return (int(hex_clean[0:2], 16), int(hex_clean[2:4], 16), int(hex_clean[4:6], 16))
 
-                fitted = ImageOps.fit(
-                    source.convert("RGB"),
-                    (self.config.width, self.config.height),
-                    method=Image.Resampling.LANCZOS,
-                    centering=(0.5, 0.5),
-                )
-                overlay = Image.new("RGB", fitted.size, (0, 0, 0))
-                return Image.blend(fitted, overlay, BACKGROUND_DARKEN_FACTOR)
-            except OSError, ValueError:
-                pass
+    @staticmethod
+    def _blend_color(c1: RGBColor, c2: RGBColor, factor: float) -> RGBColor:
+        inv_factor = 1 - factor
+        return (
+            int(c1[0] * inv_factor + c2[0] * factor),
+            int(c1[1] * inv_factor + c2[1] * factor),
+            int(c1[2] * inv_factor + c2[2] * factor),
+        )
 
-        return Image.new("RGB", (self.config.width, self.config.height), "black")
+    @staticmethod
+    @lru_cache(maxsize=64)
+    def _calculate_gradient_colors(base_color: str, height: int) -> tuple[RGBColor, ...]:
+        if height <= 1:
+            base_rgb = BannerGenerator._hex_to_rgb(base_color)
+            return (base_rgb,) * max(height, 0)
+
+        base_rgb = BannerGenerator._hex_to_rgb(base_color)
+        lighter_rgb: RGBColor = (
+            min(255, int(base_rgb[0] * 1.3)),
+            min(255, int(base_rgb[1] * 1.3)),
+            min(255, int(base_rgb[2] * 1.3)),
+        )
+        darker_rgb: RGBColor = (int(base_rgb[0] * 0.6), int(base_rgb[1] * 0.6), int(base_rgb[2] * 0.6))
+        inv_denominator = 1.0 / (height - 1)
+
+        colors: list[RGBColor] = []
+        for y in range(height):
+            position = y * inv_denominator
+            if position < GRADIENT_MIDPOINT:
+                factor = position * 2
+                colors.append(BannerGenerator._blend_color(lighter_rgb, base_rgb, factor))
+                continue
+
+            factor = (position - GRADIENT_MIDPOINT) * 2
+            colors.append(BannerGenerator._blend_color(base_rgb, darker_rgb, factor))
+        return tuple(colors)
+
+    @classmethod
+    @lru_cache(maxsize=len(MATERIAL_COLORS))
+    def _create_gradient_background(cls, base_color: str, width: int, height: int) -> Image.Image:
+        column = Image.new("RGB", (1, height))
+        column.putdata(cls._calculate_gradient_colors(base_color, height))
+        return column.resize((width, height), Image.Resampling.BILINEAR)
 
     @staticmethod
     @lru_cache(maxsize=8)
@@ -106,10 +155,7 @@ class BannerGenerator:
         try:
             return ImageFont.truetype(str(font_path), size)
         except OSError:
-            try:
-                return ImageFont.load_default(size)
-            except TypeError:
-                return ImageFont.load_default()
+            return ImageFont.load_default()
 
     @classmethod
     @lru_cache(maxsize=128)
@@ -152,14 +198,14 @@ class BannerGenerator:
 
     def _compute_title_layout(self, title_text: str) -> TextLayout:
         max_title_width = self.config.width - (2 * self.config.margin)
-        max_title_height = self.config.height - RESERVED_HEIGHT
+        max_title_height = max(0, self.config.height - RESERVED_HEIGHT)
         font_path = FONT_BOLD_PATH
 
         font_size = self.config.max_font_size
         selected_lines: list[str] = []
         measured_lines: list[tuple[str, int]] = []
 
-        while font_size > self.config.min_font_size:
+        while font_size >= self.config.min_font_size:
             candidate_lines = self._wrap_text(title_text, max_title_width, font_path, font_size)
             if not candidate_lines:
                 break
@@ -168,7 +214,7 @@ class BannerGenerator:
             total_height = len(candidate_lines) * line_height - LINE_HEIGHT_PADDING
 
             widths = [self._get_text_dimensions(line, font_path, font_size)[0] for line in candidate_lines]
-            max_line_width = max(widths)
+            max_line_width = max(widths) if widths else 0
 
             if max_line_width <= max_title_width and total_height <= max_title_height:
                 selected_lines = candidate_lines
@@ -213,8 +259,9 @@ class BannerGenerator:
         draw.text((footer_x, footer_y), self.config.footer_text, fill=self.config.text_color, font=footer_font)
         self._add_channel_logo(image, (int(logo_x), int(logo_y)), self.config.logo_size)
 
-    def generate(self, title_text: str, background_image: BackgroundImageInput | None = None) -> bytes:
-        image = self._prepare_background(background_image)
+    def generate(self, title_text: str) -> bytes:
+        bg_color = secrets.choice(MATERIAL_COLORS)
+        image = self._create_gradient_background(bg_color, self.config.width, self.config.height).copy()
 
         try:
             draw = ImageDraw.Draw(image)

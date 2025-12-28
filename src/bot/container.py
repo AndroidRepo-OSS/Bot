@@ -16,7 +16,6 @@ from .db import (
     vacuum_and_analyze,
 )
 from .integrations.ai import RevisionAgent, SummaryAgent
-from .integrations.nasa import NasaApodService
 from .integrations.repositories import GitHubRepositoryFetcher, GitLabRepositoryFetcher
 from .services import PreviewDebugRegistry, TelegramLogger
 
@@ -49,7 +48,6 @@ def setup_dependencies(dp: Dispatcher, bot: Bot, settings: BotSettings) -> None:
         gitlab_fetcher = GitLabRepositoryFetcher(session=session, token=settings.resolved_gitlab_token)
         dp["github_fetcher"] = github_fetcher
         dp["gitlab_fetcher"] = gitlab_fetcher
-        dp["nasa_apod_service"] = NasaApodService(session=session, api_key=settings.resolved_nasa_api_key)
 
         db_engine = create_engine(settings.database_url)
         db_session_maker = create_session_maker(db_engine)
