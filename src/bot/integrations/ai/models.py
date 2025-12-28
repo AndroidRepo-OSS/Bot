@@ -86,6 +86,7 @@ class RepositoryTag(StrEnum):
     WORKOUT = "Workout"
     WRITING = "Writing"
     XPOSED = "Xposed"
+    SUPER_USER = "Super_User"
 
 
 @dataclass(slots=True)
