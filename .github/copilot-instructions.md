@@ -48,7 +48,7 @@ async def handler(message: Message, github_fetcher: GitHubRepositoryFetcher): ..
 Every file MUST start with:
 ```python
 # SPDX-License-Identifier: BSD-3-Clause
-# Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
+# Copyright (c) 2026 Hitalo M. <https://github.com/HitaloM>
 
 from __future__ import annotations
 ```
