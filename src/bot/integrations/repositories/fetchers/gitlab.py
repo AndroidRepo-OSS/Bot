@@ -9,7 +9,14 @@ from typing import TYPE_CHECKING, Final
 from urllib.parse import quote
 
 from bot.integrations.repositories.errors import RepositoryClientError
-from bot.integrations.repositories.models import RepositoryAuthor, RepositoryInfo, RepositoryPlatform, RepositoryReadme
+from bot.integrations.repositories.models import (
+    RepositoryAuthor,
+    RepositoryInfo,
+    RepositoryPlatform,
+    RepositoryReadme,
+    parse_http_url,
+    parse_optional_http_url,
+)
 from bot.logging import get_logger
 
 from .base import BaseRepositoryFetcher
@@ -150,7 +157,7 @@ class GitLabRepositoryFetcher(BaseRepositoryFetcher):
         return RepositoryReadme(
             path=filename,
             content=sanitized_content,
-            source_url=f"{web_url}/-/raw/{branch}/{filename}" if web_url else None,
+            source_url=parse_optional_http_url(f"{web_url}/-/raw/{branch}/{filename}" if web_url else None),
         )
 
     @staticmethod
@@ -178,7 +185,7 @@ class GitLabRepositoryFetcher(BaseRepositoryFetcher):
             name=name,
             full_name=full_name,
             description=self._string_value(payload.get("description")),
-            web_url=web_url,
+            web_url=parse_http_url(web_url),
             tags=self._extract_topics(payload),
             readme=readme,
             author=self._extract_author(payload),
@@ -207,7 +214,9 @@ class GitLabRepositoryFetcher(BaseRepositoryFetcher):
         if url is None and (full_path := self._string_value(namespace.get("full_path"))):
             url = f"https://gitlab.com/{full_path}"
 
-        return RepositoryAuthor(id=author_id, username=username, display_name=display_name, url=url)
+        return RepositoryAuthor(
+            id=author_id, username=username, display_name=display_name, url=parse_optional_http_url(url)
+        )
 
     def _extract_topics(self, payload: JSONObject) -> list[str]:
         topics = payload.get("topics")

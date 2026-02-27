@@ -27,7 +27,7 @@ def parse_args() -> argparse.Namespace:
 
 
 async def main() -> None:
-    settings = BotSettings()  # ty: ignore[missing-argument]
+    settings = BotSettings.load()
 
     defaults = DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview=LinkPreviewOptions(is_disabled=True))
     bot = Bot(token=settings.bot_token, default=defaults)

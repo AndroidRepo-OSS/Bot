@@ -4,8 +4,20 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Final, cast
 
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field  # noqa: TC002
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, TypeAdapter
+
+_HTTP_URL_ADAPTER: Final = TypeAdapter(AnyHttpUrl)
+_OPTIONAL_HTTP_URL_ADAPTER: Final = TypeAdapter(AnyHttpUrl | None)
+
+
+def parse_http_url(value: str) -> AnyHttpUrl:
+    return cast("AnyHttpUrl", _HTTP_URL_ADAPTER.validate_python(value))
+
+
+def parse_optional_http_url(value: str | None) -> AnyHttpUrl | None:
+    return cast("AnyHttpUrl | None", _OPTIONAL_HTTP_URL_ADAPTER.validate_python(value))
 
 
 class RepositoryPlatform(StrEnum):

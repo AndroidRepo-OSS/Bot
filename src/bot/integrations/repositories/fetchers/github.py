@@ -10,7 +10,14 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
 from bot.integrations.repositories.errors import RepositoryClientError
-from bot.integrations.repositories.models import RepositoryAuthor, RepositoryInfo, RepositoryPlatform, RepositoryReadme
+from bot.integrations.repositories.models import (
+    RepositoryAuthor,
+    RepositoryInfo,
+    RepositoryPlatform,
+    RepositoryReadme,
+    parse_http_url,
+    parse_optional_http_url,
+)
 from bot.logging import get_logger
 
 from .base import BaseRepositoryFetcher
@@ -159,7 +166,9 @@ class GitHubRepositoryFetcher(BaseRepositoryFetcher):
             content_length=len(sanitized_content),
         )
 
-        return RepositoryReadme(path=readme_path, content=sanitized_content, source_url=source_url)
+        return RepositoryReadme(
+            path=readme_path, content=sanitized_content, source_url=parse_optional_http_url(source_url)
+        )
 
     def _build_repository_info(
         self, payload: JSONObject, *, readme: RepositoryReadme | None, fallback_owner: str
@@ -175,7 +184,7 @@ class GitHubRepositoryFetcher(BaseRepositoryFetcher):
             name=name,
             full_name=full_name,
             description=self._string_value(payload.get("description")),
-            web_url=web_url,
+            web_url=parse_http_url(web_url),
             tags=self._extract_topics(payload),
             readme=readme,
             author=self._extract_author(payload, fallback_username=fallback_owner),
@@ -196,7 +205,7 @@ class GitHubRepositoryFetcher(BaseRepositoryFetcher):
             id=owner_id,
             username=username,
             display_name=self._string_value(owner_data.get("name")),
-            url=self._string_value(owner_data.get("html_url")),
+            url=parse_optional_http_url(self._string_value(owner_data.get("html_url"))),
         )
 
     def _extract_topics(self, payload: JSONObject) -> list[str]:

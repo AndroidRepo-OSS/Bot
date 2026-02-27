@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from typing import Self
+
 from pydantic import SecretStr  # noqa: TC002
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -20,6 +22,10 @@ class BotSettings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///data/bot.sqlite3"
     github_token: SecretStr
     gitlab_token: SecretStr | None = None
+
+    @classmethod
+    def load(cls) -> Self:
+        return cls()  # pyright: ignore[reportCallIssue]
 
     @property
     def bot_token(self) -> str:

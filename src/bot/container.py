@@ -4,10 +4,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Unpack
+from typing import TYPE_CHECKING, TypedDict
 
 from aiogram import Dispatcher
-from aiogram.dispatcher.middlewares.data import MiddlewareData
 from aiogram.fsm.storage.memory import MemoryStorage, SimpleEventIsolation
 from aiohttp import ClientSession, ClientTimeout
 
@@ -32,7 +31,7 @@ if TYPE_CHECKING:
     from .db import AsyncSessionMaker
 
 
-class AppWorkflowData(MiddlewareData, total=False):
+class AppWorkflowData(TypedDict, total=False):
     settings: BotSettings
     preview_registry: PreviewDebugRegistry
     summary_agent: SummaryAgent
@@ -64,8 +63,8 @@ def create_dispatcher(*, bot: Bot, settings: BotSettings) -> Dispatcher:
     return dispatcher
 
 
-def _update_workflow_data(dispatcher: Dispatcher, **kwargs: Unpack[AppWorkflowData]) -> None:
-    dispatcher.workflow_data.update(kwargs)
+def _update_workflow_data(dispatcher: Dispatcher, values: AppWorkflowData) -> None:
+    dispatcher.workflow_data.update(values)
 
 
 @dataclass(slots=True)
@@ -96,15 +95,15 @@ class ApplicationRuntime:
             bot=self.bot, chat_id=self.settings.allowed_chat_id, topic_id=self.settings.logs_topic_id
         )
 
-        _update_workflow_data(
-            self.dispatcher,
-            github_fetcher=github_fetcher,
-            gitlab_fetcher=gitlab_fetcher,
-            db_engine=self.db_engine,
-            db_session_maker=self.db_session_maker,
-            posts_repository=posts_repository,
-            telegram_logger=telegram_logger,
-        )
+        workflow_data: AppWorkflowData = {
+            "github_fetcher": github_fetcher,
+            "gitlab_fetcher": gitlab_fetcher,
+            "db_engine": self.db_engine,
+            "db_session_maker": self.db_session_maker,
+            "posts_repository": posts_repository,
+            "telegram_logger": telegram_logger,
+        }
+        _update_workflow_data(self.dispatcher, workflow_data)
 
         await telegram_logger.log_bot_started()
 
