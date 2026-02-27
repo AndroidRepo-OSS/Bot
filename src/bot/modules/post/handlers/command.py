@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 from datetime import timedelta
 from typing import TYPE_CHECKING
@@ -12,7 +13,6 @@ from aiogram import Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
 from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
-from anyio import create_task_group
 
 from bot.integrations.ai import NonAndroidProjectError, RepositorySummaryError
 from bot.integrations.repositories.errors import RepositoryClientError
@@ -31,7 +31,6 @@ if TYPE_CHECKING:
 
     from bot.config import BotSettings
     from bot.db import PostsRepository
-    from bot.db.models.post import Post
     from bot.integrations.ai import SummaryAgent, SummaryResult
     from bot.integrations.repositories import GitHubRepositoryFetcher, GitLabRepositoryFetcher, RepositoryInfo
     from bot.services import PreviewDebugRegistry, TelegramLogger
@@ -82,32 +81,22 @@ async def handle_post(
         if message.from_user:
             await telegram_logger.log_post_started(message.from_user, repository)
 
-        recent_post: Post | None = None
-        already_posted = False
-        stored_tags: list[str] = []
-
-        async def load_recent_post() -> None:
-            nonlocal recent_post
-            recent_post = await posts_repository.get_recent_post(
-                platform=locator.platform, owner=locator.owner, name=locator.name, months=3
+        async with asyncio.TaskGroup() as task_group:
+            recent_post_task = task_group.create_task(
+                posts_repository.get_recent_post(
+                    platform=locator.platform, owner=locator.owner, name=locator.name, months=3
+                )
+            )
+            already_posted_task = task_group.create_task(
+                posts_repository.is_posted(platform=locator.platform, owner=locator.owner, name=locator.name)
+            )
+            stored_tags_task = task_group.create_task(
+                posts_repository.get_tags(platform=locator.platform, owner=locator.owner, name=locator.name)
             )
 
-        async def load_already_posted() -> None:
-            nonlocal already_posted
-            already_posted = await posts_repository.is_posted(
-                platform=locator.platform, owner=locator.owner, name=locator.name
-            )
-
-        async def load_stored_tags() -> None:
-            nonlocal stored_tags
-            stored_tags = await posts_repository.get_tags(
-                platform=locator.platform, owner=locator.owner, name=locator.name
-            )
-
-        async with create_task_group() as tg:
-            tg.start_soon(load_recent_post)
-            tg.start_soon(load_already_posted)
-            tg.start_soon(load_stored_tags)
+        recent_post = recent_post_task.result()
+        already_posted = already_posted_task.result()
+        stored_tags = stored_tags_task.result()
 
         if recent_post:
             next_allowed = recent_post.posted_at + timedelta(days=90)
@@ -266,17 +255,11 @@ async def _render_preview(
     *,
     preview_registry: PreviewDebugRegistry,
 ) -> tuple[str, str, bytes, Message, str | None]:
-    banner_bytes: bytes | None = None
-
-    async def render_banner_task() -> None:
-        nonlocal banner_bytes
-        banner_bytes = await render_banner(repository, summary_result.summary)
-
-    async with create_task_group() as tg:
-        tg.start_soon(render_banner_task)
+    async with asyncio.TaskGroup() as task_group:
+        banner_task = task_group.create_task(render_banner(repository, summary_result.summary))
         caption = render_post_caption(repository, summary_result.summary)
 
-    assert banner_bytes is not None
+    banner_bytes = banner_task.result()
 
     submission_id = uuid4().hex
     preview_registry.save(submission_id, repository, summary_model=summary_result.model_name)

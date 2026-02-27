@@ -3,11 +3,11 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
 from aiogram.exceptions import TelegramBadRequest
-from anyio import create_task_group, sleep
 
 from bot.modules.post.utils.models import SubmissionData
 
@@ -58,16 +58,16 @@ async def cleanup_messages(
         return
 
     if delay:
-        await sleep(delay)
+        await asyncio.sleep(delay)
 
     if len(unique_targets) == 1:
         chat_id, message_id = unique_targets[0]
         await safe_delete(bot, chat_id, message_id)
         return
 
-    async with create_task_group() as tg:
+    async with asyncio.TaskGroup() as task_group:
         for chat_id, message_id in unique_targets:
-            tg.start_soon(safe_delete, bot, chat_id, message_id)
+            task_group.create_task(safe_delete(bot, chat_id, message_id))
 
 
 async def update_progress(message: Message, text: str) -> None:

@@ -4,9 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 
-import anyio
+import uvloop
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
@@ -45,4 +46,5 @@ if __name__ == "__main__":
     args = parse_args()
     log_level = logging.DEBUG if args.debug else logging.INFO
     setup_logging(level=log_level)
-    anyio.run(main, backend="asyncio", backend_options={"use_uvloop": True})
+    with asyncio.Runner(debug=args.debug, loop_factory=uvloop.new_event_loop) as runner:
+        runner.run(main())

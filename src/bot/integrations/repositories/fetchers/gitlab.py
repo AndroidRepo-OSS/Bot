@@ -3,11 +3,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 from urllib.parse import quote
-
-from anyio import create_task_group
 
 from bot.integrations.repositories.errors import RepositoryClientError
 from bot.integrations.repositories.models import RepositoryAuthor, RepositoryInfo, RepositoryPlatform, RepositoryReadme
@@ -93,54 +92,77 @@ class GitLabRepositoryFetcher(BaseRepositoryFetcher):
 
         project_id = self._identifier_value(project_data.get("id"))
         web_url = self._string_value(project_data.get("web_url"))
-        readme: RepositoryReadme | None = None
 
-        async def try_readme(filename: str) -> None:
-            nonlocal readme
-            if readme is not None:
-                return
-
-            await logger.adebug("Trying README file", project_id=project_id, filename=filename)
-
-            content = await self._request_text(
-                f"{_GITLAB_API}/projects/{project_id}/repository/files/{quote(filename, safe='')}/raw",
-                params={"ref": branch},
-                ignore_404=True,
+        tasks = {
+            asyncio.create_task(
+                self._fetch_readme_candidate(project_id=project_id, branch=branch, web_url=web_url, filename=filename),
+                name=f"gitlab-readme:{filename}",
             )
-
-            if content is None:
-                return
-
-            sanitized_content = self._sanitize_readme_content(content)
-            if not sanitized_content:
-                await logger.adebug("README content empty after sanitization", project_id=project_id, filename=filename)
-                return
-
-            readme = RepositoryReadme(
-                path=filename,
-                content=sanitized_content,
-                source_url=f"{web_url}/-/raw/{branch}/{filename}" if web_url else None,
-            )
-
-            await logger.adebug(
-                "README found", project_id=project_id, filename=filename, content_length=len(sanitized_content)
-            )
-            task_group.cancel_scope.cancel()
+            for filename in _README_CANDIDATES
+        }
 
         try:
-            async with create_task_group() as task_group:
-                for filename in _README_CANDIDATES:
-                    task_group.start_soon(try_readme, filename)
-        except* RepositoryClientError as exc_group:
-            error = self._unwrap_client_error(exc_group)
-            await logger.aerror("Failed to fetch GitLab README", project_id=project_id, error=str(error))
-            raise error
+            pending = set(tasks)
+            while pending:
+                done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+                for task in done:
+                    try:
+                        readme = task.result()
+                    except RepositoryClientError as error:
+                        await self._cancel_tasks(pending)
+                        await logger.aerror("Failed to fetch GitLab README", project_id=project_id, error=str(error))
+                        raise
 
-        if readme is not None:
-            return readme
+                    if readme is None:
+                        continue
+
+                    await self._cancel_tasks(pending)
+                    return readme
+        finally:
+            await self._cancel_tasks(tasks)
 
         await logger.adebug("No README found", project_id=project_id)
         return None
+
+    async def _fetch_readme_candidate(
+        self, *, project_id: int | str, branch: str, web_url: str | None, filename: str
+    ) -> RepositoryReadme | None:
+        await logger.adebug("Trying README file", project_id=project_id, filename=filename)
+
+        content = await self._request_text(
+            f"{_GITLAB_API}/projects/{project_id}/repository/files/{quote(filename, safe='')}/raw",
+            params={"ref": branch},
+            ignore_404=True,
+        )
+
+        if content is None:
+            return None
+
+        sanitized_content = self._sanitize_readme_content(content)
+        if not sanitized_content:
+            await logger.adebug("README content empty after sanitization", project_id=project_id, filename=filename)
+            return None
+
+        await logger.adebug(
+            "README found", project_id=project_id, filename=filename, content_length=len(sanitized_content)
+        )
+
+        return RepositoryReadme(
+            path=filename,
+            content=sanitized_content,
+            source_url=f"{web_url}/-/raw/{branch}/{filename}" if web_url else None,
+        )
+
+    @staticmethod
+    async def _cancel_tasks(tasks: set[asyncio.Task[RepositoryReadme | None]]) -> None:
+        if not tasks:
+            return
+
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     def _build_repository_info(self, payload: JSONObject, *, readme: RepositoryReadme | None) -> RepositoryInfo:
         repository_id = self._identifier_value(payload.get("id"))

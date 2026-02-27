@@ -3,12 +3,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 from binascii import Error as BinasciiError
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
-
-from anyio import create_task_group
 
 from bot.integrations.repositories.errors import RepositoryClientError
 from bot.integrations.repositories.models import RepositoryAuthor, RepositoryInfo, RepositoryPlatform, RepositoryReadme
@@ -99,27 +98,19 @@ class GitHubRepositoryFetcher(BaseRepositoryFetcher):
     async def fetch_repository(self, owner: str, name: str) -> RepositoryInfo:
         await logger.ainfo("Fetching GitHub repository", owner=owner, name=name)
 
-        repository_payload: JSONObject | None = None
-        readme: RepositoryReadme | None = None
-
-        async def load_repository() -> None:
-            nonlocal repository_payload
-            repository_payload = await self._request_object(
-                f"{_GITHUB_API}/repos/{owner}/{name}", details=_REPOSITORY_ENDPOINT_DETAILS
-            )
-
-        async def load_readme() -> None:
-            nonlocal readme
-            readme = await self._fetch_readme(owner, name)
-
         try:
-            async with create_task_group() as task_group:
-                task_group.start_soon(load_repository)
-                task_group.start_soon(load_readme)
+            async with asyncio.TaskGroup() as task_group:
+                repository_task = task_group.create_task(
+                    self._request_object(f"{_GITHUB_API}/repos/{owner}/{name}", details=_REPOSITORY_ENDPOINT_DETAILS)
+                )
+                readme_task = task_group.create_task(self._fetch_readme(owner, name))
         except* RepositoryClientError as exc_group:
             error = self._unwrap_client_error(exc_group)
             await logger.aerror("Failed to fetch GitHub repository", owner=owner, name=name, error=str(error))
             raise error
+
+        repository_payload = repository_task.result()
+        readme = readme_task.result()
 
         if repository_payload is None:
             raise RepositoryClientError(self._platform_name, details="GitHub repository payload is missing")

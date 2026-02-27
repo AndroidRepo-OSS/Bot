@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
@@ -10,7 +11,6 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import BufferedInputFile, InputMediaPhoto
 from aiogram.utils.deep_linking import create_start_link
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from anyio import to_thread
 
 from bot.modules.post.utils.models import SubmissionAction, SubmissionCallback
 from bot.services import BannerGenerator
@@ -27,7 +27,7 @@ _banner_generator = BannerGenerator()
 
 
 async def render_banner(repository: RepositoryInfo, summary: RepositorySummary) -> bytes:
-    return await to_thread.run_sync(_banner_generator.generate, summary.project_name or repository.name)
+    return await asyncio.to_thread(_banner_generator.generate, summary.project_name or repository.name)
 
 
 async def build_debug_link(bot: Bot | None, payload: str) -> str | None:
