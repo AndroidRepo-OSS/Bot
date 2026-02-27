@@ -21,6 +21,10 @@ class RepositoryAuthor(BaseModel):
     display_name: str | None = Field(default=None, description="Author's display name")
     url: AnyHttpUrl | None = Field(default=None, description="Author's profile URL")
 
+    @property
+    def label(self) -> str:
+        return self.display_name or self.username
+
 
 class RepositoryReadme(BaseModel):
     model_config = ConfigDict(frozen=True, extra="ignore")
@@ -42,3 +46,7 @@ class RepositoryInfo(BaseModel):
     tags: list[str] = Field(default_factory=list, description="Repository topics/tags")
     readme: RepositoryReadme | None = Field(default=None, description="Repository README content")
     author: RepositoryAuthor = Field(description="Repository author/owner")
+
+    @property
+    def has_readme(self) -> bool:
+        return bool(self.readme and self.readme.content)

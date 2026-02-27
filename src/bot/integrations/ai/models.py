@@ -89,28 +89,28 @@ class RepositoryTag(StrEnum):
     SUPER_USER = "Super_User"
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True, kw_only=True)
 class SummaryDependencies:
     repository: RepositoryInfo
     readme_excerpt: str
-    links: list[str]
+    links: tuple[str, ...]
     available_tags: tuple[str, ...]
     reuse_tags: tuple[str, ...] | None = None
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True, kw_only=True)
 class RevisionDependencies:
     repository: RepositoryInfo
     current_summary: RepositorySummary
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True, kw_only=True)
 class SummaryResult:
     summary: RepositorySummary
     model_name: str
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True, kw_only=True)
 class RevisionResult:
     summary: RepositorySummary
     model_name: str

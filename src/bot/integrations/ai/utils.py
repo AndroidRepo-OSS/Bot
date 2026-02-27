@@ -15,7 +15,8 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-_URL_PATTERN: Final[Pattern[str]] = re.compile(r"https?://[^\s)]+", re.IGNORECASE)
+_TRAILING_URL_PUNCTUATION: Final[str] = ".,);]\"' "
+_URL_PATTERN: Final[Pattern[str]] = re.compile(r"https?://[^\s<>()]+", re.IGNORECASE)
 _MAX_README_CHARS: Final[int] = 16000
 
 
@@ -48,7 +49,7 @@ def extract_links(text: str) -> list[str]:
         return results
 
     for match in _URL_PATTERN.findall(text):
-        url = match.rstrip(".,);]\"' ")
+        url = match.rstrip(_TRAILING_URL_PUNCTUATION)
         if url and url not in seen:
             seen.add(url)
             results.append(url)

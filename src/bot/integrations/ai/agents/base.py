@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic_ai import Agent
 from pydantic_ai.models.fallback import FallbackModel
@@ -12,50 +13,58 @@ from pydantic_ai.providers.github import GitHubProvider
 
 from bot.logging import get_logger
 
+if TYPE_CHECKING:
+    from pydantic_ai import RunContext
+
 logger = get_logger(__name__)
+
+
+def _describe_schema(schema: object) -> str:
+    return getattr(schema, "__name__", str(schema))
 
 
 class BaseAgent[TDeps, TOutput](ABC):
     __slots__ = ("_agent",)
 
-    def __init__(self, *, api_key: str, instructions: str) -> None:
-        logger.debug("Initializing AI agent", agent_class=self.__class__.__name__)
+    _deps_type: ClassVar[type[Any]]
+    _instructions: ClassVar[str]
+    _model_names: ClassVar[tuple[str, ...]]
+    _model_settings: ClassVar[OpenAIChatModelSettings | None] = OpenAIChatModelSettings(openai_reasoning_effort="high")
+    _output_type: ClassVar[Any]
+
+    def __init__(self, *, api_key: str) -> None:
+        cls = type(self)
+        if not cls._model_names:
+            msg = f"{cls.__name__} must define at least one model name"
+            raise TypeError(msg)
+
+        logger.debug("Initializing AI agent", agent_class=cls.__name__, models=cls._model_names)
 
         provider = GitHubProvider(api_key=api_key)
-        model = self._create_model(provider)
-
         self._agent: Agent[TDeps, TOutput] = Agent(
-            model=model,
-            output_type=self._get_output_type(),
-            deps_type=self._get_deps_type(),
-            instructions=instructions,
-            model_settings=OpenAIChatModelSettings(openai_reasoning_effort="high"),
+            model=cls._create_model(provider),
+            output_type=cls._output_type,
+            deps_type=cls._deps_type,
+            instructions=cls._instructions,
+            model_settings=cls._model_settings,
         )
-        self._register_instructions()
+        self._register_context_instruction()
 
         logger.debug(
             "AI agent initialized successfully",
-            agent_class=self.__class__.__name__,
-            output_type=self._get_output_type().__name__,
-            deps_type=self._get_deps_type().__name__,
+            agent_class=cls.__name__,
+            output_type=_describe_schema(cls._output_type),
+            deps_type=_describe_schema(cls._deps_type),
         )
 
     @classmethod
-    @abstractmethod
-    def _get_output_type(cls) -> type[TOutput]: ...
+    def _create_model(cls, provider: GitHubProvider) -> FallbackModel:
+        return FallbackModel(*(OpenAIChatModel(model_name, provider=provider) for model_name in cls._model_names))
 
-    @classmethod
-    @abstractmethod
-    def _get_deps_type(cls) -> type[TDeps]: ...
-
-    @staticmethod
-    def _create_model(provider: GitHubProvider) -> FallbackModel:
-        return FallbackModel(
-            OpenAIChatModel("openai/gpt-5", provider=provider),
-            OpenAIChatModel("openai/gpt-5-mini", provider=provider),
-            OpenAIChatModel("openai/gpt-4.1", provider=provider),
-            OpenAIChatModel("openai/gpt-4.1-mini", provider=provider),
-        )
+    def _register_context_instruction(self) -> None:
+        @self._agent.instructions
+        def provide_context(ctx: RunContext[TDeps]) -> str:
+            return self.build_context(ctx.deps)
 
     @abstractmethod
-    def _register_instructions(self) -> None: ...
+    def build_context(self, deps: TDeps) -> str: ...

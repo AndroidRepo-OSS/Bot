@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final, override
 
 from bot.integrations.ai.errors import NonAndroidProjectError, RepositorySummaryError
 from bot.integrations.ai.models import (
@@ -18,76 +18,57 @@ from bot.integrations.ai.utils import extract_links, extract_readme
 from bot.logging import get_logger
 
 from .base import BaseAgent
+from .context import append_bullet_block, append_text_block, render_repository_section
 
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
-    from pydantic_ai import RunContext
-
     from bot.integrations.repositories.models import RepositoryInfo
 
 type SummaryOutput = RepositorySummary | RejectedRepository
+
+_SUMMARY_REQUEST: Final[str] = (
+    "Generate a structured summary for this repository. "
+    "Validate first that it is Android-related. "
+    "Return RejectedRepository when it is not Android-related or cannot be summarized confidently. "
+    "Otherwise return RepositorySummary using only the provided repository data."
+)
 
 
 class SummaryAgent(BaseAgent[SummaryDependencies, SummaryOutput]):
     __slots__ = ()
 
-    def __init__(self, *, api_key: str) -> None:
-        super().__init__(api_key=api_key, instructions=SUMMARY_INSTRUCTIONS)
+    _deps_type = SummaryDependencies
+    _instructions = SUMMARY_INSTRUCTIONS
+    _model_names = ("openai/gpt-5", "openai/gpt-5-mini", "openai/gpt-4.1", "openai/gpt-4.1-mini")
+    _output_type = SummaryOutput
 
-    @classmethod
-    def _get_output_type(cls) -> type[SummaryOutput]:
-        return SummaryOutput
+    @override
+    def build_context(self, deps: SummaryDependencies) -> str:
+        parts = render_repository_section(deps.repository, include_author=True)
 
-    @classmethod
-    def _get_deps_type(cls) -> type[SummaryDependencies]:
-        return SummaryDependencies
-
-    def _register_instructions(self) -> None:
-        @self._agent.instructions
-        def provide_repository_context(ctx: RunContext[SummaryDependencies]) -> str:
-            repo = ctx.deps.repository
-            parts = [
-                "## Repository Data",
+        if deps.reuse_tags:
+            parts.extend([
                 "",
-                f"**Name:** {repo.name}",
-                f"**Full Name:** {repo.full_name}",
-                f"**Author:** {repo.author.display_name or repo.author.username}",
-                f"**Platform:** {repo.platform.value}",
-                f"**Description:** {repo.description or 'Not provided'}",
-            ]
+                "## Reuse Tags (MANDATORY)",
+                "This project was previously posted. You MUST use exactly these tags:",
+            ])
+            parts.extend(f"- {tag}" for tag in deps.reuse_tags)
+            parts.append("Do NOT select different tags; use only the ones listed above.")
+        else:
+            append_bullet_block(parts, "## Allowed Tags (choose 2-4)", deps.available_tags)
 
-            if repo.tags:
-                parts.append(f"**Tags:** {', '.join(repo.tags)}")
+        if deps.links:
+            append_bullet_block(parts, "## Available Links (select relevant ones)", deps.links)
 
-            if ctx.deps.reuse_tags:
-                parts.extend([
-                    "",
-                    "## Reuse Tags (MANDATORY)",
-                    "This project was previously posted. You MUST use exactly these tags:",
-                ])
-                parts.extend(f"- {tag}" for tag in ctx.deps.reuse_tags)
-                parts.append("Do NOT select different tags; use only the ones listed above.")
-            else:
-                parts.extend(["", "## Allowed Tags (choose 2-4)"])
-                parts.extend(f"- {tag}" for tag in ctx.deps.available_tags)
+        append_text_block(
+            parts,
+            "## README Content",
+            deps.readme_excerpt,
+            intro="Use this to extract features, benefits, and additional context:",
+        )
 
-            parts.append(f"**Repository URL:** {repo.web_url}")
-
-            if ctx.deps.links:
-                parts.extend(["", "## Available Links (select relevant ones)"])
-                parts.extend(f"- {link}" for link in ctx.deps.links)
-
-            if ctx.deps.readme_excerpt:
-                parts.extend([
-                    "",
-                    "## README Content",
-                    "Use this to extract features, benefits, and additional context:",
-                    "",
-                    ctx.deps.readme_excerpt,
-                ])
-
-            return "\n".join(parts)
+        return "\n".join(parts)
 
     async def summarize(
         self, repository: RepositoryInfo, *, reuse_tags: tuple[str, ...] | None = None
@@ -96,39 +77,31 @@ class SummaryAgent(BaseAgent[SummaryDependencies, SummaryOutput]):
             "Starting repository summary generation",
             repository=repository.full_name,
             platform=repository.platform.value,
-            has_readme=bool(repository.readme and repository.readme.content),
+            has_readme=repository.has_readme,
             reuse_tags_count=len(reuse_tags) if reuse_tags else 0,
         )
 
-        readme = extract_readme(repository)
-        links = extract_links(readme)
+        readme_excerpt = extract_readme(repository)
+        available_links = tuple(extract_links(readme_excerpt))
 
         await logger.adebug(
-            "Extracted README and links for summary",
+            "Summary context prepared",
             repository=repository.full_name,
-            readme_length=len(readme),
-            links_count=len(links),
+            readme_length=len(readme_excerpt),
+            links_count=len(available_links),
         )
 
         deps = SummaryDependencies(
             repository=repository,
-            readme_excerpt=readme,
-            links=links,
-            available_tags=ALLOWED_SUMMARY_TAGS if not reuse_tags else (),
+            readme_excerpt=readme_excerpt,
+            links=available_links,
+            available_tags=() if reuse_tags else ALLOWED_SUMMARY_TAGS,
             reuse_tags=reuse_tags,
         )
 
         try:
             await logger.adebug("Invoking AI agent for summary", repository=repository.full_name)
-            result = await self._agent.run(
-                "Generate a summary for this Android project. "
-                "First, verify if this is an Android-related project. "
-                "If not, return a RejectedRepository with the reason. "
-                "Otherwise, extract the project name, write a compelling description, "
-                "identify key features, select relevant links, and choose 2-4 tags "
-                "from the allowed list that best fit the project.",
-                deps=deps,
-            )
+            result = await self._agent.run(_SUMMARY_REQUEST, deps=deps)
         except Exception as exc:
             await logger.aerror(
                 "Failed to generate repository summary",
@@ -143,7 +116,10 @@ class SummaryAgent(BaseAgent[SummaryDependencies, SummaryOutput]):
 
         if isinstance(output, RejectedRepository):
             await logger.ainfo(
-                "Repository rejected as non-Android project", repository=repository.full_name, reason=output.reason
+                "Repository rejected as non-Android project",
+                repository=repository.full_name,
+                reason=output.reason,
+                model_name=model_name,
             )
             raise NonAndroidProjectError(reason=output.reason)
 
@@ -154,6 +130,7 @@ class SummaryAgent(BaseAgent[SummaryDependencies, SummaryOutput]):
             features_count=len(output.key_features),
             links_count=len(output.important_links),
             tags_count=len(output.tags),
+            model_name=model_name,
         )
 
         return SummaryResult(summary=output, model_name=model_name)

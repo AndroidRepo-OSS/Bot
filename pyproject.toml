@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["uv_build>=0.9.9,<0.10.0"]
+requires = ["uv_build>=0.10"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
@@ -29,4 +29,4 @@ module-name = "bot"
 module-root = "src"
 
 [dependency-groups]
-dev = ["pre-commit>=4.5.0", "ty>=0.0.1a7", "ruff>=0.14.6"]
+dev = ["pre-commit>=4.5.1", "ruff>=0.14.14", "pyright>=1.1.408"]

@@ -53,11 +53,15 @@ ignore = [
     "RUF001",
     "RUF002",
     "RUF003",
+    "RUF067",
+    "N807",
+    "PLC2701",
     "PLR2004",
     "PLR0917",
     "PLR0913",
     "PLR0914",
     "PLR0911",
+    "PLR0912",
     "PLR0915",
 ]
 logger-objects = ["logging.get_logger"]

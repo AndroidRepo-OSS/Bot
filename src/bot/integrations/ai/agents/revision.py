@@ -3,10 +3,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from pydantic_ai.models.fallback import FallbackModel
-from pydantic_ai.models.openai import OpenAIChatModel
+from typing import TYPE_CHECKING, Final, override
 
 from bot.integrations.ai.errors import PreviewEditError
 from bot.integrations.ai.models import ALLOWED_SUMMARY_TAGS, RepositorySummary, RevisionDependencies, RevisionResult
@@ -14,78 +11,31 @@ from bot.integrations.ai.prompts import REVISION_INSTRUCTIONS
 from bot.logging import get_logger
 
 from .base import BaseAgent
+from .context import append_bullet_block, render_repository_section, render_summary_section
 
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
-    from pydantic_ai import RunContext
-    from pydantic_ai.providers.github import GitHubProvider
-
     from bot.integrations.repositories.models import RepositoryInfo
+
+_REVISION_REQUEST_PREFIX: Final[str] = "Edit request from the user:\n"
 
 
 class RevisionAgent(BaseAgent[RevisionDependencies, RepositorySummary]):
     __slots__ = ()
 
-    def __init__(self, *, api_key: str) -> None:
-        super().__init__(api_key=api_key, instructions=REVISION_INSTRUCTIONS)
+    _deps_type = RevisionDependencies
+    _instructions = REVISION_INSTRUCTIONS
+    _model_names = ("openai/gpt-5-mini", "openai/gpt-4.1-mini")
+    _output_type = RepositorySummary
 
-    @classmethod
-    def _get_output_type(cls) -> type[RepositorySummary]:
-        return RepositorySummary
-
-    @classmethod
-    def _get_deps_type(cls) -> type[RevisionDependencies]:
-        return RevisionDependencies
-
-    @staticmethod
-    def _create_model(provider: GitHubProvider) -> FallbackModel:
-        return FallbackModel(
-            OpenAIChatModel("openai/gpt-5-mini", provider=provider),
-            OpenAIChatModel("openai/gpt-4.1-mini", provider=provider),
-        )
-
-    def _register_instructions(self) -> None:
-        @self._agent.instructions
-        def provide_revision_context(ctx: RunContext[RevisionDependencies]) -> str:
-            repo = ctx.deps.repository
-            summary = ctx.deps.current_summary
-            parts = [
-                "## Repository Data",
-                "",
-                f"**Name:** {repo.name}",
-                f"**Full Name:** {repo.full_name}",
-                f"**Platform:** {repo.platform.value}",
-                f"**Description:** {repo.description or 'Not provided'}",
-                "",
-                "## Current Preview",
-                f"**Project Name:** {summary.project_name}",
-                f"**Enhanced Description:** {summary.enhanced_description}",
-                "**Key Features:**",
-            ]
-
-            if summary.key_features:
-                parts.extend(f"- {feature}" for feature in summary.key_features)
-            else:
-                parts.append("- (none provided)")
-
-            parts.extend(["", "**Important Links:**"])
-            if summary.important_links:
-                parts.extend(f"- {link.label}: {link.url}" for link in summary.important_links)
-            else:
-                parts.append("- (none provided)")
-
-            parts.extend(["", "**Tags:**"])
-            if summary.tags:
-                parts.extend(f"- {tag.value}" for tag in summary.tags)
-            else:
-                parts.append("- (none provided)")
-
-            parts.extend(["", "## Allowed Tags (choose 2-4)"])
-            parts.extend(f"- {tag}" for tag in ALLOWED_SUMMARY_TAGS)
-
-            parts.extend(["", "Use the user's edit request to adjust this preview."])
-            return "\n".join(parts)
+    @override
+    def build_context(self, deps: RevisionDependencies) -> str:
+        parts = render_repository_section(deps.repository)
+        parts.extend(["", *render_summary_section(deps.current_summary)])
+        append_bullet_block(parts, "## Allowed Tags (choose 2-4)", ALLOWED_SUMMARY_TAGS)
+        parts.extend(["", "Use the user's edit request to adjust this preview."])
+        return "\n".join(parts)
 
     async def revise(
         self, *, repository: RepositoryInfo, summary: RepositorySummary, edit_request: str
@@ -98,7 +48,7 @@ class RevisionAgent(BaseAgent[RevisionDependencies, RepositorySummary]):
         )
 
         deps = RevisionDependencies(repository=repository, current_summary=summary)
-        instructions = "Edit request from the user:\n" + edit_request.strip()
+        prompt = _REVISION_REQUEST_PREFIX + edit_request.strip()
 
         await logger.adebug(
             "Revision context prepared",
@@ -109,7 +59,7 @@ class RevisionAgent(BaseAgent[RevisionDependencies, RepositorySummary]):
 
         try:
             await logger.adebug("Invoking AI agent for revision", repository=repository.full_name)
-            result = await self._agent.run(instructions, deps=deps)
+            result = await self._agent.run(prompt, deps=deps)
         except Exception as exc:
             await logger.aerror(
                 "Failed to revise preview",
@@ -119,6 +69,8 @@ class RevisionAgent(BaseAgent[RevisionDependencies, RepositorySummary]):
             )
             raise PreviewEditError(original_error=exc) from exc
 
+        model_name = result.response.model_name or "unknown"
+
         await logger.ainfo(
             "Preview revision completed successfully",
             repository=repository.full_name,
@@ -126,7 +78,7 @@ class RevisionAgent(BaseAgent[RevisionDependencies, RepositorySummary]):
             new_features_count=len(result.output.key_features),
             new_links_count=len(result.output.important_links),
             new_tags_count=len(result.output.tags),
-            model_name=result.response.model_name,
+            model_name=model_name,
         )
 
-        return RevisionResult(summary=result.output, model_name=result.response.model_name or "unknown")
+        return RevisionResult(summary=result.output, model_name=model_name)
