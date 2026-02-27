@@ -5,14 +5,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .post import setup_post
+from .post import create_post_router
 
 if TYPE_CHECKING:
     from aiogram import Dispatcher
 
 
 def register_modules(dp: Dispatcher, *, allowed_chat_id: int, post_topic_id: int) -> None:
-    setup_post(dp, allowed_chat_id=allowed_chat_id, post_topic_id=post_topic_id)
+    dp.include_router(create_post_router(allowed_chat_id=allowed_chat_id, post_topic_id=post_topic_id))
 
 
 __all__ = ("register_modules",)

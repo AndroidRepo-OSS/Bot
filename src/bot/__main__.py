@@ -8,15 +8,14 @@ import asyncio
 import logging
 
 import uvloop
-from aiogram import Bot, Dispatcher
+from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import LinkPreviewOptions
 
 from .config import BotSettings
-from .container import setup_dependencies
+from .container import create_dispatcher
 from .logging import get_logger, setup_logging
-from .modules import register_modules
 
 logger = get_logger(__name__)
 
@@ -30,12 +29,10 @@ def parse_args() -> argparse.Namespace:
 async def main() -> None:
     settings = BotSettings()  # ty: ignore[missing-argument]
 
-    defaults = DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True)
+    defaults = DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview=LinkPreviewOptions(is_disabled=True))
     bot = Bot(token=settings.bot_token, default=defaults)
 
-    dp = Dispatcher(storage=MemoryStorage())
-    setup_dependencies(dp, bot, settings)
-    register_modules(dp, allowed_chat_id=settings.allowed_chat_id, post_topic_id=settings.post_topic_id)
+    dp = create_dispatcher(bot=bot, settings=settings)
 
     await logger.ainfo("Starting bot...")
     allowed_updates = dp.resolve_used_update_types()

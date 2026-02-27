@@ -3,29 +3,28 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
+from aiogram import F, Router
 from aiogram.utils.callback_answer import CallbackAnswerMiddleware
-
-from bot.filters import ChatFilter, TopicFilter
 
 from .handlers import command, debug, edit, publish
 
-if TYPE_CHECKING:
-    from aiogram import Dispatcher
+_INTERACTIVE_ROUTERS = (command.router, edit.router, publish.router)
 
 
-def setup_post(dp: Dispatcher, *, allowed_chat_id: int, post_topic_id: int) -> None:
-    chat_filter = ChatFilter(allowed_chat_id)
-    topic_filter = TopicFilter(post_topic_id)
+def create_post_router(*, allowed_chat_id: int, post_topic_id: int) -> Router:
+    router = Router(name="post")
 
-    for router in (command.router, edit.router, publish.router):
-        router.message.filter(chat_filter, topic_filter)
-        router.callback_query.filter(chat_filter, topic_filter)
-        router.callback_query.middleware(CallbackAnswerMiddleware())
-        dp.include_router(router)
+    for child_router in _INTERACTIVE_ROUTERS:
+        _configure_post_interactions(child_router, allowed_chat_id=allowed_chat_id, post_topic_id=post_topic_id)
 
-    dp.include_router(debug.router)
+    router.include_routers(*_INTERACTIVE_ROUTERS, debug.router)
+    return router
 
 
-__all__ = ("setup_post",)
+def _configure_post_interactions(router: Router, *, allowed_chat_id: int, post_topic_id: int) -> None:
+    router.message.filter(F.chat.id == allowed_chat_id, F.message_thread_id == post_topic_id)
+    router.callback_query.filter(F.message.chat.id == allowed_chat_id, F.message.message_thread_id == post_topic_id)
+    router.callback_query.middleware(CallbackAnswerMiddleware())
+
+
+__all__ = ("create_post_router",)

@@ -12,7 +12,8 @@ from uuid import uuid4
 from aiogram import Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
-from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import BufferedInputFile
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.integrations.ai import NonAndroidProjectError, RepositorySummaryError
 from bot.integrations.repositories.errors import RepositoryClientError
@@ -27,7 +28,7 @@ from bot.modules.post.utils.session import cleanup_messages, reset_submission_st
 if TYPE_CHECKING:
     from aiogram.filters import CommandObject
     from aiogram.fsm.context import FSMContext
-    from aiogram.types import Message
+    from aiogram.types import InlineKeyboardMarkup, Message
 
     from bot.config import BotSettings
     from bot.db import PostsRepository
@@ -101,9 +102,8 @@ async def handle_post(
         if recent_post:
             next_allowed = recent_post.posted_at + timedelta(days=90)
             link = build_channel_message_link(settings.post_channel_id, recent_post.channel_message_id)
-            keyboard = InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="See previous post", url=link)]]
-            )
+            keyboard_builder = InlineKeyboardBuilder()
+            keyboard_builder.button(text="See previous post", url=link)
             await telegram_logger.log_post_recently_posted(
                 message.from_user,
                 repository,
@@ -116,7 +116,7 @@ async def handle_post(
                 message,
                 state,
                 "❌ This repository was already posted in the last 3 months. Please wait before reposting.",
-                reply_markup=keyboard,
+                reply_markup=keyboard_builder.as_markup(),
             )
             return
 

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from aiogram import Router
 from aiogram.filters import CommandStart
+from aiogram.types import LinkPreviewOptions
 from aiogram.utils.formatting import Bold, Text, TextLink, as_key_value, as_list
 
 if TYPE_CHECKING:
@@ -38,7 +39,7 @@ async def handle_preview_debug_link(
         return
 
     content = _render_repository(submission_id, preview_entry)
-    await message.answer(**content.as_kwargs(), disable_web_page_preview=True)
+    await message.answer(**content.as_kwargs(), link_preview_options=LinkPreviewOptions(is_disabled=True))
 
 
 def _extract_submission_id(payload: str) -> str | None:
