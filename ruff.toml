@@ -1,0 +1,65 @@
+fix = true
+line-length = 120
+preview = true
+show-fixes = true
+unsafe-fixes = true
+
+src = ["src"]
+
+[format]
+skip-magic-trailing-comma = true
+
+[lint]
+future-annotations = true
+select = [
+    "ANN",
+    "ASYNC",
+    "BLE",
+    "FBT",
+    "A",
+    "C4",
+    "C90",
+    "DTZ",
+    "EM",
+    "FA",
+    "INT",
+    "ISC",
+    "LOG",
+    "G",
+    "INP",
+    "PIE",
+    "T20",
+    "PYI",
+    "Q",
+    "RET",
+    "SIM",
+    "SLOT",
+    "TID",
+    "TC",
+    "PTH",
+    "I",
+    "N",
+    "PERF",
+    "E",
+    "W",
+    "F",
+    "PL",
+    "UP",
+    "FURB",
+    "RUF",
+    "TRY",
+    "FLY",
+]
+
+[lint.isort]
+split-on-trailing-comma = false
+known-first-party = ["androidrepo_bot"]
+
+[lint.flake8-tidy-imports]
+ban-relative-imports = "parents"
+
+[lint.flake8-tidy-imports.banned-api]
+"logging.getLogger".msg = "Use structlog.get_logger for application logging."
+
+[lint.per-file-ignores]
+"src/androidrepo_bot/log_config.py" = ["banned-api"]

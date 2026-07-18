@@ -1,0 +1,63 @@
+name: android-repository
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: androidrepo
+      POSTGRES_USER: androidrepo
+      POSTGRES_PASSWORD: androidrepo
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U androidrepo -d androidrepo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  bot:
+    image: androidrepo-bot:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      AR_DATABASE_URL: ${AR_DATABASE_URL:-postgresql+asyncpg://androidrepo:androidrepo@postgres:5432/androidrepo}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 180s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  migrate:
+    image: androidrepo-bot:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      AR_DATABASE_URL: ${AR_DATABASE_URL:-postgresql+asyncpg://androidrepo:androidrepo@postgres:5432/androidrepo}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
+    restart: "no"
+    entrypoint: ["alembic"]
+    command: ["-c", "/app/alembic.ini", "upgrade", "head"]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  postgres-data:

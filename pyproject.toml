@@ -1,0 +1,45 @@
+[project]
+name = "androidrepo-bot"
+version = "0.1.0"
+description = "Telegram bot for reviewed Android Repository channel posts"
+readme = "README.md"
+authors = [{ name = "Hitalo M." }]
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+classifiers = ["Private :: Do Not Upload"]
+requires-python = ">=3.14"
+dependencies = [
+    "aiogram[fast]",
+    "aiohttp[speedups]>=3.14,<4",
+    "alembic>=1.18,<2",
+    "asyncpg>=0.31,<1",
+    "pillow",
+    "pydantic>=2.13,<3",
+    "pydantic-ai-slim[openai]>=2.7,<3",
+    "pydantic-settings",
+    "sqlalchemy>=2.0.51,<2.1",
+    "structlog>=26.1.0",
+    "uvloop>=0.22.1",
+]
+
+[project.scripts]
+androidrepo-bot = "androidrepo_bot.cli:main"
+
+[dependency-groups]
+dev = [
+    "pre-commit",
+    "pyright",
+    "ruff",
+]
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+[tool.pyright]
+include = ["src"]
+pythonVersion = "3.14"
+pythonPlatform = "Linux"
+typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
