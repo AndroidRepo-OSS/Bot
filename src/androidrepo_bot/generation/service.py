@@ -148,6 +148,11 @@ class GenerationService:
 
 
 def resolve_draft(repository: RepositoryDetails, generated: GeneratedPost) -> PostDraft:
+    download_link = repository.link_by_id(generated.download_link_id)
+    if download_link is None:
+        msg = "Generated download link must resolve to a verified repository destination"
+        raise ValueError(msg)
+
     links_by_url: dict[str, PostLink] = {}
     repository_link = repository.link_by_id(REPOSITORY_LINK_ID)
     if repository_link is not None:
@@ -166,5 +171,6 @@ def resolve_draft(repository: RepositoryDetails, generated: GeneratedPost) -> Po
         summary=generated.summary,
         features=generated.features,
         links=tuple(links_by_url.values())[:_MAXIMUM_DRAFT_LINKS],
+        download_url=download_link.url,
         tags=generated.tags,
     )

@@ -52,6 +52,10 @@ def invalid_generated_link_ids(repository: RepositoryDetails, output: GeneratedP
     return frozenset(link.id for link in output.links if link.id not in repository.selectable_link_ids)
 
 
+def has_valid_download_link(repository: RepositoryDetails, output: GeneratedPost) -> bool:
+    return repository.link_by_id(output.download_link_id) is not None
+
+
 def summary_redundant_features(output: GeneratedPost) -> tuple[str, ...]:
     normalized_summary = _normalized_text(output.summary)
     summary_terms = _meaningful_terms(output.summary)
@@ -146,6 +150,7 @@ def _is_literal_url_label(label: str, url: str) -> bool:
 
 def validate_generated_output(repository: RepositoryDetails, output: GeneratedPost) -> tuple[str, ...]:
     candidates = (
+        _download_link_rule(repository, output),
         _selectable_link_ids_rule(repository, output),
         _text_budget_rule(repository, output),
         _summary_feature_redundancy_rule(output),
@@ -163,6 +168,16 @@ def validate_generated_post(ctx: RunContext[RepositoryDetails], output: Generate
     if not messages:
         return output
     raise ModelRetry(_retry_message(messages))
+
+
+def _download_link_rule(repository: RepositoryDetails, output: GeneratedPost) -> str | None:
+    if has_valid_download_link(repository, output):
+        return None
+
+    return (
+        "Select download_link_id from the supplied repository or selectable link IDs. "
+        f"Invalid download link ID: {output.download_link_id}."
+    )
 
 
 def _retry_message(messages: tuple[str, ...]) -> str:

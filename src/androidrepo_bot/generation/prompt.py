@@ -65,7 +65,17 @@ projects. Use a clear, technical, informative tone without promotional copy.
 
 # Links
 - The mandatory repository destination is ``links.data.repository``. Draft
-  mapping adds it automatically; never return or select its ID.
+  mapping adds it automatically; never include its ID in the optional ``links``
+  list. It may be used as ``download_link_id`` only as the fallback described
+  below.
+- Always return ``download_link_id``. Choose the exact ID of the most suitable
+  official place where a reader can obtain the project. Prefer an official app
+  store or package repository, then the latest release, and fall back to the
+  official source repository only when no better download destination exists.
+- Treat only destinations in ``links.data.repository`` and
+  ``links.data.selectable`` as verified. Never invent, rewrite, or guess a URL
+  or link ID. The chosen destination becomes the post's mandatory inline
+  Download button.
 - Select optional destinations only from ``links.data.selectable`` and return
   each selected destination's exact ID.
 - Give every selection a concise semantic destination label derived from its
@@ -97,7 +107,7 @@ projects. Use a clear, technical, informative tone without promotional copy.
   numbered lists, trailing calls to action, or first-person phrasing.
 - Return categories only in the structured tags field.
 - Before returning, remove unsupported or duplicate claims, verify the project
-  name and selectable link IDs, and check every character budget.
+  name, download destination, selectable link IDs, and every character budget.
 """.strip()
 
 

@@ -231,6 +231,13 @@ class GeneratedPost(_StrictModel):
         BeforeValidator(_json_array_to_tuple),
         Field(max_length=4, description="Useful non-repository destinations selected only by exact inspected link ID."),
     ] = ()
+    download_link_id: LinkId = Field(
+        description=(
+            "The exact ID of the most appropriate official download destination in the supplied links evidence. "
+            "Prefer an official app store or package repository, then the latest release, and use the source "
+            "repository only when no better official download destination is available."
+        )
+    )
     tags: Annotated[
         tuple[PostTag, ...],
         BeforeValidator(_normalize_tags),

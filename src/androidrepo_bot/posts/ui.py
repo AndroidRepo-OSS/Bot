@@ -33,23 +33,31 @@ class PostCallback(CallbackData, prefix=POST_CALLBACK_PREFIX):
     action: PostAction
 
 
-def draft_keyboard() -> InlineKeyboardMarkup:
+def draft_keyboard(draft: PostDraft) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+    builder.button(text="📥 Download", url=draft.download_url)
     for text, action in (
         ("🚀 Publish", PostAction.PUBLISH),
         ("🔄 Regenerate", PostAction.REGENERATE),
         ("✖️ Cancel", PostAction.CANCEL),
     ):
         builder.button(text=text, callback_data=PostCallback(action=action))
-    builder.adjust(1, 2)
+    builder.adjust(1, 1, 2)
     return builder.as_markup()
 
 
-def publish_confirmation_keyboard() -> InlineKeyboardMarkup:
+def publish_confirmation_keyboard(draft: PostDraft) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+    builder.button(text="📥 Download", url=draft.download_url)
     builder.button(text="✅ Publish now", callback_data=PostCallback(action=PostAction.CONFIRM_PUBLISH))
     builder.button(text="↩️ Back", callback_data=PostCallback(action=PostAction.BACK))
-    builder.adjust(1, 1)
+    builder.adjust(1, 1, 1)
+    return builder.as_markup()
+
+
+def published_post_keyboard(draft: PostDraft) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📥 Download", url=draft.download_url)
     return builder.as_markup()
 
 

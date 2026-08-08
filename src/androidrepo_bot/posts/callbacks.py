@@ -29,6 +29,7 @@ from androidrepo_bot.posts.ui import (
     PostCallback,
     draft_keyboard,
     publish_confirmation_keyboard,
+    published_post_keyboard,
     render_post_media,
 )
 
@@ -56,7 +57,7 @@ async def handle_publish_request(callback: CallbackQuery, state: FSMContext) -> 
         await message.answer(PENDING_PUBLICATION_MESSAGE)
         await _answer(callback, "Finish saving the existing publication.")
         return
-    await message.edit_reply_markup(reply_markup=publish_confirmation_keyboard())
+    await message.edit_reply_markup(reply_markup=publish_confirmation_keyboard(session.draft))
     await request_publication_confirmation(state)
     await _answer(callback, "Ready to publish. Confirm below.")
 
@@ -84,7 +85,7 @@ async def handle_publish_confirmation(
                 session.registered_repository, requested_by_user_id=callback.from_user.id
             )
             if not cooldown.allowed:
-                await message.edit_reply_markup(reply_markup=draft_keyboard())
+                await message.edit_reply_markup(reply_markup=draft_keyboard(session.draft))
                 await return_to_draft(state)
                 await message.answer(**_publication_cooldown_message(cooldown.blocked_until).as_kwargs())
                 return
@@ -94,7 +95,7 @@ async def handle_publish_confirmation(
                     chat_id=settings.channel_id,
                     from_chat_id=message.chat.id,
                     message_id=session.message_id,
-                    reply_markup=None,
+                    reply_markup=published_post_keyboard(session.draft),
                 )
             except TelegramAPIError as error:
                 await message.answer("⚠️ Could not publish. Check the bot's channel permissions and try again.")
@@ -155,7 +156,7 @@ async def handle_publish_back(callback: CallbackQuery, state: FSMContext) -> Non
         await message.answer(PENDING_PUBLICATION_MESSAGE)
         await _answer(callback, "The published receipt must be saved first.")
         return
-    await message.edit_reply_markup(reply_markup=draft_keyboard())
+    await message.edit_reply_markup(reply_markup=draft_keyboard(session.draft))
     await return_to_draft(state)
     await _answer(callback, "Publication cancelled. Draft kept.")
 
@@ -227,7 +228,10 @@ async def _answer(callback: CallbackQuery, text: str) -> None:
 async def _send_replacement(message: Message, draft: PostDraft, banner: BannerImage) -> Message:
     media = render_post_media(draft, banner)
     return await message.answer_photo(
-        photo=media.media, caption=media.caption, caption_entities=media.caption_entities, reply_markup=draft_keyboard()
+        photo=media.media,
+        caption=media.caption,
+        caption_entities=media.caption_entities,
+        reply_markup=draft_keyboard(draft),
     )
 
 

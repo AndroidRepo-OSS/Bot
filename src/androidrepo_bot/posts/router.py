@@ -119,7 +119,10 @@ async def _prepare_draft(
     await progress.complete_step()
     media = render_post_media(creation.draft, banner)
     draft_message = await message.answer_photo(
-        photo=media.media, caption=media.caption, caption_entities=media.caption_entities, reply_markup=draft_keyboard()
+        photo=media.media,
+        caption=media.caption,
+        caption_entities=media.caption_entities,
+        reply_markup=draft_keyboard(creation.draft),
     )
     return creation, banner, draft_message.message_id
 
