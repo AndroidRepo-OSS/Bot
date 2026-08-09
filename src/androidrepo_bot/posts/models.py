@@ -103,7 +103,7 @@ class PostDraft:
     summary: str
     features: tuple[str, ...]
     links: tuple[PostLink, ...]
-    download_url: str
+    download_url: str | None
     tags: tuple[PostTag, ...]
 
     def __post_init__(self) -> None:
@@ -111,7 +111,9 @@ class PostDraft:
         summary = self.summary.strip()
         features = tuple(feature.strip() for feature in self.features)
         links = tuple(self.links)
-        download_url = require_web_url(self.download_url, subject="Post download URL")
+        download_url = (
+            require_web_url(self.download_url, subject="Post download URL") if self.download_url is not None else None
+        )
         tags = tuple(self.tags)
 
         if not title:

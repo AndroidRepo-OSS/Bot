@@ -211,6 +211,28 @@ class GeneratedLink(_StrictModel):
     label: LinkLabel
 
 
+class NotAndroidProject(_StrictModel):
+    reason: Annotated[
+        str,
+        BeforeValidator(_normalize_text),
+        Field(min_length=1, max_length=280, description="Evidence-based reason the project is not related to Android."),
+        AfterValidator(_validate_plain_text),
+    ]
+
+
+class MissingDownloadSource(_StrictModel):
+    reason: Annotated[
+        str,
+        BeforeValidator(_normalize_text),
+        Field(
+            min_length=1,
+            max_length=280,
+            description="Evidence-based explanation that no official install or release download source was found.",
+        ),
+        AfterValidator(_validate_plain_text),
+    ]
+
+
 class GeneratedPost(_StrictModel):
     project_name: ProjectName
     summary: Summary
@@ -231,11 +253,10 @@ class GeneratedPost(_StrictModel):
         BeforeValidator(_json_array_to_tuple),
         Field(max_length=4, description="Useful non-repository destinations selected only by exact inspected link ID."),
     ] = ()
-    download_link_id: LinkId = Field(
+    download_link_id: LinkId | None = Field(
         description=(
-            "The exact ID of the most appropriate official download destination in the supplied links evidence. "
-            "Prefer an official app store or package repository, then the latest release, and use the source "
-            "repository only when no better official download destination is available."
+            "The exact ID of the most appropriate official install or release download destination in the supplied "
+            "selectable links, or null only when the user explicitly approved generation without one."
         )
     )
     tags: Annotated[
@@ -268,3 +289,6 @@ class GeneratedPost(_StrictModel):
             raise ValueError(msg)
 
         return self
+
+
+type GeneratedOutput = GeneratedPost | NotAndroidProject | MissingDownloadSource

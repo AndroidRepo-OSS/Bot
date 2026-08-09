@@ -45,7 +45,12 @@ class PostService:
         self._publication_locks: dict[int, Lock] = {}
 
     async def create(
-        self, repository: RepositoryRef, *, requested_by_user_id: int, progress: ProgressCallback | None = None
+        self,
+        repository: RepositoryRef,
+        *,
+        requested_by_user_id: int,
+        progress: ProgressCallback | None = None,
+        allow_missing_download: bool = False,
     ) -> PostCreation:
         details = await self.repositories.get(repository)
         if progress is not None:
@@ -57,13 +62,13 @@ class PostService:
             await record_blocked_attempt(self.sessions, registered, cooldown, requested_by_user_id=requested_by_user_id)
             raise CooldownBlockedError(cooldown)
 
-        draft = await self.generation.generate(details)
+        draft = await self.generation.generate(details, allow_missing_download=allow_missing_download)
         if progress is not None:
             await progress()
         return PostCreation(details, registered, draft)
 
-    async def regenerate(self, repository: RepositoryDetails) -> PostDraft:
-        return await self.generation.generate(repository)
+    async def regenerate(self, repository: RepositoryDetails, *, allow_missing_download: bool = False) -> PostDraft:
+        return await self.generation.generate(repository, allow_missing_download=allow_missing_download)
 
     async def render_banner(self, draft: PostDraft, repository: RepositoryDetails) -> BannerImage:
         return await self.banners.render(

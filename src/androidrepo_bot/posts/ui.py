@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 TELEGRAM_CAPTION_LIMIT = 1_024
 POST_CALLBACK_PREFIX = "post"
+DOWNLOAD_CALLBACK_PREFIX = "download_confirmation"
 logger = structlog.get_logger(__name__)
 
 
@@ -33,29 +34,52 @@ class PostCallback(CallbackData, prefix=POST_CALLBACK_PREFIX):
     action: PostAction
 
 
+class DownloadDecision(StrEnum):
+    GENERATE = "generate"
+    CANCEL = "cancel"
+
+
+class DownloadDecisionCallback(CallbackData, prefix=DOWNLOAD_CALLBACK_PREFIX):
+    action: DownloadDecision
+
+
+def missing_download_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="Generate without download", callback_data=DownloadDecisionCallback(action=DownloadDecision.GENERATE)
+    )
+    builder.button(text="Cancel", callback_data=DownloadDecisionCallback(action=DownloadDecision.CANCEL))
+    builder.adjust(1, 1)
+    return builder.as_markup()
+
+
 def draft_keyboard(draft: PostDraft) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="📥 Download", url=draft.download_url)
+    if draft.download_url is not None:
+        builder.button(text="📥 Download", url=draft.download_url)
     for text, action in (
         ("🚀 Publish", PostAction.PUBLISH),
         ("🔄 Regenerate", PostAction.REGENERATE),
         ("✖️ Cancel", PostAction.CANCEL),
     ):
         builder.button(text=text, callback_data=PostCallback(action=action))
-    builder.adjust(1, 1, 2)
+    builder.adjust(*(1, 1, 2) if draft.download_url is not None else (1, 2))
     return builder.as_markup()
 
 
 def publish_confirmation_keyboard(draft: PostDraft) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="📥 Download", url=draft.download_url)
+    if draft.download_url is not None:
+        builder.button(text="📥 Download", url=draft.download_url)
     builder.button(text="✅ Publish now", callback_data=PostCallback(action=PostAction.CONFIRM_PUBLISH))
     builder.button(text="↩️ Back", callback_data=PostCallback(action=PostAction.BACK))
-    builder.adjust(1, 1, 1)
+    builder.adjust(*(1, 1, 1) if draft.download_url is not None else (1, 1))
     return builder.as_markup()
 
 
-def published_post_keyboard(draft: PostDraft) -> InlineKeyboardMarkup:
+def published_post_keyboard(draft: PostDraft) -> InlineKeyboardMarkup | None:
+    if draft.download_url is None:
+        return None
     builder = InlineKeyboardBuilder()
     builder.button(text="📥 Download", url=draft.download_url)
     return builder.as_markup()

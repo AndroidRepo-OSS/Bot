@@ -24,3 +24,11 @@ class ExternalServiceTimeoutError(ExternalServiceError):
 
 class GenerationError(ApplicationError):
     pass
+
+
+class NotAndroidProjectError(GenerationError):
+    pass
+
+
+class MissingDownloadSourceError(GenerationError):
+    pass

@@ -9,9 +9,10 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.profiles.openai import OpenAIModelProfile
 from pydantic_ai.providers.openai import OpenAIProvider
 
-from androidrepo_bot.errors import GenerationError
+from androidrepo_bot.errors import GenerationError, MissingDownloadSourceError, NotAndroidProjectError
 from androidrepo_bot.generation.prompt import POST_INSTRUCTIONS, build_generation_prompt
-from androidrepo_bot.generation.schema import GeneratedPost
+from androidrepo_bot.generation.schema import GeneratedOutput, GeneratedPost, MissingDownloadSource, NotAndroidProject
+from androidrepo_bot.generation.types import GenerationContext
 from androidrepo_bot.generation.validation import validate_generated_post
 from androidrepo_bot.posts.models import PostDraft, PostLink
 from androidrepo_bot.repositories.models import REPOSITORY_LINK_ID, RepositoryDetails
@@ -29,7 +30,7 @@ _ZEN_API_BASE_URL = "https://opencode.ai/zen/v1"
 
 logger = structlog.get_logger(__name__)
 
-type PostAgent = Agent[RepositoryDetails, GeneratedPost]
+type PostAgent = Agent[GenerationContext, GeneratedOutput]
 type _LogValue = str | int | float | bool | None
 type _LogContext = Mapping[str, _LogValue]
 
@@ -50,14 +51,26 @@ def create_zen_model(*, api_key: str, model_name: str) -> OpenAIChatModel:
 
 
 def create_post_agent(model: Model) -> PostAgent:
-    agent = Agent[RepositoryDetails, GeneratedPost](
+    agent = Agent[GenerationContext, GeneratedOutput](
         model,
         name="android_repository_post",
         description="Generate one grounded Android Repository channel post.",
-        deps_type=RepositoryDetails,
-        output_type=ToolOutput(
-            GeneratedPost, name="return_post_draft", description="Return the complete evidence-grounded post draft."
-        ),
+        deps_type=GenerationContext,
+        output_type=[
+            ToolOutput(
+                GeneratedPost, name="return_post_draft", description="Return the complete evidence-grounded post draft."
+            ),
+            ToolOutput(
+                NotAndroidProject,
+                name="not_android_project",
+                description="Return an error when the evidence does not directly support Android relevance.",
+            ),
+            ToolOutput(
+                MissingDownloadSource,
+                name="missing_download_source",
+                description="Return a warning when no official install or release download source is available.",
+            ),
+        ],
         instructions=POST_INSTRUCTIONS,
         model_settings=ModelSettings(temperature=0.2),
         retries={"output": OUTPUT_RETRIES},
@@ -70,7 +83,7 @@ class GenerationService:
     def __init__(self, *, agent: PostAgent) -> None:
         self._agent = agent
 
-    async def generate(self, repository: RepositoryDetails, /) -> PostDraft:
+    async def generate(self, repository: RepositoryDetails, /, *, allow_missing_download: bool = False) -> PostDraft:
         log_context: _LogContext = {
             "operation": "generation",
             "provider": repository.ref.provider.value,
@@ -88,7 +101,9 @@ class GenerationService:
         )
 
         try:
-            draft, usage = await self._generate_draft(repository, log_context)
+            output, usage = await self._generate_output(
+                repository, log_context, allow_missing_download=allow_missing_download
+            )
         except Exception as error:
             logger.warning(
                 "Post AI operation failed",
@@ -99,6 +114,13 @@ class GenerationService:
             )
             msg = "The post generation agent could not produce a draft"
             raise GenerationError(msg) from error
+
+        if isinstance(output, NotAndroidProject):
+            raise NotAndroidProjectError(output.reason)
+        if isinstance(output, MissingDownloadSource):
+            raise MissingDownloadSourceError(output.reason)
+
+        draft = resolve_draft(repository, output)
 
         logger.info(
             "Post AI operation completed",
@@ -114,11 +136,11 @@ class GenerationService:
         )
         return draft
 
-    async def _generate_draft(
-        self, repository: RepositoryDetails, log_context: _LogContext
-    ) -> tuple[PostDraft, RunUsage]:
+    async def _generate_output(
+        self, repository: RepositoryDetails, log_context: _LogContext, *, allow_missing_download: bool
+    ) -> tuple[GeneratedOutput, RunUsage]:
         stage_started_at = perf_counter()
-        generation_prompt = build_generation_prompt(repository)
+        generation_prompt = build_generation_prompt(repository, allow_missing_download=allow_missing_download)
         logger.debug(
             "Post AI evidence prompt prepared", **log_context, duration_seconds=perf_counter() - stage_started_at
         )
@@ -127,7 +149,7 @@ class GenerationService:
         async with timeout(_GENERATION_TIMEOUT_SECONDS):
             result = await self._agent.run(
                 generation_prompt,
-                deps=repository,
+                deps=GenerationContext(repository=repository, allow_missing_download=allow_missing_download),
                 model_settings=ModelSettings(timeout=_GENERATION_TIMEOUT_SECONDS),
                 usage_limits=UsageLimits(request_limit=MODEL_REQUEST_LIMIT),
                 metadata={"provider": repository.ref.provider.value, "repository": repository.ref.full_name},
@@ -135,21 +157,20 @@ class GenerationService:
         logger.debug("Post AI model run completed", **log_context, duration_seconds=perf_counter() - stage_started_at)
 
         stage_started_at = perf_counter()
-        draft = resolve_draft(repository, result.output)
         logger.debug(
-            "Post AI draft resolved",
+            "Post AI output resolved",
             **log_context,
             duration_seconds=perf_counter() - stage_started_at,
-            feature_count=len(draft.features),
-            link_count=len(draft.links),
-            tag_count=len(draft.tags),
+            output_type=type(result.output).__name__,
         )
-        return draft, result.usage
+        return result.output, result.usage
 
 
 def resolve_draft(repository: RepositoryDetails, generated: GeneratedPost) -> PostDraft:
-    download_link = repository.link_by_id(generated.download_link_id)
-    if download_link is None:
+    download_link = (
+        repository.link_by_id(generated.download_link_id) if generated.download_link_id is not None else None
+    )
+    if generated.download_link_id is not None and download_link is None:
         msg = "Generated download link must resolve to a verified repository destination"
         raise ValueError(msg)
 
@@ -171,6 +192,6 @@ def resolve_draft(repository: RepositoryDetails, generated: GeneratedPost) -> Po
         summary=generated.summary,
         features=generated.features,
         links=tuple(links_by_url.values())[:_MAXIMUM_DRAFT_LINKS],
-        download_url=download_link.url,
+        download_url=download_link.url if download_link is not None else None,
         tags=generated.tags,
     )

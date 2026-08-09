@@ -171,7 +171,9 @@ async def handle_regenerate(callback: CallbackQuery, state: FSMContext, post_ser
     progress = await DraftProgress.start(message)
     await progress.complete_step()
     try:
-        draft = await post_service.regenerate(session.repository)
+        draft = await post_service.regenerate(
+            session.repository, allow_missing_download=session.draft.download_url is None
+        )
         await progress.complete_step()
         banner = await post_service.render_banner(draft, session.repository)
         await progress.complete_step()

@@ -3,7 +3,8 @@ from urllib.parse import unquote, urlsplit
 
 from pydantic_ai import ModelRetry, RunContext
 
-from androidrepo_bot.generation.schema import GeneratedPost  # ruff: ignore[typing-only-first-party-import]
+from androidrepo_bot.generation.schema import GeneratedOutput, GeneratedPost, MissingDownloadSource
+from androidrepo_bot.generation.types import GenerationContext  # ruff: ignore[typing-only-first-party-import]
 from androidrepo_bot.repositories.models import REPOSITORY_LINK_ID, RepositoryDetails
 
 DRAFT_TEXT_BUDGET = 950
@@ -53,7 +54,7 @@ def invalid_generated_link_ids(repository: RepositoryDetails, output: GeneratedP
 
 
 def has_valid_download_link(repository: RepositoryDetails, output: GeneratedPost) -> bool:
-    return repository.link_by_id(output.download_link_id) is not None
+    return output.download_link_id is not None and output.download_link_id in repository.selectable_link_ids
 
 
 def summary_redundant_features(output: GeneratedPost) -> tuple[str, ...]:
@@ -148,9 +149,11 @@ def _is_literal_url_label(label: str, url: str) -> bool:
     return bool(path_text and normalized_label_text == path_text)
 
 
-def validate_generated_output(repository: RepositoryDetails, output: GeneratedPost) -> tuple[str, ...]:
+def validate_generated_output(
+    repository: RepositoryDetails, output: GeneratedPost, *, allow_missing_download: bool = False
+) -> tuple[str, ...]:
     candidates = (
-        _download_link_rule(repository, output),
+        _download_link_rule(repository, output, allow_missing_download=allow_missing_download),
         _selectable_link_ids_rule(repository, output),
         _text_budget_rule(repository, output),
         _summary_feature_redundancy_rule(output),
@@ -160,22 +163,45 @@ def validate_generated_output(repository: RepositoryDetails, output: GeneratedPo
     return tuple(message for message in candidates if message is not None)
 
 
-def validate_generated_post(ctx: RunContext[RepositoryDetails], output: GeneratedPost) -> GeneratedPost:
+def validate_generated_post(ctx: RunContext[GenerationContext], output: GeneratedOutput) -> GeneratedOutput:
     if ctx.partial_output:
         return output
 
-    messages = validate_generated_output(ctx.deps, output)
+    if isinstance(output, MissingDownloadSource):
+        if ctx.deps.allow_missing_download:
+            msg = (
+                "The user approved generation without a download source. Return return_post_draft with "
+                "download_link_id set to null."
+            )
+            raise ModelRetry(msg)
+        return output
+    if not isinstance(output, GeneratedPost):
+        return output
+
+    messages = validate_generated_output(
+        ctx.deps.repository, output, allow_missing_download=ctx.deps.allow_missing_download
+    )
     if not messages:
         return output
     raise ModelRetry(_retry_message(messages))
 
 
-def _download_link_rule(repository: RepositoryDetails, output: GeneratedPost) -> str | None:
+def _download_link_rule(
+    repository: RepositoryDetails, output: GeneratedPost, *, allow_missing_download: bool
+) -> str | None:
     if has_valid_download_link(repository, output):
         return None
 
+    if output.download_link_id is None:
+        if allow_missing_download:
+            return None
+        return (
+            "No download_link_id was selected. Return missing_download_source instead of a post draft when no official "
+            "download source is available."
+        )
+
     return (
-        "Select download_link_id from the supplied repository or selectable link IDs. "
+        "Select download_link_id only from the supplied selectable link IDs. "
         f"Invalid download link ID: {output.download_link_id}."
     )
 

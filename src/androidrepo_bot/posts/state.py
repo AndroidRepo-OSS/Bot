@@ -8,7 +8,10 @@ from aiogram.types import CallbackQuery, Message
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from androidrepo_bot.posts.models import PostDraft, RegisteredRepository  # ruff: ignore[typing-only-first-party-import]
-from androidrepo_bot.repositories.models import RepositoryDetails  # ruff: ignore[typing-only-first-party-import]
+from androidrepo_bot.repositories.models import (  # ruff: ignore[typing-only-first-party-import]
+    RepositoryDetails,
+    RepositoryRef,
+)
 
 if TYPE_CHECKING:
     from aiogram import Bot
@@ -27,9 +30,14 @@ PENDING_PUBLICATION_MESSAGE = (
 class PostDraftState(StatesGroup):
     active = State()
     confirming_publication = State()
+    awaiting_download_confirmation = State()
 
 
-DRAFT_STATES = (PostDraftState.active, PostDraftState.confirming_publication)
+DRAFT_STATES = (
+    PostDraftState.active,
+    PostDraftState.confirming_publication,
+    PostDraftState.awaiting_download_confirmation,
+)
 _DRAFT_STATE_NAMES = frozenset(state.state for state in DRAFT_STATES)
 
 
@@ -50,6 +58,13 @@ class DraftSession(BaseModel):
     registered_repository: RegisteredRepository
     notice_message_id: int | None = None
     pending_publication: PendingPublication | None = None
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class PendingDownloadConfirmation(BaseModel):
+    owner_id: int
+    repository: RepositoryRef
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -97,6 +112,27 @@ async def request_publication_confirmation(state: FSMContext) -> None:
 
 async def return_to_draft(state: FSMContext) -> None:
     await state.set_state(PostDraftState.active)
+
+
+async def request_download_confirmation(
+    state: FSMContext, *, repository: RepositoryRef, owner_id: int
+) -> PendingDownloadConfirmation:
+    pending = PendingDownloadConfirmation(owner_id=owner_id, repository=repository)
+    await state.set_state(PostDraftState.awaiting_download_confirmation)
+    await state.set_data({"download_confirmation": pending.model_dump(mode="json")})
+    return pending
+
+
+async def load_download_confirmation(state: FSMContext, owner_id: int) -> PendingDownloadConfirmation | None:
+    if await state.get_state() != PostDraftState.awaiting_download_confirmation.state:
+        return None
+    payload = (await state.get_data()).get("download_confirmation")
+    try:
+        pending = PendingDownloadConfirmation.model_validate(payload)
+    except ValidationError:
+        logger.warning("Discarding invalid download confirmation data")
+        return None
+    return pending if pending.owner_id == owner_id else None
 
 
 async def load_session(state: FSMContext, owner_id: int) -> DraftSession | None:
