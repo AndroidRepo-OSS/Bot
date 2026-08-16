@@ -10,6 +10,8 @@ _HOST_LABEL = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
 _MAX_HOSTNAME_LENGTH = 253
 _ASCII_CONTROL_LIMIT = 32
 _ASCII_DELETE = 127
+_REPOSITORY_COMPONENT = re.compile(r"[A-Za-z0-9_.-]+")
+type WebUrlKey = tuple[str, str, str, str, str]
 
 
 def require_web_url(url: str, *, subject: str = "value") -> str:
@@ -58,6 +60,17 @@ def _valid_hostname(hostname: str) -> bool:
     if not ascii_hostname or len(ascii_hostname) > _MAX_HOSTNAME_LENGTH:
         return False
     return all(_HOST_LABEL.fullmatch(label) for label in ascii_hostname.split("."))
+
+
+def web_url_key(url: str) -> WebUrlKey:
+    parsed = urlsplit(url)
+    return (
+        parsed.scheme.casefold(),
+        parsed.netloc.casefold(),
+        parsed.path.rstrip("/") or "/",
+        parsed.query,
+        parsed.fragment,
+    )
 
 
 class RepositoryProvider(StrEnum):
@@ -124,7 +137,7 @@ class RepositoryRef:
         if (
             not namespace
             or not name
-            or any(not re.fullmatch(r"[A-Za-z0-9_.-]+", part) for part in (*parts, name))
+            or any(not _valid_repository_component(part) for part in (*parts, name))
             or (self.provider is RepositoryProvider.GITHUB and len(parts) != 1)
         ):
             msg = f"Invalid {self.provider.display_name} repository reference"
@@ -218,8 +231,11 @@ class RepositoryDetails:
         if len(links_by_id) != len(links):
             msg = "Repository link IDs must be unique"
             raise ValueError(msg)
-        if len({link.url for link in links}) != len(links):
+        if len({web_url_key(link.url) for link in links}) != len(links):
             msg = "Repository link URLs must be unique"
+            raise ValueError(msg)
+        if web_url_key(links_by_id[REPOSITORY_LINK_ID].url) != web_url_key(self.ref.url):
+            msg = "Repository link URL must match the repository reference"
             raise ValueError(msg)
 
         object.__setattr__(self, "provider_repository_id", provider_repository_id)
@@ -261,6 +277,10 @@ class RepositoryDetails:
 
 class RepositoryClient(Protocol):
     async def fetch(self, repository: RepositoryRef) -> RepositoryDetails: ...
+
+
+def _valid_repository_component(value: str) -> bool:
+    return value not in {".", ".."} and _REPOSITORY_COMPONENT.fullmatch(value) is not None
 
 
 def _normalized_unique(values: tuple[str, ...], *, subject: str) -> tuple[str, ...]:

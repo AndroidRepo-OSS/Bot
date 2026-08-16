@@ -5,7 +5,7 @@ from html.parser import HTMLParser
 from typing import TYPE_CHECKING, override
 from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
 
-from androidrepo_bot.repositories.models import RepositoryLink, RepositoryLinkKind, require_web_url
+from androidrepo_bot.repositories.models import RepositoryLink, RepositoryLinkKind, require_web_url, web_url_key
 
 if TYPE_CHECKING:
     from collections.abc import Collection
@@ -43,7 +43,7 @@ _DONATION_TERMS = frozenset({"donate", "donation", "fund", "sponsor", "sponsors"
 
 
 @dataclass(frozen=True, slots=True)
-class LinkCandidate:
+class _LinkCandidate:
     position: int
     label: str
     destination: str
@@ -52,7 +52,7 @@ class LinkCandidate:
 class _AnchorParser(HTMLParser):
     def __init__(self, source: str) -> None:
         super().__init__(convert_charrefs=True)
-        self.candidates: list[LinkCandidate] = []
+        self.candidates: list[_LinkCandidate] = []
         self._line_offsets = [0, *(match.end() for match in re.finditer(r"\n", source))]
         self._anchor: tuple[int, str, list[str]] | None = None
 
@@ -75,32 +75,33 @@ class _AnchorParser(HTMLParser):
         if tag.casefold() != "a" or self._anchor is None:
             return
         position, destination, label = self._anchor
-        self.candidates.append(LinkCandidate(position, " ".join(label), destination))
+        self.candidates.append(_LinkCandidate(position, " ".join(label), destination))
         self._anchor = None
 
 
-def extract_candidates(readme: str) -> list[LinkCandidate]:
+def _extract_candidates(readme: str) -> list[_LinkCandidate]:
     visible = _mask_code_and_comments(readme[:_README_SCAN_LIMIT])
     references = {_reference_key(match.group(1)): match.group(2) for match in _REFERENCE.finditer(visible)}
     candidates = [
         *(
-            LinkCandidate(match.start(), match.group(1), match.group(2) or match.group(3))
+            _LinkCandidate(match.start(), match.group(1), match.group(2) or match.group(3))
             for match in _BADGE_LINK.finditer(visible)
         ),
         *(
-            LinkCandidate(match.start(), match.group(1), match.group(2) or match.group(3))
+            _LinkCandidate(match.start(), match.group(1), match.group(2) or match.group(3))
             for match in _MARKDOWN_LINK.finditer(visible)
         ),
         *(
-            LinkCandidate(match.start(), match.group(1), destination)
+            _LinkCandidate(match.start(), match.group(1), destination)
             for match in _REFERENCE_LINK.finditer(visible)
             if (destination := references.get(_reference_key(match.group(2) or match.group(1))))
         ),
-        *(LinkCandidate(match.start(), match.group(1), match.group(1)) for match in _AUTOLINK.finditer(visible)),
+        *(_LinkCandidate(match.start(), match.group(1), match.group(1)) for match in _AUTOLINK.finditer(visible)),
     ]
 
     parser = _AnchorParser(visible)
     parser.feed(visible)
+    parser.close()
     candidates.extend(parser.candidates)
 
     plain = visible
@@ -116,7 +117,7 @@ def extract_candidates(readme: str) -> list[LinkCandidate]:
         plain = pattern.sub(lambda match: _masked(match.group()), plain)
     plain = _HTML_TAG.sub(lambda match: _masked(match.group()), plain)
     candidates.extend(
-        LinkCandidate(match.start(), match.group(), _trim_bare_url(match.group()))
+        _LinkCandidate(match.start(), match.group(), _trim_bare_url(match.group()))
         for match in _BARE_URL.finditer(plain)
     )
     candidates.sort(key=lambda candidate: candidate.position)
@@ -138,7 +139,7 @@ def build_repository_links(
         links.append(
             RepositoryLink(id="release", label="Latest release", url=release_url, kind=RepositoryLinkKind.RELEASE)
         )
-    if homepage and _url_key(homepage) != _url_key(repository_url):
+    if homepage and web_url_key(homepage) != web_url_key(repository_url):
         links.append(RepositoryLink(id="website", label="Website", url=homepage, kind=RepositoryLinkKind.WEBSITE))
     if readme:
         links.extend(
@@ -150,11 +151,11 @@ def build_repository_links(
 def _readme_links(
     repository_url: str, readme: str, *, readme_url: str | None, known_urls: Collection[str]
 ) -> list[RepositoryLink]:
-    known_keys = {_url_key(url) for url in known_urls}
+    known_keys = {web_url_key(url) for url in known_urls}
     found: list[RepositoryLink] = []
-    for candidate in extract_candidates(readme):
+    for candidate in _extract_candidates(readme):
         url = _resolve_url(candidate.destination, repository_url=repository_url, readme_url=readme_url)
-        if url is None or (key := _url_key(url)) in known_keys:
+        if url is None or (key := web_url_key(url)) in known_keys:
             continue
         try:
             label = _clean_label(candidate.label, url)
@@ -305,14 +306,3 @@ def _reference_key(value: str) -> str:
 
 def _trim_bare_url(url: str) -> str:
     return url.rstrip(".,;:!?)]}")
-
-
-def _url_key(url: str) -> tuple[str, str, str, str, str]:
-    parsed = urlsplit(url)
-    return (
-        parsed.scheme.casefold(),
-        parsed.netloc.casefold(),
-        parsed.path.rstrip("/") or "/",
-        parsed.query,
-        parsed.fragment,
-    )
