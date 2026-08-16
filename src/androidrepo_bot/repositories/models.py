@@ -1,14 +1,28 @@
 import re
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final, assert_never
+from ipaddress import ip_address
+from typing import Final, Protocol, assert_never
 from urllib.parse import urlsplit
 
 REPOSITORY_LINK_ID: Final = "repository"
+_HOST_LABEL = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
+_MAX_HOSTNAME_LENGTH = 253
+_ASCII_CONTROL_LIMIT = 32
+_ASCII_DELETE = 127
 
 
 def require_web_url(url: str, *, subject: str = "value") -> str:
     candidate = url.strip()
+    if not candidate or any(
+        character.isspace()
+        or character == "\\"
+        or ord(character) < _ASCII_CONTROL_LIMIT
+        or ord(character) == _ASCII_DELETE
+        for character in candidate
+    ):
+        msg = f"{subject} must be a valid HTTP or HTTPS URL"
+        raise ValueError(msg)
     try:
         parsed = urlsplit(candidate)
         port = parsed.port
@@ -16,16 +30,34 @@ def require_web_url(url: str, *, subject: str = "value") -> str:
         msg = f"{subject} must be a valid HTTP or HTTPS URL"
         raise ValueError(msg) from error
 
-    if (
-        parsed.scheme.casefold() not in {"http", "https"}
-        or not parsed.hostname
-        or parsed.username is not None
-        or parsed.password is not None
-        or port == 0
-    ):
+    hostname = parsed.hostname
+    valid_authority = (
+        hostname is not None
+        and parsed.username is None
+        and parsed.password is None
+        and port != 0
+        and _valid_hostname(hostname)
+    )
+    if parsed.scheme.casefold() not in {"http", "https"} or not valid_authority:
         msg = f"{subject} must use an HTTP or HTTPS URL"
         raise ValueError(msg)
     return candidate
+
+
+def _valid_hostname(hostname: str) -> bool:
+    try:
+        ip_address(hostname)
+    except ValueError:
+        pass
+    else:
+        return True
+    try:
+        ascii_hostname = hostname.rstrip(".").encode("idna").decode("ascii")
+    except UnicodeError:
+        return False
+    if not ascii_hostname or len(ascii_hostname) > _MAX_HOSTNAME_LENGTH:
+        return False
+    return all(_HOST_LABEL.fullmatch(label) for label in ascii_hostname.split("."))
 
 
 class RepositoryProvider(StrEnum):
@@ -185,8 +217,16 @@ class RepositoryDetails:
     def selectable_link_ids(self) -> frozenset[str]:
         return frozenset(link.id for link in self.links if link.id != REPOSITORY_LINK_ID)
 
+    @property
+    def repository_link(self) -> RepositoryLink:
+        return next(link for link in self.links if link.id == REPOSITORY_LINK_ID)
+
     def link_by_id(self, link_id: str) -> RepositoryLink | None:
         return next((link for link in self.links if link.id == link_id), None)
+
+
+class RepositoryClient(Protocol):
+    async def fetch(self, repository: RepositoryRef) -> RepositoryDetails: ...
 
 
 def _normalized_unique(values: tuple[str, ...], *, subject: str) -> tuple[str, ...]:

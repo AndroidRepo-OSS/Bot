@@ -13,10 +13,6 @@ if TYPE_CHECKING:
     from androidrepo_bot.repositories.models import RepositoryDetails, RepositoryRef
 
 
-def utc_now() -> datetime:
-    return datetime.now(UTC)
-
-
 async def register_repository(
     sessions: async_sessionmaker[AsyncSession], repository: RepositoryDetails, requested: RepositoryRef
 ) -> RegisteredRepository:
@@ -24,19 +20,17 @@ async def register_repository(
         msg = "requested and canonical repositories must use the same provider"
         raise ValueError(msg)
 
-    seen_at = utc_now()
+    seen_at = datetime.now(UTC)
     async with sessions.begin() as session:
-        repository_id = (await session.execute(repository_upsert(repository, seen_at))).scalar_one()
-        await session.execute(alias_upsert(repository_id, requested, seen_at))
+        repository_id = (await session.execute(_repository_upsert(repository, seen_at))).scalar_one()
+        await session.execute(_alias_upsert(repository_id, requested, seen_at))
         if requested != repository.ref:
-            await session.execute(alias_upsert(repository_id, repository.ref, seen_at))
+            await session.execute(_alias_upsert(repository_id, repository.ref, seen_at))
 
-    return RegisteredRepository(
-        id=repository_id, ref=repository.ref, provider_repository_id=repository.provider_repository_id
-    )
+    return RegisteredRepository(id=repository_id, ref=repository.ref)
 
 
-def repository_upsert(repository: RepositoryDetails, seen_at: datetime) -> ReturningInsert[tuple[int]]:
+def _repository_upsert(repository: RepositoryDetails, seen_at: datetime) -> ReturningInsert[tuple[int]]:
     statement = insert(RepositoryApp).values(
         provider=repository.ref.provider.value,
         provider_repository_id=repository.provider_repository_id,
@@ -59,7 +53,7 @@ def repository_upsert(repository: RepositoryDetails, seen_at: datetime) -> Retur
     ).returning(RepositoryApp.id)
 
 
-def alias_upsert(repository_id: int, repository: RepositoryRef, observed_at: datetime) -> Insert:
+def _alias_upsert(repository_id: int, repository: RepositoryRef, observed_at: datetime) -> Insert:
     statement = insert(RepositoryAlias).values(
         repository_app_id=repository_id,
         namespace=repository.namespace,

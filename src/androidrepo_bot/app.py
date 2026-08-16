@@ -21,20 +21,20 @@ from aiogram.types import (
     TelegramObject,
     Update,
 )
-from aiogram.utils.formatting import Bold, Text
+from aiogram.utils.formatting import Bold, as_list
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from androidrepo_bot.admin import AdminLog
-from androidrepo_bot.db import create_database, verify_database
-from androidrepo_bot.generation import GenerationService, create_post_agent, create_zen_model
-from androidrepo_bot.media import BannerService
-from androidrepo_bot.posts.callbacks import router as callbacks_router
-from androidrepo_bot.posts.router import router as posts_router
-from androidrepo_bot.posts.service import PostService
-from androidrepo_bot.repositories import RepositoryService
+from androidrepo_bot.db.engine import database_sessions
+from androidrepo_bot.generation.service import GenerationService, create_post_agent, create_zen_model
+from androidrepo_bot.posts.callbacks import router as post_callbacks
+from androidrepo_bot.posts.commands import router as post_commands
+from androidrepo_bot.posts.drafts import DraftWorkflow
+from androidrepo_bot.posts.publication import PublicationWorkflow
 from androidrepo_bot.repositories.github import GitHubClient
 from androidrepo_bot.repositories.gitlab import GitLabClient
 from androidrepo_bot.repositories.http import create_http_session
+from androidrepo_bot.repositories.models import RepositoryProvider
 from androidrepo_bot.start import router as start_router
 
 if TYPE_CHECKING:
@@ -48,6 +48,7 @@ STAFF_COMMANDS = [
     START_COMMAND,
     BotCommand(command="post", description="Create a repository post"),
     BotCommand(command="cancel", description="Discard the active draft"),
+    BotCommand(command="reconcile", description="Resolve a pending publication"),
 ]
 type Handler = Callable[[TelegramObject, dict[str, Any]], Awaitable[object]]
 
@@ -91,20 +92,23 @@ class StaffTopicMiddleware(BaseMiddleware):
         )
 
 
-def build_dispatcher(settings: Settings, post_service: PostService, admin_log: AdminLog) -> Dispatcher:
+def build_dispatcher(
+    settings: Settings, drafts: DraftWorkflow, publications: PublicationWorkflow, admin_log: AdminLog
+) -> Dispatcher:
     dispatcher = Dispatcher(
         storage=MemoryStorage(),
         fsm_strategy=FSMStrategy.USER_IN_CHAT,
         events_isolation=SimpleEventIsolation(),
         settings=settings,
-        post_service=post_service,
+        drafts=drafts,
+        publications=publications,
         admin_log=admin_log,
     )
     dispatcher.update.outer_middleware(
         StaffTopicMiddleware(staff_chat_id=settings.staff_chat_id, post_topic_id=settings.post_topic_id)
     )
     router = Router(name="androidrepo_bot")
-    router.include_routers(start_router, posts_router, callbacks_router)
+    router.include_routers(start_router, post_commands, post_callbacks)
     dispatcher.include_router(router)
     dispatcher.errors.register(handle_error)
     return dispatcher
@@ -112,13 +116,11 @@ def build_dispatcher(settings: Settings, post_service: PostService, admin_log: A
 
 async def run_bot(settings: Settings) -> None:
     bot = Bot(token=settings.bot_token.get_secret_value(), default=DefaultBotProperties(link_preview_is_disabled=True))
-    database = create_database(settings.database_url.get_secret_value())
 
     async with AsyncExitStack() as stack:
         await stack.enter_async_context(bot)
         http = await stack.enter_async_context(create_http_session())
-        stack.push_async_callback(database.engine.dispose)
-        await verify_database(database)
+        sessions = await stack.enter_async_context(database_sessions(settings.database_url.get_secret_value()))
 
         model = create_zen_model(
             api_key=settings.opencode_zen_api_key.get_secret_value(), model_name=settings.opencode_zen_model
@@ -127,23 +129,26 @@ async def run_bot(settings: Settings) -> None:
         await stack.enter_async_context(agent)
 
         generation = GenerationService(agent=agent)
-        repositories = RepositoryService(
-            github=GitHubClient(session=http, token=_secret_value(settings.github_token)),
-            gitlab=GitLabClient(session=http, token=_secret_value(settings.gitlab_token)),
-        )
-        banners = BannerService(session=http)
-        post_service = PostService(
-            repositories=repositories, generation=generation, banners=banners, sessions=database.sessions
-        )
         admin_log = AdminLog(bot=bot, chat_id=settings.staff_chat_id, topic_id=settings.log_topic_id)
-        dispatcher = build_dispatcher(settings, post_service, admin_log)
+        drafts = DraftWorkflow(
+            providers={
+                RepositoryProvider.GITHUB: GitHubClient(session=http, token=_secret_value(settings.github_token)),
+                RepositoryProvider.GITLAB: GitLabClient(session=http, token=_secret_value(settings.gitlab_token)),
+            },
+            generation=generation,
+            http=http,
+            sessions=sessions,
+            admin_log=admin_log,
+        )
+        publications = PublicationWorkflow(bot=bot, channel_id=settings.channel_id, sessions=sessions)
+        dispatcher = build_dispatcher(settings, drafts, publications, admin_log)
 
         await bot.set_my_commands([START_COMMAND], scope=BotCommandScopeDefault())
         await bot.set_my_commands(STAFF_COMMANDS, scope=BotCommandScopeChat(chat_id=settings.staff_chat_id))
         await admin_log.bot_started()
         try:
             start_polling = cast("Callable[..., Awaitable[None]]", getattr(dispatcher, "start_polling"))
-            await start_polling(bot, allowed_updates=dispatcher.resolve_used_update_types(), close_bot_session=False)
+            await start_polling(bot, close_bot_session=False)
         finally:
             await drain_update_tasks(dispatcher)
             await admin_log.bot_stopped()
@@ -174,7 +179,7 @@ async def handle_error(event: ErrorEvent) -> bool:
     if message is None:
         return True
     try:
-        await message.answer(**Text(Bold("Request failed"), "\n", "Try again in a moment.").as_kwargs())
+        await message.answer(**as_list(Bold("Request failed"), "Try again in a moment.").as_kwargs())
     except TelegramAPIError:
         logger.exception("Failed to send the error response")
     return True

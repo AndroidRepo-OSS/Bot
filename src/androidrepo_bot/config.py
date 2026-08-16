@@ -1,9 +1,8 @@
 from typing import Literal, Self
 
+from aiogram.utils.token import TokenValidationError, validate_token
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-from androidrepo_bot.generation import DEFAULT_MODEL_NAME
 
 LogLevel = Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]
 
@@ -18,7 +17,7 @@ class Settings(BaseSettings):
     log_level: LogLevel = "INFO"
 
     opencode_zen_api_key: SecretStr
-    opencode_zen_model: str = DEFAULT_MODEL_NAME
+    opencode_zen_model: str = "deepseek-v4-flash"
 
     github_token: SecretStr | None = None
     gitlab_token: SecretStr | None = None
@@ -34,7 +33,17 @@ class Settings(BaseSettings):
         hide_input_in_errors=True,
     )
 
-    @field_validator("bot_token", "opencode_zen_api_key")
+    @field_validator("bot_token")
+    @classmethod
+    def validate_bot_token(cls, value: SecretStr) -> SecretStr:
+        try:
+            validate_token(value.get_secret_value())
+        except TokenValidationError as error:
+            message = "AR_BOT_TOKEN must be a valid Telegram bot token"
+            raise ValueError(message) from error
+        return value
+
+    @field_validator("opencode_zen_api_key")
     @classmethod
     def validate_required_secret(cls, value: SecretStr) -> SecretStr:
         if not value.get_secret_value().strip():
@@ -50,18 +59,6 @@ class Settings(BaseSettings):
             message = "AR_OPENCODE_ZEN_MODEL must not be empty"
             raise ValueError(message)
         return value
-
-    @field_validator("database_url")
-    @classmethod
-    def validate_database_url(cls, value: SecretStr) -> SecretStr:
-        database_url = value.get_secret_value().strip()
-        if not database_url:
-            message = "AR_DATABASE_URL must not be empty"
-            raise ValueError(message)
-        if not database_url.startswith("postgresql+asyncpg://"):
-            message = "AR_DATABASE_URL must use the postgresql+asyncpg scheme"
-            raise ValueError(message)
-        return SecretStr(database_url)
 
     @model_validator(mode="after")
     def validate_telegram_targets(self) -> Self:

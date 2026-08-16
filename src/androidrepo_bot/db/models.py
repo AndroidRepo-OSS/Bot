@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from sqlalchemy import (
     BigInteger,
@@ -11,6 +11,7 @@ from sqlalchemy import (
     MetaData,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -25,6 +26,7 @@ NAMING_CONVENTION = {
 
 type IntegerPrimaryKey = Annotated[int, mapped_column(Integer, primary_key=True, autoincrement=True)]
 type Timestamp = Annotated[datetime, mapped_column(DateTime(timezone=True), nullable=False)]
+type PublicationOperationStatus = Literal["copying", "compensating", "completed", "uncertain", "failed", "abandoned"]
 
 
 class Base(DeclarativeBase):
@@ -79,6 +81,51 @@ class PublishedPost(Base):
     channel_id: Mapped[int] = mapped_column(BigInteger)
     channel_message_id: Mapped[int] = mapped_column(BigInteger)
     published_at: Mapped[Timestamp]
+
+
+class PublicationOperation(Base):
+    __tablename__ = "publication_operations"
+    __table_args__ = (
+        Index("ix_publication_operations_status_lease", "status", "lease_expires_at"),
+        Index(
+            "uq_publication_operations_open_repository",
+            "repository_app_id",
+            unique=True,
+            postgresql_where=text("status IN ('copying', 'compensating', 'uncertain')"),
+        ),
+        CheckConstraint(
+            "(status = 'copying' AND lease_expires_at IS NOT NULL "
+            "AND channel_message_id IS NULL AND published_at IS NULL AND published_post_id IS NULL) OR "
+            "(status = 'compensating' AND lease_expires_at IS NULL "
+            "AND channel_message_id IS NOT NULL AND published_at IS NOT NULL AND published_post_id IS NULL) OR "
+            "(status = 'completed' AND lease_expires_at IS NULL "
+            "AND channel_message_id IS NOT NULL AND published_at IS NOT NULL AND published_post_id IS NOT NULL) OR "
+            "(status IN ('uncertain', 'failed') AND lease_expires_at IS NULL "
+            "AND channel_message_id IS NULL AND published_at IS NULL AND published_post_id IS NULL) OR "
+            "(status = 'abandoned' AND lease_expires_at IS NULL AND published_post_id IS NULL "
+            "AND ((channel_message_id IS NULL AND published_at IS NULL) OR "
+            "(channel_message_id IS NOT NULL AND published_at IS NOT NULL)))",
+            name="state_shape",
+        ),
+    )
+
+    id: Mapped[IntegerPrimaryKey]
+    repository_app_id: Mapped[int] = mapped_column(ForeignKey("repository_apps.id", ondelete="CASCADE"), nullable=False)
+    source_chat_id: Mapped[int] = mapped_column(BigInteger)
+    source_message_id: Mapped[int] = mapped_column(BigInteger)
+    channel_id: Mapped[int] = mapped_column(BigInteger)
+    actor_user_id: Mapped[int] = mapped_column(BigInteger)
+    title: Mapped[str] = mapped_column(String(255))
+    tags: Mapped[list[str]] = mapped_column(ARRAY(String(64)))
+    status: Mapped[PublicationOperationStatus] = mapped_column(String(32))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    channel_message_id: Mapped[int | None] = mapped_column(BigInteger)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    published_post_id: Mapped[int | None] = mapped_column(
+        ForeignKey("published_posts.id", ondelete="RESTRICT"), nullable=True, unique=True
+    )
+    created_at: Mapped[Timestamp]
+    updated_at: Mapped[Timestamp]
 
 
 class PostAttempt(Base):

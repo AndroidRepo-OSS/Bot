@@ -6,8 +6,8 @@ normalizes repository evidence, generates constrained English copy, renders a
 1920 × 1080 PNG banner, and requires explicit confirmation before publication.
 
 The project is one installable Python 3.14 application. Runtime code lives in
-`src/androidrepo_bot`, tests live in `tests`, and the `androidrepo-bot` console
-script and `python -m androidrepo_bot` use the same entry point.
+`src/androidrepo_bot`, and the `androidrepo-bot` console script and
+`python -m androidrepo_bot` use the same entry point.
 
 ## What it preserves
 
@@ -107,7 +107,7 @@ are ignored. See [`.env.example`](.env.example) for annotated placeholders.
 | --- | --- | --- | --- |
 | `AR_BOT_TOKEN` | yes | — | Telegram bot token |
 | `AR_STAFF_CHAT_ID` | yes | — | Staff chat admitted to the post workflow |
-| `AR_POST_TOPIC_ID` | yes | — | Staff topic for `/post`, `/cancel`, and draft callbacks |
+| `AR_POST_TOPIC_ID` | yes | — | Staff topic for `/post`, `/cancel`, `/reconcile`, and draft callbacks |
 | `AR_LOG_TOPIC_ID` | yes | — | Staff topic receiving best-effort operational audits |
 | `AR_CHANNEL_ID` | yes | — | Channel receiving confirmed posts |
 | `AR_OPENCODE_ZEN_API_KEY` | yes | — | OpenCode Zen generation credential |
@@ -165,12 +165,15 @@ identity and publication history remain persistent in PostgreSQL.
 
 Generation treats every repository string, including README and release text,
 as untrusted evidence. Only the first 50,000 README characters are supplied.
-The structured result requires a canonical name, one summary, three to five
+The structured result requires a project name, one summary, three to five
 distinct features, one to three supported tags, and at most four optional link
-selections. Free text, duplication, link IDs, semantic labels, project naming,
-and the 950-character generation budget are validated. The agent may make at
-most three model requests: the initial request and two output-correction
-retries. Each complete generation run has a 120-second deadline.
+selections. The output schema enforces plain text, field bounds, and distinct
+values; the service verifies destination IDs, the download decision, and the
+950-character generation budget. Editorial guidance such as canonical naming,
+semantic link labels, and non-redundant prose stays in the generation prompt.
+The agent may make at most three model requests: the initial request and two
+output-correction retries. Each complete generation run has a 120-second
+deadline.
 
 The model never supplies a destination URL to the final post. It selects stable
 IDs from inspected evidence; the service resolves those IDs through the same
@@ -196,19 +199,23 @@ photo-caption limit.
   draft message. Stale, foreign, and malformed callbacks receive an alert and
   cannot mutate or publish the session.
 
-Publication is serialized per repository in the running process, and the
-cooldown is checked again immediately before the channel copy. After a
-successful copy, the channel message receipt is stored in the FSM before the
-database write. If the database write fails, pressing **Publish now** again
-retries only the idempotent publication record; it does not copy the channel
-post twice. Until that receipt is saved, back, cancel, and replacement actions
-are blocked so the retry data cannot be discarded. The database also enforces
-uniqueness on channel ID and message ID. If Telegram rejects the copy, the
-draft remains available for another attempt.
+`PublicationWorkflow` reserves one durable publication operation per
+repository before copying to the channel. A PostgreSQL transaction-level
+advisory lock and a unique open-operation constraint serialize concurrent
+attempts across bot instances, while the cooldown is checked under the same
+lock. The Telegram receipt and Publication record are then stored atomically.
+
+If that write fails, the workflow persists its compensation intent before
+deleting the channel copy. A failed deletion is conservatively recorded as a
+Publication so its cooldown applies. An ambiguous delivery or interrupted
+compensation keeps the repository unavailable until staff inspect the channel
+and resolve the operation with `/reconcile`; reconciliation never performs a
+second copy. If Telegram rejects a copy definitively, the Draft remains
+available for another attempt.
 
 The staff log topic receives best-effort lifecycle, draft creation/failure,
-replacement/cancellation, and publication success/failure events. Failure to
-deliver an audit message does not fail the underlying workflow.
+replacement/cancellation, publication success/failure, and recovery details.
+Failure to deliver an audit message does not fail the underlying workflow.
 
 ## Architecture
 
@@ -217,9 +224,9 @@ src/androidrepo_bot/
 ├── app.py              # composition root, Telegram middleware, lifecycle
 ├── config.py           # validated AR_* settings
 ├── start.py            # global /start presentation
-├── posts/              # commands, callbacks, FSM, UI, workflow service
+├── posts/              # composed routes, draft/publication workflows, FSM, and UI
 ├── repositories/       # URL parsing, shared HTTP policy, GitHub/GitLab
-├── generation/         # evidence prompt, schema, validation, AI service
+├── generation/         # evidence prompt, output schema, AI orchestration
 ├── media/              # NASA artwork and packaged banner renderer assets
 └── db/                 # SQLAlchemy models, operations, packaged migrations
 ```
@@ -229,6 +236,13 @@ one application-owned HTTP session; PostgreSQL uses operation-scoped async
 sessions; the application owns the bot, database engine, and generation-agent
 lifecycle. There are no internal workspace distributions or compatibility
 layers.
+
+The posts package exposes command and callback routers. Its handlers translate
+Telegram updates, while `DraftWorkflow` owns draft preparation and
+`PublicationWorkflow` owns the complete publication, compensation, and
+reconciliation protocol.
+Typed draft sessions live directly in aiogram's in-memory FSM storage through
+`state.py`; Telegram-specific session message operations stay in `telegram.py`.
 
 Repository provider responses are bounded, parsed as untrusted JSON, and
 validated before normalization. Transient provider failures use bounded
@@ -245,12 +259,13 @@ The schema stores:
 
 - provider-stable repository identities and observed aliases
 - successful channel publications
+- durable publication operations, including unresolved delivery and compensation states
 - cooldown-blocked attempts
 
 The current migrations preserve first-seen identity data, normalize aliases,
-enforce blocked-attempt shape, deduplicate legacy publication receipts, and
-make channel publication receipts unique. Do not stamp or edit a production
-schema manually; apply committed revisions with:
+enforce blocked-attempt and publication-operation state shapes, deduplicate
+legacy Publication records, and make channel receipts unique. Do not stamp or
+edit a production schema manually; apply committed revisions with:
 
 ```bash
 AR_DATABASE_URL='postgresql+asyncpg://user:password@host:5432/androidrepo' \
@@ -259,11 +274,11 @@ AR_DATABASE_URL='postgresql+asyncpg://user:password@host:5432/androidrepo' \
 
 ## Banners and asset attribution
 
-`BannerService` attempts to load a curated image from the NASA Image and Video
-Library. Remote image downloads are restricted to NASA's HTTPS asset host,
-bounded to 12 MiB, and time-limited. Invalid, unavailable, or undecodable
-artwork falls back to the packaged black-hole image. Every result is a
-1920 × 1080 RGB PNG and includes visible artwork credit and identifier text.
+The banner renderer attempts to load a curated image from the NASA Image and
+Video Library. Remote image downloads are restricted to NASA's HTTPS asset
+host, bounded to 12 MiB, and time-limited. Invalid, unavailable, or undecodable
+artwork falls back to the packaged black-hole image. Every result is a 1920 ×
+1080 RGB PNG and includes visible artwork credit and identifier text.
 
 Bundled assets and their requirements are listed in the
 [asset inventory](src/androidrepo_bot/media/assets/README.md):
@@ -291,7 +306,7 @@ uv run pre-commit run --all-files
 uv build
 ```
 
-Pyright runs in strict mode.
+Pyright runs in strict mode across runtime code.
 
 The built wheel must contain the complete package, database migrations, banner
 assets, and `androidrepo-bot` console-script metadata. The package is marked

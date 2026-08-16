@@ -1,5 +1,4 @@
 import re
-from enum import StrEnum
 from typing import Annotated, Self, cast
 
 from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, model_validator
@@ -19,78 +18,8 @@ _BULLET_SYMBOL_PATTERN = re.compile(r"[\u2022\u2023\u2043\u25aa\u25ab\u25e6]")
 _PICTOGRAPH_PATTERN = re.compile(r"[\u2600-\u27bf\U0001f000-\U0001faff]")
 
 
-class EvidenceTrust(StrEnum):
-    UNTRUSTED = "untrusted_evidence"
-    VERIFIED_DESTINATIONS = "verified_destinations_with_untrusted_labels"
-
-
 class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
-
-class RepositoryOverview(_StrictModel):
-    api_display_name: str
-    repository_slug: str
-    repository: str
-    provider: str
-    description: str | None
-    languages: tuple[str, ...]
-    license: str | None
-    topics: tuple[str, ...]
-    homepage: str | None
-    has_readme: bool
-    has_release: bool
-
-
-class RepositoryOverviewEvidence(_StrictModel):
-    source: str = "repository_metadata"
-    trust: EvidenceTrust = EvidenceTrust.UNTRUSTED
-    data: RepositoryOverview
-
-
-class RepositoryReadmeEvidence(_StrictModel):
-    source: str = "repository_readme"
-    trust: EvidenceTrust = EvidenceTrust.UNTRUSTED
-    available: bool
-    truncated: bool
-    characters_returned: int
-    data: str | None
-
-
-class LatestRelease(_StrictModel):
-    name: str
-    tag: str
-    description: str | None
-
-
-class LatestReleaseEvidence(_StrictModel):
-    source: str = "latest_release"
-    trust: EvidenceTrust = EvidenceTrust.UNTRUSTED
-    data: LatestRelease
-
-
-class RepositoryLinkEvidence(_StrictModel):
-    id: str
-    label: str
-    url: str
-
-
-class RepositoryLinks(_StrictModel):
-    repository: RepositoryLinkEvidence
-    selectable: tuple[RepositoryLinkEvidence, ...]
-
-
-class RepositoryLinksEvidence(_StrictModel):
-    source: str = "verified_repository_links"
-    trust: EvidenceTrust = EvidenceTrust.VERIFIED_DESTINATIONS
-    data: RepositoryLinks
-
-
-class RepositoryEvidence(_StrictModel):
-    overview: RepositoryOverviewEvidence
-    readme: RepositoryReadmeEvidence
-    latest_release: LatestReleaseEvidence | None
-    links: RepositoryLinksEvidence
 
 
 def _normalize_text(value: object) -> object:

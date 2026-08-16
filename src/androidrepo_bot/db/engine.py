@@ -1,9 +1,13 @@
-from dataclasses import dataclass
+from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 _POOL_SIZE = 5
 _MAX_OVERFLOW = 10
@@ -13,13 +17,8 @@ _CONNECT_TIMEOUT_SECONDS = 10.0
 _COMMAND_TIMEOUT_SECONDS = 30.0
 
 
-@dataclass(frozen=True, slots=True)
-class Database:
-    engine: AsyncEngine
-    sessions: async_sessionmaker[AsyncSession]
-
-
-def create_database(database_url: str) -> Database:
+@asynccontextmanager
+async def database_sessions(database_url: str) -> AsyncGenerator[async_sessionmaker[AsyncSession]]:
     _validate_database_url(database_url)
     engine = create_async_engine(
         database_url,
@@ -32,12 +31,12 @@ def create_database(database_url: str) -> Database:
         pool_recycle=_POOL_RECYCLE_SECONDS,
         connect_args={"timeout": _CONNECT_TIMEOUT_SECONDS, "command_timeout": _COMMAND_TIMEOUT_SECONDS},
     )
-    return Database(engine, async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False))
-
-
-async def verify_database(database: Database) -> None:
-    async with database.engine.connect() as connection:
-        await connection.execute(text("SELECT 1"))
+    try:
+        async with engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+        yield async_sessionmaker(engine, expire_on_commit=False)
+    finally:
+        await engine.dispose()
 
 
 def _validate_database_url(database_url: str) -> None:

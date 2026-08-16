@@ -1,4 +1,5 @@
 fix = true
+extend-exclude = [".agents"]
 line-length = 120
 preview = true
 show-fixes = true
@@ -60,6 +61,3 @@ ban-relative-imports = "parents"
 
 [lint.flake8-tidy-imports.banned-api]
 "logging.getLogger".msg = "Use structlog.get_logger for application logging."
-
-[lint.per-file-ignores]
-"src/androidrepo_bot/log_config.py" = ["banned-api"]

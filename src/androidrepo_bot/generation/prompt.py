@@ -1,18 +1,52 @@
-from androidrepo_bot.generation.schema import (
-    LatestRelease,
-    LatestReleaseEvidence,
-    RepositoryEvidence,
-    RepositoryLinkEvidence,
-    RepositoryLinks,
-    RepositoryLinksEvidence,
-    RepositoryOverview,
-    RepositoryOverviewEvidence,
-    RepositoryReadmeEvidence,
-)
-from androidrepo_bot.generation.validation import DRAFT_TEXT_BUDGET
+import json
+from typing import TypedDict
+
 from androidrepo_bot.repositories.models import REPOSITORY_LINK_ID, RepositoryDetails, RepositoryLink
 
 README_CHARACTER_LIMIT = 50_000
+DRAFT_TEXT_BUDGET = 950
+
+
+class RepositoryMetadataEvidence(TypedDict):
+    display_name: str
+    slug: str
+    full_name: str
+    provider: str
+    description: str | None
+    languages: tuple[str, ...]
+    license: str | None
+    topics: tuple[str, ...]
+    homepage: str | None
+
+
+class ReadmeEvidence(TypedDict):
+    truncated: bool
+    content: str
+
+
+class ReleaseEvidence(TypedDict):
+    name: str
+    tag: str
+    description: str | None
+
+
+class LinkEvidence(TypedDict):
+    id: str
+    label: str
+    url: str
+
+
+class LinksEvidence(TypedDict):
+    repository: LinkEvidence
+    selectable: list[LinkEvidence]
+
+
+class RepositoryEvidence(TypedDict):
+    repository: RepositoryMetadataEvidence
+    readme: ReadmeEvidence | None
+    latest_release: ReleaseEvidence | None
+    links: LinksEvidence
+
 
 POST_INSTRUCTIONS = f"""
 # Role
@@ -74,7 +108,7 @@ projects. Use a clear, technical, informative tone without promotional copy.
   instead of returning the raw slug unchanged.
 
 # Links
-- The mandatory repository destination is ``links.data.repository``. Draft
+- The mandatory repository destination is ``links.repository``. Draft
   mapping adds it automatically; never include its ID in the optional ``links``
   list or use it as ``download_link_id``.
 - A download source must be an official destination for installing the project
@@ -84,14 +118,14 @@ projects. Use a clear, technical, informative tone without promotional copy.
   source by itself.
 - Choose the exact ID of the most suitable official download source, preferring
   an official app store or package repository over the latest release page.
-- Treat only destinations in ``links.data.repository`` and
-  ``links.data.selectable`` as verified. Never invent, rewrite, or guess a URL
+- Treat only destinations in ``links.repository`` and
+  ``links.selectable`` as verified. Never invent, rewrite, or guess a URL
   or link ID. The chosen destination becomes the post's inline Download button.
-- If no official download source exists in ``links.data.selectable``, return
+- If no official download source exists in ``links.selectable``, return
   only the structured ``missing_download_source`` warning with a concise
   evidence-based reason. Do not return a post unless the generation operation
   explicitly states that the user approved generating without a download.
-- Select optional destinations only from ``links.data.selectable`` and return
+- Select optional destinations only from ``links.selectable`` and return
   each selected destination's exact ID.
 - Give every selection a concise semantic destination label derived from its
   verified URL and repository context.
@@ -129,56 +163,39 @@ projects. Use a clear, technical, informative tone without promotional copy.
 
 
 def build_repository_evidence(repository: RepositoryDetails) -> RepositoryEvidence:
-    repository_link = repository.link_by_id(REPOSITORY_LINK_ID)
-    if repository_link is None:
-        message = "Repository evidence requires the mandatory repository link"
-        raise ValueError(message)
-
     readme = repository.readme
-    readme_excerpt = readme[:README_CHARACTER_LIMIT] if readme is not None else None
     release = repository.release
-    latest_release = (
-        LatestReleaseEvidence(
-            data=LatestRelease(name=release.name, tag=release.tag, description=release.description or None)
-        )
-        if release is not None
+    readme_evidence: ReadmeEvidence | None = (
+        {"truncated": len(readme) > README_CHARACTER_LIMIT, "content": readme[:README_CHARACTER_LIMIT]}
+        if readme is not None
         else None
     )
-    selectable_links = tuple(
-        _link_evidence(link) for link in repository.links if link.id in repository.selectable_link_ids
+    release_evidence: ReleaseEvidence | None = (
+        {"name": release.name, "tag": release.tag, "description": release.description} if release is not None else None
     )
-
-    return RepositoryEvidence(
-        overview=RepositoryOverviewEvidence(
-            data=RepositoryOverview(
-                api_display_name=repository.display_name,
-                repository_slug=repository.ref.name,
-                repository=repository.ref.full_name,
-                provider=repository.ref.provider.display_name,
-                description=repository.description,
-                languages=repository.languages,
-                license=repository.license,
-                topics=repository.topics,
-                homepage=repository.homepage,
-                has_readme=readme is not None,
-                has_release=release is not None,
-            )
-        ),
-        readme=RepositoryReadmeEvidence(
-            available=readme is not None,
-            truncated=readme is not None and len(readme) > README_CHARACTER_LIMIT,
-            characters_returned=len(readme_excerpt or ""),
-            data=readme_excerpt,
-        ),
-        latest_release=latest_release,
-        links=RepositoryLinksEvidence(
-            data=RepositoryLinks(repository=_link_evidence(repository_link), selectable=selectable_links)
-        ),
-    )
+    return {
+        "repository": {
+            "display_name": repository.display_name,
+            "slug": repository.ref.name,
+            "full_name": repository.ref.full_name,
+            "provider": repository.ref.provider.display_name,
+            "description": repository.description,
+            "languages": repository.languages,
+            "license": repository.license,
+            "topics": repository.topics,
+            "homepage": repository.homepage,
+        },
+        "readme": readme_evidence,
+        "latest_release": release_evidence,
+        "links": {
+            "repository": _link_evidence(repository.repository_link),
+            "selectable": [_link_evidence(link) for link in repository.links if link.id != REPOSITORY_LINK_ID],
+        },
+    }
 
 
 def build_generation_prompt(repository: RepositoryDetails, *, allow_missing_download: bool = False) -> str:
-    evidence_json = build_repository_evidence(repository).model_dump_json(indent=2)
+    evidence_json = json.dumps(build_repository_evidence(repository), ensure_ascii=False, indent=2)
     download_override = (
         "The user explicitly approved generating this post without a download source. "
         "If the project is Android-related "
@@ -203,5 +220,5 @@ def build_generation_prompt(repository: RepositoryDetails, *, allow_missing_down
     )
 
 
-def _link_evidence(link: RepositoryLink) -> RepositoryLinkEvidence:
-    return RepositoryLinkEvidence(id=link.id, label=link.label, url=link.url)
+def _link_evidence(link: RepositoryLink) -> LinkEvidence:
+    return {"id": link.id, "label": link.label, "url": link.url}

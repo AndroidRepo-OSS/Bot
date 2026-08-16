@@ -3,10 +3,11 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from androidrepo_bot.errors import ApplicationError
-from androidrepo_bot.repositories.models import RepositoryDetails, RepositoryRef, require_web_url
 
 if TYPE_CHECKING:
     from datetime import datetime
+
+    from androidrepo_bot.repositories.models import RepositoryRef
 
 
 class PostTag(StrEnum):
@@ -88,14 +89,6 @@ class PostLink:
     label: str
     url: str
 
-    def __post_init__(self) -> None:
-        label = self.label.strip()
-        if not label:
-            msg = "Post link label must not be empty"
-            raise ValueError(msg)
-        object.__setattr__(self, "label", label)
-        object.__setattr__(self, "url", require_web_url(self.url, subject="Post link URL"))
-
 
 @dataclass(frozen=True, slots=True)
 class PostDraft:
@@ -106,86 +99,28 @@ class PostDraft:
     download_url: str | None
     tags: tuple[PostTag, ...]
 
-    def __post_init__(self) -> None:
-        title = self.title.strip()
-        summary = self.summary.strip()
-        features = tuple(feature.strip() for feature in self.features)
-        links = tuple(self.links)
-        download_url = (
-            require_web_url(self.download_url, subject="Post download URL") if self.download_url is not None else None
-        )
-        tags = tuple(self.tags)
-
-        if not title:
-            msg = "Post title must not be empty"
-            raise ValueError(msg)
-        if not summary:
-            msg = "Post summary must not be empty"
-            raise ValueError(msg)
-
-        minimum_features, maximum_features = 3, 5
-        if not minimum_features <= len(features) <= maximum_features:
-            msg = "A post must contain between 3 and 5 features"
-            raise ValueError(msg)
-        if any(not feature for feature in features):
-            msg = "Post features must not be empty"
-            raise ValueError(msg)
-        if len({feature.casefold() for feature in features}) != len(features):
-            msg = "Post features must be unique"
-            raise ValueError(msg)
-        if not links:
-            msg = "A post must contain at least one verified link"
-            raise ValueError(msg)
-        if len({link.url for link in links}) != len(links):
-            msg = "Post link URLs must be unique"
-            raise ValueError(msg)
-
-        minimum_tags, maximum_tags = 1, 3
-        if not minimum_tags <= len(tags) <= maximum_tags:
-            msg = "A post must contain between 1 and 3 tags"
-            raise ValueError(msg)
-        if len(set(tags)) != len(tags):
-            msg = "Post tags must be unique"
-            raise ValueError(msg)
-
-        object.__setattr__(self, "title", title)
-        object.__setattr__(self, "summary", summary)
-        object.__setattr__(self, "features", features)
-        object.__setattr__(self, "links", links)
-        object.__setattr__(self, "download_url", download_url)
-        object.__setattr__(self, "tags", tags)
-
 
 @dataclass(frozen=True, slots=True)
 class RegisteredRepository:
     id: int
     ref: RepositoryRef
-    provider_repository_id: str
 
 
 @dataclass(frozen=True, slots=True)
 class PublicationCooldown:
     allowed: bool
     blocked_until: datetime | None
-    last_published_at: datetime | None
 
 
 @dataclass(frozen=True, slots=True)
-class PublicationRecord:
+class PublicationIntent:
     repository: RegisteredRepository
     title: str
     tags: tuple[str, ...]
-    created_by_user_id: int
+    actor_user_id: int
+    source_chat_id: int
+    source_message_id: int
     channel_id: int
-    channel_message_id: int
-    published_at: datetime
-
-
-@dataclass(frozen=True, slots=True)
-class PostCreation:
-    repository: RepositoryDetails
-    registered_repository: RegisteredRepository
-    draft: PostDraft
 
 
 @dataclass(frozen=True, slots=True)

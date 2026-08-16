@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 
 from aiogram import Router
 from aiogram.filters import CommandStart
-from aiogram.utils.formatting import Bold, Text
+from aiogram.utils.formatting import Bold, Text, as_list
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 if TYPE_CHECKING:
@@ -26,14 +26,15 @@ def start_keyboard() -> InlineKeyboardMarkup:
 
 @router.message(CommandStart())
 async def handle_start(message: Message) -> None:
-    content = Text(
-        "🤖 ",
-        Bold("Android Repository Bot"),
-        "\n\n",
-        "I help the Android Repository team turn public GitHub and GitLab projects into polished channel posts. ",
-        "I collect repository details, generate the description and banner, and prepare everything for staff review ",
-        "before publication.",
-        "\n\n",
+    content = as_list(
+        Text("🤖 ", Bold("Android Repository Bot")),
+        Text(
+            "I help the Android Repository team turn public GitHub and GitLab projects into polished channel posts. ",
+            "I collect repository details, generate the description and banner, "
+            "and prepare everything for staff review ",
+            "before publication.",
+        ),
         "Discover open-source Android projects in our channel and join the community discussion.",
+        sep="\n\n",
     )
     await message.answer(**content.as_kwargs(), reply_markup=start_keyboard())

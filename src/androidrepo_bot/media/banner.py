@@ -1,3 +1,4 @@
+from asyncio import to_thread
 from functools import cache
 from importlib.resources import files
 from io import BytesIO
@@ -26,6 +27,7 @@ _TITLE_MAX_HEIGHT = 280
 _TITLE_MIN_SIZE = 58
 _TITLE_MAX_SIZE = 180
 _TITLE_SPACING = -6
+_MAX_SOURCE_PIXELS = 40_000_000
 _SCRIM_OPAQUE_END = 0.32
 _SCRIM_TRANSPARENT_START = 0.72
 _MIN_WRAPPED_WORDS = 2
@@ -35,24 +37,20 @@ _SUBTLE = (154, 156, 163, 230)
 type FontWeight = Literal[400, 500, 600, 800]
 
 
-class BannerService:
-    def __init__(self, *, session: aiohttp.ClientSession) -> None:
-        self._session = session
-
-    async def render(self, request: BannerRequest) -> BannerImage:
-        started_at = perf_counter()
-        log_context = {"provider": request.provider, "repository": request.repository}
-        logger.debug("Banner render started", **log_context)
-        artwork = await fetch_nasa_artwork(self._session)
-        banner = _render_banner(request, artwork)
-        logger.info(
-            "Banner rendered",
-            **log_context,
-            duration_seconds=perf_counter() - started_at,
-            artwork_id=banner.artwork_id,
-            used_remote_artwork=artwork is not None,
-        )
-        return banner
+async def render_banner(session: aiohttp.ClientSession, request: BannerRequest) -> BannerImage:
+    started_at = perf_counter()
+    log_context = {"provider": request.provider, "repository": request.repository}
+    logger.debug("Banner render started", **log_context)
+    artwork = await fetch_nasa_artwork(session)
+    banner = await to_thread(_render_banner, request, artwork)
+    logger.info(
+        "Banner rendered",
+        **log_context,
+        duration_seconds=perf_counter() - started_at,
+        artwork_id=banner.artwork_id,
+        used_remote_artwork=artwork is not None,
+    )
+    return banner
 
 
 def _render_banner(request: BannerRequest, artwork: SpaceArtwork | None) -> BannerImage:
@@ -71,12 +69,10 @@ def _render_banner(request: BannerRequest, artwork: SpaceArtwork | None) -> Bann
 
 def _prepare_background(artwork: SpaceArtwork) -> tuple[Image.Image, SpaceArtwork]:
     try:
-        source = Image.open(BytesIO(artwork.content))
-        source.load()
-        source = ImageOps.exif_transpose(source).convert("RGB")
+        source = _load_image(artwork.content)
     except OSError, UnidentifiedImageError, ValueError:
         artwork = _fallback_artwork()
-        source = Image.open(BytesIO(artwork.content)).convert("RGB")
+        source = _load_image(artwork.content)
 
     rng = Random()
     horizontal_focus = min(0.7, max(0.44, 0.57 + rng.uniform(-0.08, 0.08)))
@@ -178,7 +174,8 @@ def _draw_android_signature(image: Image.Image, draw: ImageDraw.ImageDraw) -> No
     brand_y = 895
     draw.text((_TEXT_X, brand_y), "Android", font=text_font, fill=_WHITE)
     text_box = draw.textbbox((_TEXT_X, brand_y), "Android", font=text_font)
-    icon = Image.open(BytesIO(_asset_bytes("android-head_flat.png"))).convert("RGBA")
+    with Image.open(BytesIO(_asset_bytes("android-head_flat.png"))) as icon_source:
+        icon = icon_source.convert("RGBA")
     icon_height = 35
     icon_width = round(icon.width * icon_height / icon.height)
     icon = ImageOps.fit(icon, (icon_width, icon_height), method=Image.Resampling.LANCZOS)
@@ -269,6 +266,15 @@ def _font(size: int, weight: FontWeight) -> ImageFont.FreeTypeFont:
     font = ImageFont.truetype(BytesIO(_asset_bytes("Figtree.ttf")), size)
     font.set_variation_by_axes([weight])
     return font
+
+
+def _load_image(content: bytes) -> Image.Image:
+    with Image.open(BytesIO(content)) as source:
+        if source.width * source.height > _MAX_SOURCE_PIXELS:
+            msg = "Banner source image exceeds the pixel limit"
+            raise ValueError(msg)
+        source.load()
+        return ImageOps.exif_transpose(source).convert("RGB")
 
 
 @cache

@@ -9,7 +9,7 @@ license-files = ["LICENSE"]
 classifiers = ["Private :: Do Not Upload"]
 requires-python = ">=3.14"
 dependencies = [
-    "aiogram[fast]",
+    "aiogram",
     "aiohttp[speedups]>=3.14,<4",
     "alembic>=1.18,<2",
     "asyncpg>=0.31,<1",
@@ -26,11 +26,7 @@ dependencies = [
 androidrepo-bot = "androidrepo_bot.cli:main"
 
 [dependency-groups]
-dev = [
-    "pre-commit",
-    "pyright",
-    "ruff",
-]
+dev = ["pre-commit", "pyright", "ruff"]
 
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]

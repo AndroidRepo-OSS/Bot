@@ -1,12 +1,14 @@
+from __future__ import annotations
+
+from asyncio import TaskGroup, to_thread
 from asyncio import sleep as async_sleep
-from asyncio import to_thread
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from http import HTTPStatus
 from time import perf_counter
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Annotated, Never, TypeIs
+from typing import TYPE_CHECKING, Annotated, Any, Never, TypeIs
 from urllib.parse import urlsplit
 
 import aiohttp
@@ -20,10 +22,11 @@ from androidrepo_bot.errors import (
     RepositoryAccessError,
     RepositoryNotFoundError,
 )
+from androidrepo_bot.http import ResponseTooLargeError, read_bounded_response
 from androidrepo_bot.repositories.models import require_web_url
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Iterator, Mapping
+    from collections.abc import Callable, Coroutine, Iterable, Iterator, Mapping
 
     type ResponseParser[ParsedT] = Callable[[bytes], ParsedT]
 
@@ -32,7 +35,6 @@ _MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 _MAX_RETRIES = 2
 _RETRY_BACKOFF_SECONDS = 0.25
 _MAX_RETRY_DELAY_SECONDS = 5.0
-_READ_CHUNK_SIZE = 64 * 1024
 _LANGUAGE_USAGE_ADAPTER = TypeAdapter(dict[str, int | float], config=ConfigDict(strict=True, allow_inf_nan=False))
 _RETRYABLE_STATUS_CODES = frozenset({
     HTTPStatus.REQUEST_TIMEOUT,
@@ -47,10 +49,6 @@ class ProviderModel(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True, strict=True, allow_inf_nan=False)
 
 
-class _ResponseTooLargeError(ValueError):
-    pass
-
-
 @dataclass(frozen=True, slots=True)
 class ApiResponse:
     status_code: int
@@ -60,14 +58,8 @@ class ApiResponse:
     @classmethod
     async def from_client_response(cls, response: aiohttp.ClientResponse, *, max_bytes: int) -> ApiResponse:
         headers = MappingProxyType({key.casefold(): value for key, value in response.headers.items()})
-        _validate_content_length(headers.get("content-length"), max_bytes=max_bytes)
-        body = bytearray()
-        async for chunk in response.content.iter_chunked(_READ_CHUNK_SIZE):
-            body.extend(chunk)
-            if len(body) > max_bytes:
-                msg = f"provider response exceeds {max_bytes} bytes"
-                raise _ResponseTooLargeError(msg)
-        return cls(response.status, headers, bytes(body))
+        content = await read_bounded_response(response, max_bytes=max_bytes, subject="provider response")
+        return cls(response.status, headers, content)
 
     @property
     def text(self) -> str:
@@ -136,9 +128,9 @@ class ApiClient:
         context = self._request_log_context(url, param_keys=tuple(sorted((params or {}).keys())))
         for attempt in range(_MAX_RETRIES + 1):
             try:
-                async with self._client.get(url, headers=headers, params=params) as response:
+                async with self._client.get(url, headers=headers, params=params, allow_redirects=False) as response:
                     api_response = await ApiResponse.from_client_response(response, max_bytes=_MAX_RESPONSE_BYTES)
-            except _ResponseTooLargeError as error:
+            except ResponseTooLargeError as error:
                 logger.warning(
                     "Provider response exceeded size limit", **context, max_response_bytes=_MAX_RESPONSE_BYTES
                 )
@@ -155,7 +147,7 @@ class ApiClient:
                 msg = f"{self._provider_name} request failed"
                 raise ExternalServiceError(msg) from error
 
-            if api_response.status_code in _RETRYABLE_STATUS_CODES and _can_retry(attempt):
+            if api_response.status_code in _RETRYABLE_STATUS_CODES and attempt < _MAX_RETRIES:
                 delay = _retry_delay(attempt, retry_after=api_response.headers.get("retry-after"))
                 logger.warning(
                     "Provider returned retryable HTTP status",
@@ -190,7 +182,7 @@ class ApiClient:
             )
             msg = f"{self._provider_name} rate limit exceeded"
             raise RateLimitError(msg)
-        if response.status_code >= HTTPStatus.BAD_REQUEST:
+        if not HTTPStatus.OK <= response.status_code < HTTPStatus.MULTIPLE_CHOICES:
             logger.warning(
                 "Provider returned unsuccessful HTTP status",
                 provider=self._provider_name,
@@ -216,26 +208,10 @@ class ApiClient:
         return context
 
 
-def _validate_content_length(value: str | None, *, max_bytes: int) -> None:
-    if value is None:
-        return
-    try:
-        content_length = int(value)
-    except ValueError:
-        return
-    if content_length > max_bytes:
-        msg = f"provider response exceeds {max_bytes} bytes"
-        raise _ResponseTooLargeError(msg)
-
-
-def _can_retry(attempt: int) -> bool:
-    return attempt < _MAX_RETRIES
-
-
 async def _retry_transport_failure(
     attempt: int, context: dict[str, object], error: Exception, *, is_timeout: bool
 ) -> bool:
-    if not _can_retry(attempt):
+    if attempt >= _MAX_RETRIES:
         logger.warning(
             "Provider request timed out" if is_timeout else "Provider request failed",
             **context,
@@ -278,20 +254,26 @@ def _retry_delay(attempt: int, *, retry_after: str | None = None) -> float:
     return min(_RETRY_BACKOFF_SECONDS * 2**attempt, _MAX_RETRY_DELAY_SECONDS)
 
 
-def optional_web_url(value: str | None) -> str | None:
-    if not value:
-        return None
-    try:
-        return require_web_url(value)
-    except ValueError:
-        return None
-
-
 async def fetch_languages(api: ApiClient, root: str, headers: Mapping[str, str]) -> tuple[str, ...]:
     response = await api.get_optional(f"{root}/languages", headers=headers)
     if response is None:
         return ()
     return await api.parse_payload(response, _parse_language_ranking)
+
+
+async def fetch_repository_resources[ReadmeT, ReleaseT](
+    readme: Coroutine[Any, Any, ReadmeT],
+    languages: Coroutine[Any, Any, tuple[str, ...]],
+    release: Coroutine[Any, Any, ReleaseT],
+) -> tuple[ReadmeT, tuple[str, ...], ReleaseT]:
+    try:
+        async with TaskGroup() as tasks:
+            readme_task = tasks.create_task(readme)
+            languages_task = tasks.create_task(languages)
+            release_task = tasks.create_task(release)
+    except ExceptionGroup as error:
+        _raise_task_group_error(error)
+    return readme_task.result(), languages_task.result(), release_task.result()
 
 
 def _parse_language_ranking(content: bytes) -> tuple[str, ...]:
@@ -302,7 +284,7 @@ def _rank_language_items(languages: Iterable[tuple[str, int | float]]) -> tuple[
     return tuple(name for name, _ in sorted(languages, key=lambda item: (-item[1], item[0].casefold())))
 
 
-def raise_task_group_error(error: ExceptionGroup[Exception], /) -> Never:
+def _raise_task_group_error(error: ExceptionGroup[Exception], /) -> Never:
     for exception in _iter_group_exceptions(error):
         if isinstance(exception, (RepositoryAccessError, ValueError)):
             raise exception from error

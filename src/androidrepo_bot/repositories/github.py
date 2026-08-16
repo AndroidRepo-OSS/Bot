@@ -1,6 +1,6 @@
 import base64
 import binascii
-from asyncio import TaskGroup, to_thread
+from asyncio import to_thread
 from time import perf_counter
 from types import MappingProxyType
 from typing import TYPE_CHECKING
@@ -13,11 +13,10 @@ from androidrepo_bot.repositories.http import (
     ProviderModel,
     WebUrl,
     fetch_languages,
-    optional_web_url,
-    raise_task_group_error,
+    fetch_repository_resources,
 )
 from androidrepo_bot.repositories.links import build_repository_links
-from androidrepo_bot.repositories.models import RepositoryDetails, RepositoryRef, RepositoryRelease
+from androidrepo_bot.repositories.models import RepositoryDetails, RepositoryRef, RepositoryRelease, require_web_url
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -83,20 +82,14 @@ class GitHubClient:
             topic_count=len(metadata.topics),
         )
 
-        try:
-            async with TaskGroup() as tasks:
-                readme_task = tasks.create_task(self._fetch_readme(root))
-                languages_task = tasks.create_task(fetch_languages(self._api, root, self._headers))
-                release_task = tasks.create_task(self._fetch_release(root))
-        except ExceptionGroup as error:
-            raise_task_group_error(error)
+        readme_result, languages, release = await fetch_repository_resources(
+            self._fetch_readme(root), fetch_languages(self._api, root, self._headers), self._fetch_release(root)
+        )
+        readme, readme_url = readme_result or (None, None)
 
-        languages = languages_task.result()
-        release = release_task.result()
-        readme, readme_url = readme_task.result() or (None, None)
-
-        homepage = optional_web_url(metadata.homepage)
-        links = await build_repository_links(
+        homepage = _optional_web_url(metadata.homepage)
+        links = await to_thread(
+            build_repository_links,
             metadata.html_url,
             release_url=release.url if release else None,
             homepage=homepage,
@@ -174,4 +167,13 @@ def _decode_readme_content(content: str) -> str | None:
         encoded_content = "".join(content.split())
         return base64.b64decode(encoded_content, validate=True).decode("utf-8", errors="replace")
     except binascii.Error, ValueError:
+        return None
+
+
+def _optional_web_url(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        return require_web_url(value)
+    except ValueError:
         return None

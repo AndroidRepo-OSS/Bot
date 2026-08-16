@@ -1,4 +1,4 @@
-from asyncio import TaskGroup
+from asyncio import to_thread
 from time import perf_counter
 from typing import TYPE_CHECKING
 from urllib.parse import quote, unquote, urlsplit
@@ -6,7 +6,13 @@ from urllib.parse import quote, unquote, urlsplit
 import structlog
 from pydantic import Field
 
-from androidrepo_bot.repositories.http import ApiClient, ProviderModel, WebUrl, fetch_languages, raise_task_group_error
+from androidrepo_bot.repositories.http import (
+    ApiClient,
+    ProviderModel,
+    WebUrl,
+    fetch_languages,
+    fetch_repository_resources,
+)
 from androidrepo_bot.repositories.links import build_repository_links
 from androidrepo_bot.repositories.models import RepositoryDetails, RepositoryRef, RepositoryRelease
 
@@ -64,19 +70,14 @@ class GitLabClient:
             topic_count=len(metadata.topics),
         )
 
-        try:
-            async with TaskGroup() as tasks:
-                readme_task = tasks.create_task(self._fetch_readme(root, metadata.readme_url))
-                languages_task = tasks.create_task(fetch_languages(self._api, root, self._headers))
-                release_task = tasks.create_task(self._fetch_release(root, repository))
-        except ExceptionGroup as error:
-            raise_task_group_error(error)
+        readme, languages, release = await fetch_repository_resources(
+            self._fetch_readme(root, metadata.readme_url),
+            fetch_languages(self._api, root, self._headers),
+            self._fetch_release(root, repository),
+        )
 
-        readme = readme_task.result()
-        languages = languages_task.result()
-        release = release_task.result()
-
-        links = await build_repository_links(
+        links = await to_thread(
+            build_repository_links,
             metadata.web_url,
             release_url=release.url if release else None,
             homepage=None,

@@ -1,13 +1,15 @@
 from asyncio import timeout, to_thread
+from http import HTTPStatus
 from secrets import choice
 from time import perf_counter
-from typing import Annotated, TypeIs
-from urllib.parse import urlparse, urlunparse
+from typing import Annotated
+from urllib.parse import urlsplit, urlunsplit
 
 import aiohttp
 import structlog
-from pydantic import BaseModel, BeforeValidator, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, StringConstraints
 
+from androidrepo_bot.http import read_bounded_response
 from androidrepo_bot.media.models import SpaceArtwork
 
 logger = structlog.get_logger(__name__)
@@ -16,28 +18,13 @@ _SEARCH_URL = "https://images-api.nasa.gov/search"
 _ASSET_URL = "https://images-api.nasa.gov/asset/{identifier}"
 _ALLOWED_ASSET_HOST = "images-assets.nasa.gov"
 _TIMEOUT_SECONDS = 8.0
+_ARTWORK_TIMEOUT_SECONDS = 20.0
 _MAX_METADATA_BYTES = 4 * 1024 * 1024
 _MAX_IMAGE_BYTES = 12 * 1024 * 1024
-_READ_CHUNK_SIZE = 64 * 1024
+_MAX_IMAGE_CANDIDATES = 8
+type _Text = Annotated[str, StringConstraints(strip_whitespace=True)]
 type _NonEmptyText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-
-
-def _blank_text_to_none(value: object) -> object:
-    return None if isinstance(value, str) and not value.strip() else value
-
-
-type _OptionalText = Annotated[_NonEmptyText | None, BeforeValidator(_blank_text_to_none)]
-
-
-def _json_array_to_tuple(value: object) -> object:
-    return tuple(value) if _is_object_list(value) else value
-
-
-def _is_object_list(value: object) -> TypeIs[list[object]]:
-    return isinstance(value, list)
-
-
-type _JsonTuple[T] = Annotated[tuple[T, ...], BeforeValidator(_json_array_to_tuple)]
+type _OptionalText = _Text | None
 
 
 class _NasaModel(BaseModel):
@@ -57,12 +44,12 @@ class _SearchLink(_NasaModel):
 
 
 class _SearchItem(_NasaModel):
-    data: _JsonTuple[_SearchData]
-    links: _JsonTuple[_SearchLink]
+    data: tuple[_SearchData, ...]
+    links: tuple[_SearchLink, ...]
 
 
 class _SearchCollection(_NasaModel):
-    items: _JsonTuple[_SearchItem]
+    items: tuple[_SearchItem, ...]
 
 
 class _SearchPayload(_NasaModel):
@@ -74,7 +61,7 @@ class _AssetItem(_NasaModel):
 
 
 class _AssetCollection(_NasaModel):
-    items: _JsonTuple[_AssetItem]
+    items: tuple[_AssetItem, ...]
 
 
 class _AssetPayload(_NasaModel):
@@ -127,7 +114,8 @@ async def fetch_nasa_artwork(session: aiohttp.ClientSession) -> SpaceArtwork | N
     started_at = perf_counter()
     logger.debug("NASA artwork fetch started", nasa_id=identifier)
     try:
-        artwork = await _fetch_artwork(session, identifier)
+        async with timeout(_ARTWORK_TIMEOUT_SECONDS):
+            artwork = await _fetch_artwork(session, identifier)
     except (TimeoutError, aiohttp.ClientError, KeyError, TypeError, ValueError) as error:
         logger.warning(
             "Could not load NASA banner artwork",
@@ -149,9 +137,7 @@ async def fetch_nasa_artwork(session: aiohttp.ClientSession) -> SpaceArtwork | N
 async def _fetch_artwork(session: aiohttp.ClientSession, identifier: str) -> SpaceArtwork:
     search_content = await _read_metadata(session, _SEARCH_URL, params={"nasa_id": identifier, "media_type": "image"})
     search_payload = await to_thread(_SearchPayload.model_validate_json, search_content)
-    item = _first_search_item(search_payload)
-    metadata = _first_search_data(item)
-    preview_url = _preview_url(item)
+    metadata, preview_url = _search_result(search_payload)
     if not _is_trusted_asset_url(preview_url):
         msg = "NASA preview URL uses an unexpected origin"
         raise ValueError(msg)
@@ -159,8 +145,8 @@ async def _fetch_artwork(session: aiohttp.ClientSession, identifier: str) -> Spa
     resolved_identifier = metadata.nasa_id
     logger.debug("NASA artwork metadata fetched", nasa_id=resolved_identifier)
     asset_content = await _read_metadata(session, _ASSET_URL.format(identifier=resolved_identifier))
-    asset_payload = await to_thread(_AssetPayload.model_validate_json, asset_content)
-    candidates = tuple(dict.fromkeys((*_asset_urls(asset_payload), preview_url)))
+    asset_urls = await to_thread(parse_nasa_asset_urls, asset_content)
+    candidates = tuple(dict.fromkeys((*asset_urls, preview_url)))[:_MAX_IMAGE_CANDIDATES]
     logger.debug("NASA artwork candidates resolved", nasa_id=resolved_identifier, candidate_count=len(candidates))
     content = await _download_first_image(session, candidates)
     center = metadata.center or "NASA"
@@ -176,14 +162,17 @@ async def _fetch_artwork(session: aiohttp.ClientSession, identifier: str) -> Spa
 
 async def _read_metadata(session: aiohttp.ClientSession, url: str, *, params: dict[str, str] | None = None) -> bytes:
     async with timeout(_TIMEOUT_SECONDS):
-        async with session.get(url, headers={"User-Agent": "androidrepo-bot/space-banner"}, params=params) as response:
+        async with session.get(
+            url, headers={"User-Agent": "androidrepo-bot/space-banner"}, params=params, allow_redirects=False
+        ) as response:
             response.raise_for_status()
-            return await _read_bounded_response(response, max_bytes=_MAX_METADATA_BYTES, subject="NASA metadata")
+            _require_success(response, subject="NASA metadata")
+            return await read_bounded_response(response, max_bytes=_MAX_METADATA_BYTES, subject="NASA metadata")
 
 
 async def _download_first_image(session: aiohttp.ClientSession, candidates: tuple[str, ...]) -> bytes:
     for url in candidates:
-        parsed = urlparse(url)
+        parsed = urlsplit(url)
         try:
             content = await _download_image(session, url)
         except (TimeoutError, aiohttp.ClientError, ValueError) as error:
@@ -211,48 +200,51 @@ async def _download_image(session: aiohttp.ClientSession, url: str) -> bytes:
         raise ValueError(msg)
 
     async with timeout(_TIMEOUT_SECONDS):
-        async with session.get(url, headers={"User-Agent": "androidrepo-bot/space-banner"}) as response:
+        async with session.get(
+            url, headers={"User-Agent": "androidrepo-bot/space-banner"}, allow_redirects=False
+        ) as response:
             response.raise_for_status()
+            _require_success(response, subject="NASA image")
             content_type = response.headers.get("content-type", "")
             if not content_type.startswith("image/"):
                 msg = "NASA image is not a supported bounded image"
                 raise ValueError(msg)
-            return await _read_bounded_response(response, max_bytes=_MAX_IMAGE_BYTES, subject="NASA image")
+            return await read_bounded_response(response, max_bytes=_MAX_IMAGE_BYTES, subject="NASA image")
 
 
-def _first_search_item(payload: object) -> _SearchItem:
-    root = payload if isinstance(payload, _SearchPayload) else _SearchPayload.model_validate(payload)
-    if not root.collection.items:
+def _require_success(response: aiohttp.ClientResponse, *, subject: str) -> None:
+    if HTTPStatus.OK <= response.status < HTTPStatus.MULTIPLE_CHOICES:
+        return
+    msg = f"{subject} returned HTTP {response.status}"
+    raise ValueError(msg)
+
+
+def _search_result(payload: _SearchPayload) -> tuple[_SearchData, str]:
+    if not payload.collection.items:
         msg = "NASA search returned no matching image"
         raise ValueError(msg)
-    return root.collection.items[0]
-
-
-def _first_search_data(item: _SearchItem) -> _SearchData:
+    item = payload.collection.items[0]
     if not item.data:
         msg = "NASA search item data is empty"
         raise ValueError(msg)
-    return item.data[0]
-
-
-def _preview_url(item: _SearchItem) -> str:
+    metadata = item.data[0]
     for link in item.links:
-        if link.rel == "preview" and link.href is not None:
-            return link.href
+        if link.rel == "preview" and link.href:
+            return metadata, link.href
     msg = "NASA item has no preview link"
     raise ValueError(msg)
 
 
-def _asset_urls(payload: object) -> tuple[str, ...]:
-    root = payload if isinstance(payload, _AssetPayload) else _AssetPayload.model_validate(payload)
+def parse_nasa_asset_urls(content: bytes) -> tuple[str, ...]:
+    payload = _AssetPayload.model_validate_json(content)
     ranked: list[tuple[int, str]] = []
-    for item in root.collection.items:
-        if item.href is None:
+    for item in payload.collection.items:
+        if not item.href:
             continue
         url = _normalize_asset_url(item.href)
         if url is None:
             continue
-        path = urlparse(url).path.casefold()
+        path = urlsplit(url).path.casefold()
         if not path.endswith((".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff")):
             continue
         if "~orig." in path:
@@ -268,7 +260,7 @@ def _asset_urls(payload: object) -> tuple[str, ...]:
 
 
 def _normalize_asset_url(value: str) -> str | None:
-    parsed = urlparse(value)
+    parsed = urlsplit(value)
     if (
         parsed.hostname != _ALLOWED_ASSET_HOST
         or parsed.scheme not in {"http", "https"}
@@ -277,34 +269,11 @@ def _normalize_asset_url(value: str) -> str | None:
         or parsed.port is not None
     ):
         return None
-    return urlunparse(parsed._replace(scheme="https"))
-
-
-async def _read_bounded_response(response: aiohttp.ClientResponse, *, max_bytes: int, subject: str) -> bytes:
-    _validate_content_length(response.headers.get("content-length"), max_bytes=max_bytes, subject=subject)
-    content = bytearray()
-    async for chunk in response.content.iter_chunked(_READ_CHUNK_SIZE):
-        content.extend(chunk)
-        if len(content) > max_bytes:
-            msg = f"{subject} exceeds {max_bytes} bytes"
-            raise ValueError(msg)
-    return bytes(content)
-
-
-def _validate_content_length(value: str | None, *, max_bytes: int, subject: str) -> None:
-    if value is None:
-        return
-    try:
-        content_length = int(value)
-    except ValueError:
-        return
-    if content_length < 0 or content_length > max_bytes:
-        msg = f"{subject} exceeds {max_bytes} bytes"
-        raise ValueError(msg)
+    return urlunsplit(parsed._replace(scheme="https"))
 
 
 def _is_trusted_asset_url(value: str) -> bool:
-    parsed = urlparse(value)
+    parsed = urlsplit(value)
     return (
         parsed.scheme == "https"
         and parsed.hostname == _ALLOWED_ASSET_HOST
