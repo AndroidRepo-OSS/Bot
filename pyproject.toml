@@ -26,14 +26,19 @@ dependencies = [
 androidrepo-bot = "androidrepo_bot.cli:main"
 
 [dependency-groups]
-dev = ["pre-commit", "pyright", "ruff"]
+dev = [
+    "pre-commit",
+    "pydantic-evals>=2.31.0",
+    "pyright",
+    "ruff",
+]
 
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
 [tool.pyright]
-include = ["src"]
+include = ["src", "evals"]
 pythonVersion = "3.14"
 pythonPlatform = "Linux"
 typeCheckingMode = "strict"

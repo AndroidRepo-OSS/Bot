@@ -13,6 +13,7 @@ from androidrepo_bot.errors import (
     ExternalServiceError,
     ExternalServiceTimeoutError,
     GenerationError,
+    InsufficientRepositoryEvidenceError,
     MissingDownloadSourceError,
     NotAndroidProjectError,
     RateLimitError,
@@ -89,9 +90,14 @@ class DraftWorkflow:
             prepared, session = await self._create_draft(
                 message, state, repository, requested_by_user_id=owner.id, allow_missing_download=allow_missing_download
             )
-        except NotAndroidProjectError as error:
+        except (NotAndroidProjectError, InsufficientRepositoryEvidenceError) as error:
             await state.clear()
-            await message.answer(**_error_message("Project is not related to Android", str(error)).as_kwargs())
+            title = (
+                "Project is not related to Android"
+                if isinstance(error, NotAndroidProjectError)
+                else "Not enough repository evidence"
+            )
+            await message.answer(**_error_message(title, str(error)).as_kwargs())
             await self._log_creation_failure(owner, repository, started_at, error)
             return None
         except MissingDownloadSourceError as error:

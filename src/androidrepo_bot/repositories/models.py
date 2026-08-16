@@ -95,6 +95,22 @@ class RepositoryProvider(StrEnum):
                 return None
 
 
+class RepositoryLinkKind(StrEnum):
+    REPOSITORY = "repository"
+    RELEASE = "release"
+    APP_STORE = "app_store"
+    PACKAGE_REPOSITORY = "package_repository"
+    DOCUMENTATION = "documentation"
+    WEBSITE = "website"
+    SUPPORT = "support"
+    DONATION = "donation"
+    OTHER = "other"
+
+    @property
+    def is_download_candidate(self) -> bool:
+        return self in {self.RELEASE, self.APP_STORE, self.PACKAGE_REPOSITORY}
+
+
 @dataclass(frozen=True, slots=True)
 class RepositoryRef:
     provider: RepositoryProvider
@@ -151,6 +167,7 @@ class RepositoryLink:
     id: str
     label: str
     url: str
+    kind: RepositoryLinkKind
 
     def __post_init__(self) -> None:
         link_id = self.id.strip()
@@ -193,6 +210,11 @@ class RepositoryDetails:
         if REPOSITORY_LINK_ID not in links_by_id:
             msg = "Repository details must include the repository link"
             raise ValueError(msg)
+        if links_by_id[REPOSITORY_LINK_ID].kind is not RepositoryLinkKind.REPOSITORY or any(
+            link.id != REPOSITORY_LINK_ID and link.kind is RepositoryLinkKind.REPOSITORY for link in links
+        ):
+            msg = "Repository link kind must match the reserved repository ID"
+            raise ValueError(msg)
         if len(links_by_id) != len(links):
             msg = "Repository link IDs must be unique"
             raise ValueError(msg)
@@ -216,6 +238,18 @@ class RepositoryDetails:
     @property
     def selectable_link_ids(self) -> frozenset[str]:
         return frozenset(link.id for link in self.links if link.id != REPOSITORY_LINK_ID)
+
+    @property
+    def download_link_ids(self) -> frozenset[str]:
+        return frozenset(link.id for link in self.links if link.kind.is_download_candidate)
+
+    @property
+    def optional_post_link_ids(self) -> frozenset[str]:
+        return frozenset(
+            link.id
+            for link in self.links
+            if link.kind not in {RepositoryLinkKind.REPOSITORY, RepositoryLinkKind.DONATION}
+        )
 
     @property
     def repository_link(self) -> RepositoryLink:

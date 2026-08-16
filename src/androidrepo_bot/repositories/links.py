@@ -5,7 +5,7 @@ from html.parser import HTMLParser
 from typing import TYPE_CHECKING, override
 from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
 
-from androidrepo_bot.repositories.models import RepositoryLink, require_web_url
+from androidrepo_bot.repositories.models import RepositoryLink, RepositoryLinkKind, require_web_url
 
 if TYPE_CHECKING:
     from collections.abc import Collection
@@ -37,6 +37,9 @@ _MAX_LABEL_LENGTH = 120
 _MAX_README_LINKS = 20
 _MAX_MARKDOWN_INDENT = 3
 _MIN_FENCE_LENGTH = 3
+_DOCUMENTATION_TERMS = frozenset({"docs", "documentation", "guide", "manual", "wiki"})
+_SUPPORT_TERMS = frozenset({"help", "issues", "support"})
+_DONATION_TERMS = frozenset({"donate", "donation", "fund", "sponsor", "sponsors"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,11 +131,15 @@ def build_repository_links(
     readme: str | None,
     readme_url: str | None = None,
 ) -> tuple[RepositoryLink, ...]:
-    links = [RepositoryLink(id="repository", label="Repository", url=repository_url)]
+    links = [
+        RepositoryLink(id="repository", label="Repository", url=repository_url, kind=RepositoryLinkKind.REPOSITORY)
+    ]
     if release_url:
-        links.append(RepositoryLink(id="release", label="Latest release", url=release_url))
+        links.append(
+            RepositoryLink(id="release", label="Latest release", url=release_url, kind=RepositoryLinkKind.RELEASE)
+        )
     if homepage and _url_key(homepage) != _url_key(repository_url):
-        links.append(RepositoryLink(id="website", label="Website", url=homepage))
+        links.append(RepositoryLink(id="website", label="Website", url=homepage, kind=RepositoryLinkKind.WEBSITE))
     if readme:
         links.extend(
             _readme_links(repository_url, readme, readme_url=readme_url, known_urls={link.url for link in links})
@@ -150,7 +157,8 @@ def _readme_links(
         if url is None or (key := _url_key(url)) in known_keys:
             continue
         try:
-            link = RepositoryLink(id=f"readme-{len(found) + 1}", label=_clean_label(candidate.label, url), url=url)
+            label = _clean_label(candidate.label, url)
+            link = RepositoryLink(id=f"readme-{len(found) + 1}", label=label, url=url, kind=_classify_link(url, label))
         except ValueError:
             continue
         known_keys.add(key)
@@ -158,6 +166,33 @@ def _readme_links(
         if len(found) == _MAX_README_LINKS:
             break
     return found
+
+
+def _classify_link(url: str, label: str) -> RepositoryLinkKind:
+    parsed = urlsplit(url)
+    hostname = (parsed.hostname or "").casefold()
+    path = parsed.path.casefold()
+    terms = set(re.findall(r"[a-z0-9]+", label.casefold()))
+
+    if hostname == "play.google.com" and path == "/store/apps/details":
+        kind = RepositoryLinkKind.APP_STORE
+    elif (hostname == "f-droid.org" and path.startswith("/packages/")) or (
+        hostname == "apt.izzysoft.de" and path.startswith("/fdroid/index/apk/")
+    ):
+        kind = RepositoryLinkKind.PACKAGE_REPOSITORY
+    elif (hostname == "github.com" and "/releases" in path) or (hostname == "gitlab.com" and "/-/releases" in path):
+        kind = RepositoryLinkKind.RELEASE
+    elif hostname in {"github.com", "gitlab.com"} and path.endswith("/issues"):
+        kind = RepositoryLinkKind.SUPPORT
+    elif hostname in {"ko-fi.com", "opencollective.com", "www.buymeacoffee.com"} or terms & _DONATION_TERMS:
+        kind = RepositoryLinkKind.DONATION
+    elif terms & _DOCUMENTATION_TERMS or any(part in path.split("/") for part in _DOCUMENTATION_TERMS):
+        kind = RepositoryLinkKind.DOCUMENTATION
+    elif terms & _SUPPORT_TERMS:
+        kind = RepositoryLinkKind.SUPPORT
+    else:
+        kind = RepositoryLinkKind.OTHER
+    return kind
 
 
 def _resolve_url(destination: str, *, repository_url: str, readme_url: str | None) -> str | None:

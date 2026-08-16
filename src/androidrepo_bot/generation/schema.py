@@ -144,7 +144,24 @@ class NotAndroidProject(_StrictModel):
     reason: Annotated[
         str,
         BeforeValidator(_normalize_text),
-        Field(min_length=1, max_length=280, description="Evidence-based reason the project is not related to Android."),
+        Field(
+            min_length=1,
+            max_length=280,
+            description="Evidence-based reason the project is affirmatively outside the Android project scope.",
+        ),
+        AfterValidator(_validate_plain_text),
+    ]
+
+
+class InsufficientRepositoryEvidence(_StrictModel):
+    reason: Annotated[
+        str,
+        BeforeValidator(_normalize_text),
+        Field(
+            min_length=1,
+            max_length=280,
+            description="Specific evidence gap that prevents a complete grounded post draft.",
+        ),
         AfterValidator(_validate_plain_text),
     ]
 
@@ -220,4 +237,4 @@ class GeneratedPost(_StrictModel):
         return self
 
 
-type GeneratedOutput = GeneratedPost | NotAndroidProject | MissingDownloadSource
+type GeneratedOutput = GeneratedPost | NotAndroidProject | InsufficientRepositoryEvidence | MissingDownloadSource

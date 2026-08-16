@@ -32,3 +32,7 @@ class NotAndroidProjectError(GenerationError):
 
 class MissingDownloadSourceError(GenerationError):
     pass
+
+
+class InsufficientRepositoryEvidenceError(GenerationError):
+    pass

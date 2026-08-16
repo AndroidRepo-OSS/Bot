@@ -164,21 +164,33 @@ identity and publication history remain persistent in PostgreSQL.
    **Publish**, **Regenerate**, and **Cancel** controls.
 
 Generation treats every repository string, including README and release text,
-as untrusted evidence. Only the first 50,000 README characters are supplied.
-The structured result requires a project name, one summary, three to five
-distinct features, one to three supported tags, and at most four optional link
-selections. The output schema enforces plain text, field bounds, and distinct
-values; the service verifies destination IDs, the download decision, and the
-950-character generation budget. Editorial guidance such as canonical naming,
-semantic link labels, and non-redundant prose stays in the generation prompt.
-The agent may make at most three model requests: the initial request and two
-output-correction retries. Each complete generation run has a 120-second
-deadline.
+as untrusted evidence. Long fields and collections have individual bounds, the
+README contributes at most 50,000 characters, delimiter-like markup is escaped
+inside the serialized JSON, and the complete evidence JSON is capped at 80,000
+characters. Truncation is explicit in the evidence supplied to the model.
 
-The model never supplies a destination URL to the final post. It selects stable
-IDs from inspected evidence; the service resolves those IDs through the same
-repository snapshot and always adds the mandatory repository destination.
-Unknown, mandatory-as-optional, and unresolved selections are not mapped.
+The model returns one of four structured outcomes: a complete draft, an
+affirmatively non-Android project, insufficient evidence for a grounded draft,
+or a missing-download warning. A draft requires a project name, one summary,
+three to five distinct supported features, one to three supported tags, and at
+most four optional link selections. Sparse evidence therefore produces an
+explicit insufficient-evidence result instead of padded claims.
+
+The output schema enforces plain text, field bounds, and distinct values. The
+service verifies destination IDs, download eligibility, staff approval for a
+draft without a Download button, and the 950-character generation budget.
+Staff approval is supplied as a typed dynamic agent instruction rather than as
+repository evidence. Prompt metadata includes the `post-v2` prompt version.
+The agent may make at most three model requests, each capped at 2,048 output
+tokens, with a cumulative 6,144-output-token limit and a 120-second deadline.
+
+The model never supplies a destination URL to the final post. Repository links
+are classified before generation; only verified release, Android app-store,
+and package-repository destinations are eligible for the Download button, and
+donation links cannot be selected as optional post links. The model selects
+stable IDs, the service resolves them through the same repository snapshot, and
+the mandatory repository destination is always added. Unknown,
+mandatory-as-optional, ineligible, and unresolved selections are rejected.
 
 The final Telegram caption contains the title, italic summary, key features,
 verified links, and hashtags, and is checked against Telegram's 1,024-character
@@ -306,7 +318,17 @@ uv run pre-commit run --all-files
 uv build
 ```
 
-Pyright runs in strict mode across runtime code.
+Pyright runs in strict mode across runtime code and eval definitions. To run
+the prompt-quality dataset against the configured OpenCode Zen model, export
+`AR_OPENCODE_ZEN_API_KEY` and optionally
+`AR_OPENCODE_ZEN_MODEL`, then run:
+
+```bash
+uv run python -m evals.generation
+```
+
+The eval dataset covers every structured outcome, download-policy variants,
+sparse evidence, and prompt-injection text embedded in a grounded README.
 
 The built wheel must contain the complete package, database migrations, banner
 assets, and `androidrepo-bot` console-script metadata. The package is marked
