@@ -27,8 +27,6 @@ type ProviderFilePath = Annotated[str, AfterValidator(require_repository_path)]
 
 
 class ProviderPayload(BaseModel):
-    """Strict, immutable representation of an untrusted provider payload."""
-
     model_config = ConfigDict(extra="ignore", frozen=True, strict=True, allow_inf_nan=False)
 
 

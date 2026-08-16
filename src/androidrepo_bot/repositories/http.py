@@ -96,7 +96,6 @@ async def create_http_session() -> AsyncGenerator[aiohttp.ClientSession]:
         yield session
     finally:
         await session.close()
-        # aiohttp transports can outlive ClientSession.close(), especially for TLS.
         await async_sleep(_SSL_TRANSPORT_CLOSE_DELAY_SECONDS)
 
 

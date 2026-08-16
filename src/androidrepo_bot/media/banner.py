@@ -1,4 +1,5 @@
 from asyncio import to_thread
+from contextlib import ExitStack
 from functools import cache
 from importlib.resources import files
 from io import BytesIO
@@ -8,8 +9,9 @@ from time import perf_counter
 from typing import TYPE_CHECKING, Literal
 
 import structlog
-from PIL import Image, ImageDraw, ImageEnhance, ImageFont, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageEnhance, ImageFont, ImageOps
 
+from androidrepo_bot.media.imaging import ArtworkDecodeError, decode_artwork, decode_png_asset
 from androidrepo_bot.media.models import BannerImage, BannerRequest, SpaceArtwork
 from androidrepo_bot.media.nasa import fetch_nasa_artwork
 
@@ -27,7 +29,6 @@ _TITLE_MAX_HEIGHT = 280
 _TITLE_MIN_SIZE = 58
 _TITLE_MAX_SIZE = 180
 _TITLE_SPACING = -6
-_MAX_SOURCE_PIXELS = 40_000_000
 _SCRIM_OPAQUE_END = 0.32
 _SCRIM_TRANSPARENT_START = 0.72
 _MIN_WRAPPED_WORDS = 2
@@ -56,35 +57,45 @@ async def render_banner(session: aiohttp.ClientSession, request: BannerRequest) 
 def _render_banner(request: BannerRequest, artwork: SpaceArtwork | None) -> BannerImage:
     selected_artwork = artwork or _fallback_artwork()
     background, selected_artwork = _prepare_background(selected_artwork)
-    _draw_content(background, request, selected_artwork)
+    with background:
+        _draw_content(background, request, selected_artwork)
+        content = _encode_png(background)
 
-    output = BytesIO()
-    background.convert("RGB").save(output, format="PNG", compress_level=7, optimize=True)
     return BannerImage(
-        content=output.getvalue(),
+        content=content,
         filename=f"{_filename_stem(request.project_name)}-banner.png",
         artwork_id=selected_artwork.identifier,
     )
 
 
+def _encode_png(image: Image.Image) -> bytes:
+    with image.convert("RGB") as rgb_image, BytesIO() as output:
+        rgb_image.save(output, format="PNG", compress_level=7, optimize=True)
+        return output.getvalue()
+
+
 def _prepare_background(artwork: SpaceArtwork) -> tuple[Image.Image, SpaceArtwork]:
     try:
-        source = _load_image(artwork.content)
-    except OSError, UnidentifiedImageError, ValueError:
+        source = decode_artwork(artwork.content)
+    except ArtworkDecodeError:
         artwork = _fallback_artwork()
-        source = _load_image(artwork.content)
+        source = decode_artwork(artwork.content)
 
     rng = Random()
     horizontal_focus = min(0.7, max(0.44, 0.57 + rng.uniform(-0.08, 0.08)))
-    image = ImageOps.fit(source, (_WIDTH, _HEIGHT), method=Image.Resampling.LANCZOS, centering=(horizontal_focus, 0.5))
-    image = ImageEnhance.Color(image).enhance(0.9)
-    image = ImageEnhance.Contrast(image).enhance(1.14)
-    image = ImageEnhance.Brightness(image).enhance(0.82).convert("RGBA")
-
-    cool_tint = Image.new("RGBA", image.size, (4, 6, 17, 34))
-    image = Image.alpha_composite(image, cool_tint)
-    image = Image.alpha_composite(image, _left_scrim())
-    return Image.alpha_composite(image, _edge_vignette()), artwork
+    with ExitStack() as stack:
+        stack.enter_context(source)
+        fitted = stack.enter_context(
+            ImageOps.fit(source, (_WIDTH, _HEIGHT), method=Image.Resampling.LANCZOS, centering=(horizontal_focus, 0.5))
+        )
+        colored = stack.enter_context(ImageEnhance.Color(fitted).enhance(0.9))
+        contrasted = stack.enter_context(ImageEnhance.Contrast(colored).enhance(1.14))
+        brightened = stack.enter_context(ImageEnhance.Brightness(contrasted).enhance(0.82))
+        rgba = stack.enter_context(brightened.convert("RGBA"))
+        cool_tint = stack.enter_context(Image.new("RGBA", rgba.size, (4, 6, 17, 34)))
+        tinted = stack.enter_context(Image.alpha_composite(rgba, cool_tint))
+        scrimmed = stack.enter_context(Image.alpha_composite(tinted, _left_scrim()))
+        return Image.alpha_composite(scrimmed, _edge_vignette()), artwork
 
 
 @cache
@@ -103,11 +114,13 @@ def _left_scrim() -> Image.Image:
             eased = progress * progress * (3 - 2 * progress)
             alpha = round(250 * (1 - eased))
         pixels.append(alpha)
-    mask = Image.frombytes("L", (width, height), bytes(pixels) * height)
-    mask = ImageOps.fit(mask, (_WIDTH, _HEIGHT), method=Image.Resampling.BILINEAR)
-    layer = Image.new("RGBA", (_WIDTH, _HEIGHT), (0, 0, 0, 0))
-    layer.putalpha(mask)
-    return layer
+    with (
+        Image.frombytes("L", (width, height), bytes(pixels) * height) as mask,
+        ImageOps.fit(mask, (_WIDTH, _HEIGHT), method=Image.Resampling.BILINEAR) as fitted_mask,
+    ):
+        layer = Image.new("RGBA", (_WIDTH, _HEIGHT), (0, 0, 0, 0))
+        layer.putalpha(fitted_mask)
+        return layer
 
 
 @cache
@@ -118,11 +131,13 @@ def _edge_vignette() -> Image.Image:
         for x in range(width):
             distance = hypot((x / (width - 1) - 0.56) / 0.76, (y / (height - 1) - 0.5) / 0.72)
             values.append(round(min(92, max(0.0, distance - 0.62) * 160)))
-    mask = Image.frombytes("L", (width, height), bytes(values))
-    mask = ImageOps.fit(mask, (_WIDTH, _HEIGHT), method=Image.Resampling.BILINEAR)
-    layer = Image.new("RGBA", (_WIDTH, _HEIGHT), (0, 0, 0, 0))
-    layer.putalpha(mask)
-    return layer
+    with (
+        Image.frombytes("L", (width, height), bytes(values)) as mask,
+        ImageOps.fit(mask, (_WIDTH, _HEIGHT), method=Image.Resampling.BILINEAR) as fitted_mask,
+    ):
+        layer = Image.new("RGBA", (_WIDTH, _HEIGHT), (0, 0, 0, 0))
+        layer.putalpha(fitted_mask)
+        return layer
 
 
 def _draw_content(image: Image.Image, request: BannerRequest, artwork: SpaceArtwork) -> None:
@@ -174,12 +189,11 @@ def _draw_android_signature(image: Image.Image, draw: ImageDraw.ImageDraw) -> No
     brand_y = 895
     draw.text((_TEXT_X, brand_y), "Android", font=text_font, fill=_WHITE)
     text_box = draw.textbbox((_TEXT_X, brand_y), "Android", font=text_font)
-    with Image.open(BytesIO(_asset_bytes("android-head_flat.png"))) as icon_source:
-        icon = icon_source.convert("RGBA")
-    icon_height = 35
-    icon_width = round(icon.width * icon_height / icon.height)
-    icon = ImageOps.fit(icon, (icon_width, icon_height), method=Image.Resampling.LANCZOS)
-    image.alpha_composite(icon, (round(text_box[2] + 17), brand_y + 13))
+    with decode_png_asset(_asset_bytes("android-head_flat.png")) as icon:
+        icon_height = 35
+        icon_width = round(icon.width * icon_height / icon.height)
+        with ImageOps.fit(icon, (icon_width, icon_height), method=Image.Resampling.LANCZOS) as fitted_icon:
+            image.alpha_composite(fitted_icon, (round(text_box[2] + 17), brand_y + 13))
     attribution_font = _font(11, 400)
     draw.text(
         (_TEXT_X, 956),
@@ -261,20 +275,10 @@ def _ellipsize(
     return best
 
 
-@cache
 def _font(size: int, weight: FontWeight) -> ImageFont.FreeTypeFont:
     font = ImageFont.truetype(BytesIO(_asset_bytes("Figtree.ttf")), size)
     font.set_variation_by_axes([weight])
     return font
-
-
-def _load_image(content: bytes) -> Image.Image:
-    with Image.open(BytesIO(content)) as source:
-        if source.width * source.height > _MAX_SOURCE_PIXELS:
-            msg = "Banner source image exceeds the pixel limit"
-            raise ValueError(msg)
-        source.load()
-        return ImageOps.exif_transpose(source).convert("RGB")
 
 
 @cache

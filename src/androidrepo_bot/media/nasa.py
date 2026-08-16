@@ -1,18 +1,22 @@
 from asyncio import timeout, to_thread
+from dataclasses import dataclass
 from http import HTTPStatus
 from secrets import choice
 from time import perf_counter
-from typing import Annotated
-from urllib.parse import urlsplit, urlunsplit
+from typing import TYPE_CHECKING, Annotated
+from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 import aiohttp
 import structlog
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, StringConstraints, ValidationError
 
-from androidrepo_bot.http import read_bounded_response
+from androidrepo_bot.http import ResponseTooLargeError, read_bounded_response
 from androidrepo_bot.media.models import SpaceArtwork
 
 logger = structlog.get_logger(__name__)
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 _SEARCH_URL = "https://images-api.nasa.gov/search"
 _ASSET_URL = "https://images-api.nasa.gov/asset/{identifier}"
@@ -22,9 +26,33 @@ _ARTWORK_TIMEOUT_SECONDS = 20.0
 _MAX_METADATA_BYTES = 4 * 1024 * 1024
 _MAX_IMAGE_BYTES = 12 * 1024 * 1024
 _MAX_IMAGE_CANDIDATES = 8
-type _Text = Annotated[str, StringConstraints(strip_whitespace=True)]
-type _NonEmptyText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-type _OptionalText = _Text | None
+_REQUEST_TIMEOUT = aiohttp.ClientTimeout(
+    total=_TIMEOUT_SECONDS, connect=5.0, sock_connect=5.0, sock_read=_TIMEOUT_SECONDS
+)
+_REQUEST_HEADERS = {"User-Agent": "androidrepo-bot/space-banner"}
+_JSON_CONTENT_TYPES = frozenset({"application/json"})
+_IMAGE_CONTENT_TYPES = frozenset({"image/jpeg", "image/png", "image/tiff", "image/webp"})
+type _Identifier = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+type _Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+type _Center = Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)]
+type _Date = Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)]
+type _Relation = Annotated[str, StringConstraints(strip_whitespace=True, max_length=50)]
+type _Url = Annotated[str, StringConstraints(strip_whitespace=True, max_length=2_048)]
+
+
+class NasaArtworkError(ValueError):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class _ResponsePolicy:
+    subject: str
+    max_bytes: int
+    allowed_content_types: frozenset[str]
+
+
+_METADATA_POLICY = _ResponsePolicy("NASA metadata", _MAX_METADATA_BYTES, _JSON_CONTENT_TYPES)
+_IMAGE_POLICY = _ResponsePolicy("NASA image", _MAX_IMAGE_BYTES, _IMAGE_CONTENT_TYPES)
 
 
 class _NasaModel(BaseModel):
@@ -32,15 +60,15 @@ class _NasaModel(BaseModel):
 
 
 class _SearchData(_NasaModel):
-    nasa_id: _NonEmptyText
-    title: _NonEmptyText
-    center: _OptionalText = None
-    date_created: _OptionalText = None
+    nasa_id: _Identifier
+    title: _Title
+    center: _Center | None = None
+    date_created: _Date | None = None
 
 
 class _SearchLink(_NasaModel):
-    rel: _OptionalText = None
-    href: _OptionalText = None
+    rel: _Relation | None = None
+    href: _Url | None = None
 
 
 class _SearchItem(_NasaModel):
@@ -57,7 +85,7 @@ class _SearchPayload(_NasaModel):
 
 
 class _AssetItem(_NasaModel):
-    href: _OptionalText = None
+    href: _Url | None = None
 
 
 class _AssetCollection(_NasaModel):
@@ -116,7 +144,7 @@ async def fetch_nasa_artwork(session: aiohttp.ClientSession) -> SpaceArtwork | N
     try:
         async with timeout(_ARTWORK_TIMEOUT_SECONDS):
             artwork = await _fetch_artwork(session, identifier)
-    except (TimeoutError, aiohttp.ClientError, KeyError, TypeError, ValueError) as error:
+    except (TimeoutError, aiohttp.ClientError, NasaArtworkError, ResponseTooLargeError, ValidationError) as error:
         logger.warning(
             "Could not load NASA banner artwork",
             nasa_id=identifier,
@@ -138,9 +166,12 @@ async def _fetch_artwork(session: aiohttp.ClientSession, identifier: str) -> Spa
     search_content = await _read_metadata(session, _SEARCH_URL, params={"nasa_id": identifier, "media_type": "image"})
     search_payload = await to_thread(_SearchPayload.model_validate_json, search_content)
     metadata, preview_url = _search_result(search_payload)
+    if metadata.nasa_id != identifier:
+        msg = "NASA search returned an unexpected artwork identifier"
+        raise NasaArtworkError(msg)
     if not _is_trusted_asset_url(preview_url):
         msg = "NASA preview URL uses an unexpected origin"
-        raise ValueError(msg)
+        raise NasaArtworkError(msg)
 
     resolved_identifier = metadata.nasa_id
     logger.debug("NASA artwork metadata fetched", nasa_id=resolved_identifier)
@@ -161,78 +192,79 @@ async def _fetch_artwork(session: aiohttp.ClientSession, identifier: str) -> Spa
 
 
 async def _read_metadata(session: aiohttp.ClientSession, url: str, *, params: dict[str, str] | None = None) -> bytes:
-    async with timeout(_TIMEOUT_SECONDS):
-        async with session.get(
-            url, headers={"User-Agent": "androidrepo-bot/space-banner"}, params=params, allow_redirects=False
-        ) as response:
-            response.raise_for_status()
-            _require_success(response, subject="NASA metadata")
-            return await read_bounded_response(response, max_bytes=_MAX_METADATA_BYTES, subject="NASA metadata")
+    return await _read_response(session, url, policy=_METADATA_POLICY, params=params)
 
 
 async def _download_first_image(session: aiohttp.ClientSession, candidates: tuple[str, ...]) -> bytes:
     for url in candidates:
-        parsed = urlsplit(url)
+        parsed = _safe_urlsplit(url)
+        asset_host: str | None = None
+        asset_path: str | None = None
+        if parsed is not None:
+            asset_host = parsed.hostname
+            asset_path = parsed.path
         try:
             content = await _download_image(session, url)
-        except (TimeoutError, aiohttp.ClientError, ValueError) as error:
+        except (TimeoutError, aiohttp.ClientError, NasaArtworkError, ResponseTooLargeError) as error:
             logger.debug(
                 "NASA artwork image candidate rejected",
-                asset_host=parsed.hostname,
-                asset_path=parsed.path,
+                asset_host=asset_host,
+                asset_path=asset_path,
                 error_type=type(error).__name__,
             )
             continue
         logger.debug(
-            "NASA artwork image downloaded",
-            asset_host=parsed.hostname,
-            asset_path=parsed.path,
-            image_bytes=len(content),
+            "NASA artwork image downloaded", asset_host=asset_host, asset_path=asset_path, image_bytes=len(content)
         )
         return content
     msg = "NASA did not provide a supported bounded image"
-    raise ValueError(msg)
+    raise NasaArtworkError(msg)
 
 
 async def _download_image(session: aiohttp.ClientSession, url: str) -> bytes:
     if not _is_trusted_asset_url(url):
         msg = "NASA image URL uses an unexpected origin"
-        raise ValueError(msg)
+        raise NasaArtworkError(msg)
 
-    async with timeout(_TIMEOUT_SECONDS):
-        async with session.get(
-            url, headers={"User-Agent": "androidrepo-bot/space-banner"}, allow_redirects=False
-        ) as response:
-            response.raise_for_status()
-            _require_success(response, subject="NASA image")
-            content_type = response.headers.get("content-type", "")
-            if not content_type.startswith("image/"):
-                msg = "NASA image is not a supported bounded image"
-                raise ValueError(msg)
-            return await read_bounded_response(response, max_bytes=_MAX_IMAGE_BYTES, subject="NASA image")
+    return await _read_response(session, url, policy=_IMAGE_POLICY)
+
+
+async def _read_response(
+    session: aiohttp.ClientSession, url: str, *, policy: _ResponsePolicy, params: Mapping[str, str] | None = None
+) -> bytes:
+    async with session.get(
+        url, headers=_REQUEST_HEADERS, params=params, allow_redirects=False, timeout=_REQUEST_TIMEOUT
+    ) as response:
+        _require_success(response, subject=policy.subject)
+        if response.content_type.casefold() not in policy.allowed_content_types:
+            msg = f"{policy.subject} returned an unsupported content type"
+            raise NasaArtworkError(msg)
+        return await read_bounded_response(response, max_bytes=policy.max_bytes, subject=policy.subject)
 
 
 def _require_success(response: aiohttp.ClientResponse, *, subject: str) -> None:
     if HTTPStatus.OK <= response.status < HTTPStatus.MULTIPLE_CHOICES:
         return
+    if response.status >= HTTPStatus.BAD_REQUEST:
+        response.raise_for_status()
     msg = f"{subject} returned HTTP {response.status}"
-    raise ValueError(msg)
+    raise NasaArtworkError(msg)
 
 
 def _search_result(payload: _SearchPayload) -> tuple[_SearchData, str]:
     if not payload.collection.items:
         msg = "NASA search returned no matching image"
-        raise ValueError(msg)
+        raise NasaArtworkError(msg)
     item = payload.collection.items[0]
     if not item.data:
         msg = "NASA search item data is empty"
-        raise ValueError(msg)
+        raise NasaArtworkError(msg)
     metadata = item.data[0]
     for link in item.links:
         if link.rel == "preview" and link.href:
             return metadata, link.href
     msg = "NASA item has no preview link"
-    raise ValueError(msg)
+    raise NasaArtworkError(msg)
 
 
 def parse_nasa_asset_urls(content: bytes) -> tuple[str, ...]:
@@ -260,26 +292,33 @@ def parse_nasa_asset_urls(content: bytes) -> tuple[str, ...]:
 
 
 def _normalize_asset_url(value: str) -> str | None:
-    parsed = urlsplit(value)
-    if (
-        parsed.hostname != _ALLOWED_ASSET_HOST
-        or parsed.scheme not in {"http", "https"}
-        or parsed.username is not None
-        or parsed.password is not None
-        or parsed.port is not None
-    ):
+    parsed = _safe_urlsplit(value)
+    if parsed is None:
+        return None
+    if parsed.scheme not in {"http", "https"} or not _has_trusted_authority(parsed):
         return None
     return urlunsplit(parsed._replace(scheme="https"))
 
 
 def _is_trusted_asset_url(value: str) -> bool:
-    parsed = urlsplit(value)
+    parsed = _safe_urlsplit(value)
+    return parsed is not None and parsed.scheme == "https" and _has_trusted_authority(parsed)
+
+
+def _safe_urlsplit(value: str) -> SplitResult | None:
+    try:
+        return urlsplit(value)
+    except ValueError:
+        return None
+
+
+def _has_trusted_authority(parsed: SplitResult) -> bool:
+    try:
+        port = parsed.port
+    except ValueError:
+        return False
     return (
-        parsed.scheme == "https"
-        and parsed.hostname == _ALLOWED_ASSET_HOST
-        and parsed.username is None
-        and parsed.password is None
-        and parsed.port is None
+        parsed.hostname == _ALLOWED_ASSET_HOST and parsed.username is None and parsed.password is None and port is None
     )
 
 
