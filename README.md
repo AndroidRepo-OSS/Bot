@@ -236,9 +236,9 @@ src/androidrepo_bot/
 ├── app.py              # composition root, Telegram middleware, lifecycle
 ├── config.py           # validated AR_* settings
 ├── start.py            # global /start presentation
-├── posts/              # composed routes, draft/publication workflows, FSM, and UI
+├── posts/              # routes, preparation/publication workflows, FSM, and UI
 ├── repositories/       # URL parsing, shared HTTP policy, GitHub/GitLab
-├── generation/         # evidence prompt, output schema, AI orchestration
+├── generation/         # draft models, evidence prompt, output schema, AI orchestration
 ├── media/              # NASA artwork and packaged banner renderer assets
 └── db/                 # SQLAlchemy models, operations, packaged migrations
 ```
@@ -250,9 +250,11 @@ lifecycle. There are no internal workspace distributions or compatibility
 layers.
 
 The posts package exposes command and callback routers. Its handlers translate
-Telegram updates, while `DraftWorkflow` owns draft preparation and
+Telegram updates, `DraftPreparer` owns provider-to-banner draft preparation,
+`DraftWorkflow` coordinates Telegram, FSM, and audit effects, and
 `PublicationWorkflow` owns the complete publication, compensation, and
-reconciliation protocol.
+reconciliation protocol. Generated draft and tag models live with the
+generation boundary rather than the Telegram layer.
 Typed draft sessions live directly in aiogram's in-memory FSM storage through
 `state.py`; Telegram-specific session message operations stay in `telegram.py`.
 

@@ -6,12 +6,11 @@ from sqlalchemy import func, select, text, update
 from sqlalchemy.dialects.postgresql import Insert, insert
 
 from androidrepo_bot.db.models import PostAttempt, PublicationOperation, PublicationOperationStatus, PublishedPost
-from androidrepo_bot.posts.models import PublicationCooldown
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from androidrepo_bot.posts.models import PublicationIntent, RegisteredRepository
+    from androidrepo_bot.db.repositories import RegisteredRepository
 
 _PUBLICATION_LOCK_NAMESPACE = 1_095_789_890
 _COPY_LEASE = timedelta(minutes=2)
@@ -23,6 +22,23 @@ _FAILED: Final = "failed"
 _ABANDONED: Final = "abandoned"
 _OPEN_OPERATION_STATUSES: tuple[PublicationOperationStatus, ...] = (_COPYING, _COMPENSATING, _UNCERTAIN)
 type _ReceiptlessStatus = Literal["uncertain", "failed"]
+
+
+@dataclass(frozen=True, slots=True)
+class PublicationCooldown:
+    allowed: bool
+    blocked_until: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class PublicationIntent:
+    repository: RegisteredRepository
+    title: str
+    tags: tuple[str, ...]
+    actor_user_id: int
+    source_chat_id: int
+    source_message_id: int
+    channel_id: int
 
 
 @dataclass(frozen=True, slots=True)

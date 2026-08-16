@@ -23,6 +23,7 @@ from androidrepo_bot.errors import (
     MissingDownloadSourceError,
     NotAndroidProjectError,
 )
+from androidrepo_bot.generation.models import PostDraft, PostLink
 from androidrepo_bot.generation.prompt import (
     DRAFT_TEXT_BUDGET,
     POST_INSTRUCTIONS,
@@ -36,7 +37,6 @@ from androidrepo_bot.generation.schema import (
     MissingDownloadSource,
     NotAndroidProject,
 )
-from androidrepo_bot.posts.models import PostDraft, PostLink
 
 if TYPE_CHECKING:
     from pydantic_ai.models import Model
@@ -244,8 +244,8 @@ def _validate_generated_post(ctx: RunContext[GenerationContext], output: Generat
             msg = f"Choose a verified download candidate instead. Valid download IDs: {valid_ids}."
             raise ModelRetry(msg)
         if ctx.deps.allow_missing_download:
-            message = "Generate the approved draft with download_link_id set to null."
-            raise ModelRetry(message)
+            msg = "Generate the approved draft with download_link_id set to null."
+            raise ModelRetry(msg)
         return output
     if not isinstance(output, GeneratedPost):
         return output

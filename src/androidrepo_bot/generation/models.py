@@ -1,13 +1,5 @@
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
-
-from androidrepo_bot.errors import ApplicationError
-
-if TYPE_CHECKING:
-    from datetime import datetime
-
-    from androidrepo_bot.repositories.models import RepositoryRef
 
 
 class PostTag(StrEnum):
@@ -98,31 +90,3 @@ class PostDraft:
     links: tuple[PostLink, ...]
     download_url: str | None
     tags: tuple[PostTag, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class RegisteredRepository:
-    id: int
-    ref: RepositoryRef
-
-
-@dataclass(frozen=True, slots=True)
-class PublicationCooldown:
-    allowed: bool
-    blocked_until: datetime | None
-
-
-@dataclass(frozen=True, slots=True)
-class PublicationIntent:
-    repository: RegisteredRepository
-    title: str
-    tags: tuple[str, ...]
-    actor_user_id: int
-    source_chat_id: int
-    source_message_id: int
-    channel_id: int
-
-
-@dataclass(frozen=True, slots=True)
-class CooldownBlockedError(ApplicationError):
-    cooldown: PublicationCooldown

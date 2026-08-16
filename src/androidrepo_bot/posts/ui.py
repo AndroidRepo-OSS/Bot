@@ -11,8 +11,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 if TYPE_CHECKING:
     from aiogram.types import InlineKeyboardMarkup
 
+    from androidrepo_bot.generation.models import PostDraft
     from androidrepo_bot.media.models import BannerImage
-    from androidrepo_bot.posts.models import PostDraft
 
 TELEGRAM_CAPTION_LIMIT = 1_024
 POST_CALLBACK_PREFIX = "post"

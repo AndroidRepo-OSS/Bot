@@ -8,14 +8,12 @@ from aiogram.exceptions import TelegramAPIError, TelegramNetworkError, TelegramS
 from sqlalchemy.exc import SQLAlchemyError
 
 from androidrepo_bot.db import publications as publication_db
-from androidrepo_bot.posts.models import PublicationIntent
 from androidrepo_bot.posts.ui import published_post_keyboard
 
 if TYPE_CHECKING:
     from aiogram import Bot
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from androidrepo_bot.posts.models import PublicationCooldown
     from androidrepo_bot.posts.state import DraftSession
 
 logger = structlog.get_logger(__name__)
@@ -39,7 +37,7 @@ class PublicationCompleted:
 
 @dataclass(frozen=True, slots=True)
 class PublicationBlocked:
-    cooldown: PublicationCooldown
+    cooldown: publication_db.PublicationCooldown
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,7 +76,7 @@ class PublicationWorkflow:
     async def publish(self, session: DraftSession, *, source_chat_id: int, actor_user_id: int) -> PublicationOutcome:
         reservation = await publication_db.reserve_publication(
             self._sessions,
-            PublicationIntent(
+            publication_db.PublicationIntent(
                 repository=session.registered_repository,
                 title=session.draft.title,
                 tags=tuple(tag.value for tag in session.draft.tags),

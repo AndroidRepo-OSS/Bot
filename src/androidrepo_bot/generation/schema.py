@@ -3,7 +3,7 @@ from typing import Annotated, Self, cast
 
 from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
-from androidrepo_bot.posts.models import PostTag
+from androidrepo_bot.generation.models import PostTag
 
 _URL_PATTERN = re.compile(r"(?:https?://|www\.)", re.IGNORECASE)
 _HTML_PATTERN = re.compile(r"</?[a-z][^>]*>", re.IGNORECASE)

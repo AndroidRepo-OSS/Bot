@@ -39,16 +39,16 @@ class Settings(BaseSettings):
         try:
             validate_token(value.get_secret_value())
         except TokenValidationError as error:
-            message = "AR_BOT_TOKEN must be a valid Telegram bot token"
-            raise ValueError(message) from error
+            msg = "AR_BOT_TOKEN must be a valid Telegram bot token"
+            raise ValueError(msg) from error
         return value
 
     @field_validator("opencode_zen_api_key")
     @classmethod
     def validate_required_secret(cls, value: SecretStr) -> SecretStr:
         if not value.get_secret_value().strip():
-            message = "Required secret settings must not be empty"
-            raise ValueError(message)
+            msg = "Required secret settings must not be empty"
+            raise ValueError(msg)
         return value
 
     @field_validator("opencode_zen_model")
@@ -56,22 +56,22 @@ class Settings(BaseSettings):
     def validate_opencode_zen_model(cls, value: str) -> str:
         value = value.strip()
         if not value:
-            message = "AR_OPENCODE_ZEN_MODEL must not be empty"
-            raise ValueError(message)
+            msg = "AR_OPENCODE_ZEN_MODEL must not be empty"
+            raise ValueError(msg)
         return value
 
     @model_validator(mode="after")
     def validate_telegram_targets(self) -> Self:
         if self.staff_chat_id == 0:
-            message = "AR_STAFF_CHAT_ID must not be zero"
-            raise ValueError(message)
+            msg = "AR_STAFF_CHAT_ID must not be zero"
+            raise ValueError(msg)
         if self.post_topic_id <= 0:
-            message = "AR_POST_TOPIC_ID must be a positive message thread ID"
-            raise ValueError(message)
+            msg = "AR_POST_TOPIC_ID must be a positive message thread ID"
+            raise ValueError(msg)
         if self.log_topic_id <= 0:
-            message = "AR_LOG_TOPIC_ID must be a positive message thread ID"
-            raise ValueError(message)
+            msg = "AR_LOG_TOPIC_ID must be a positive message thread ID"
+            raise ValueError(msg)
         if self.channel_id == 0:
-            message = "AR_CHANNEL_ID must not be zero"
-            raise ValueError(message)
+            msg = "AR_CHANNEL_ID must not be zero"
+            raise ValueError(msg)
         return self

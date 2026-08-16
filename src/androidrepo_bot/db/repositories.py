@@ -1,16 +1,22 @@
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy.dialects.postgresql import Insert, insert
 
 from androidrepo_bot.db.models import RepositoryAlias, RepositoryApp
-from androidrepo_bot.posts.models import RegisteredRepository
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
     from sqlalchemy.sql.dml import ReturningInsert
 
     from androidrepo_bot.repositories.models import RepositoryDetails, RepositoryRef
+
+
+@dataclass(frozen=True, slots=True)
+class RegisteredRepository:
+    id: int
+    ref: RepositoryRef
 
 
 async def register_repository(

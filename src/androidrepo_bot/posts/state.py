@@ -7,8 +7,9 @@ from aiogram.fsm.state import State, StatesGroup
 if TYPE_CHECKING:
     from aiogram.fsm.context import FSMContext
 
+    from androidrepo_bot.db.repositories import RegisteredRepository
+    from androidrepo_bot.generation.models import PostDraft
     from androidrepo_bot.posts.drafts import PreparedDraft
-    from androidrepo_bot.posts.models import PostDraft, RegisteredRepository
     from androidrepo_bot.repositories.models import RepositoryDetails, RepositoryRef
 
 _SESSION_KEY = "draft_session"

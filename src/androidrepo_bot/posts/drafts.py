@@ -7,8 +7,8 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.utils.formatting import Bold, Text, as_list
 from sqlalchemy.exc import SQLAlchemyError
 
-from androidrepo_bot.db.publications import check_publication_eligibility
-from androidrepo_bot.db.repositories import register_repository
+from androidrepo_bot.db.publications import PublicationCooldown, check_publication_eligibility
+from androidrepo_bot.db.repositories import RegisteredRepository, register_repository
 from androidrepo_bot.errors import (
     ExternalServiceError,
     ExternalServiceTimeoutError,
@@ -22,7 +22,6 @@ from androidrepo_bot.errors import (
 )
 from androidrepo_bot.media.banner import render_banner
 from androidrepo_bot.media.models import BannerImage, BannerRequest
-from androidrepo_bot.posts.models import CooldownBlockedError, PostDraft, PublicationCooldown
 from androidrepo_bot.posts.telegram import bound_bot, deactivate_previous
 from androidrepo_bot.posts.ui import draft_keyboard, missing_download_keyboard, render_post_media
 
@@ -34,8 +33,8 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from androidrepo_bot.admin import AdminLog
+    from androidrepo_bot.generation.models import PostDraft
     from androidrepo_bot.generation.service import GenerationService
-    from androidrepo_bot.posts.models import RegisteredRepository
     from androidrepo_bot.posts.state import DraftSession, DraftState
     from androidrepo_bot.repositories.models import (
         RepositoryClient,
@@ -55,7 +54,7 @@ class PreparedDraft:
     banner: BannerImage
 
 
-class DraftWorkflow:
+class DraftPreparer:
     def __init__(
         self,
         *,
@@ -63,12 +62,52 @@ class DraftWorkflow:
         generation: GenerationService,
         http: aiohttp.ClientSession,
         sessions: async_sessionmaker[AsyncSession],
-        admin_log: AdminLog,
     ) -> None:
         self._providers = dict(providers)
         self._generation = generation
         self._http = http
         self._sessions = sessions
+
+    async def prepare(
+        self, repository: RepositoryRef, *, requested_by_user_id: int, allow_missing_download: bool
+    ) -> PreparedDraft | PublicationCooldown:
+        details = await self._providers[repository.provider].fetch(repository)
+
+        registered = await register_repository(self._sessions, details, repository)
+        cooldown = await check_publication_eligibility(
+            self._sessions, registered, requested_by_user_id=requested_by_user_id
+        )
+        if not cooldown.allowed:
+            return cooldown
+
+        draft = await self._generation.generate(details, allow_missing_download=allow_missing_download)
+        banner = await self._render_banner(draft, details)
+        return PreparedDraft(details, registered, draft, banner)
+
+    async def regenerate(
+        self, repository: RepositoryDetails, *, allow_missing_download: bool
+    ) -> tuple[PostDraft, BannerImage]:
+        draft = await self._generation.generate(repository, allow_missing_download=allow_missing_download)
+        return draft, await self._render_banner(draft, repository)
+
+    async def _render_banner(self, draft: PostDraft, repository: RepositoryDetails) -> BannerImage:
+        return await render_banner(
+            self._http,
+            BannerRequest(
+                project_name=draft.title,
+                repository=repository.ref.full_name,
+                provider=repository.ref.provider.display_name,
+                primary_language=(repository.languages[0] if repository.languages else None),
+                license_name=repository.license,
+                release=(repository.release.tag if repository.release is not None else None),
+                topics=repository.topics[:3],
+            ),
+        )
+
+
+class DraftWorkflow:
+    def __init__(self, *, preparer: DraftPreparer, admin_log: AdminLog) -> None:
+        self._preparer = preparer
         self._admin_log = admin_log
 
     async def create(
@@ -87,9 +126,14 @@ class DraftWorkflow:
             )
         started_at = perf_counter()
         try:
-            prepared, session = await self._create_draft(
+            result = await self._create_draft(
                 message, state, repository, requested_by_user_id=owner.id, allow_missing_download=allow_missing_download
             )
+            if isinstance(result, PublicationCooldown):
+                await state.clear()
+                await message.answer(**_cooldown_message(result).as_kwargs())
+                return None
+            prepared, session = result
         except (NotAndroidProjectError, InsufficientRepositoryEvidenceError) as error:
             await state.clear()
             title = (
@@ -114,10 +158,6 @@ class DraftWorkflow:
             except TelegramAPIError:
                 await state.clear()
                 raise
-            return None
-        except CooldownBlockedError as error:
-            await state.clear()
-            await message.answer(**_cooldown_message(error.cooldown).as_kwargs())
             return None
         except (RepositoryAccessError, GenerationError, SQLAlchemyError, TelegramAPIError, ValueError) as error:
             await state.clear()
@@ -164,10 +204,12 @@ class DraftWorkflow:
         *,
         requested_by_user_id: int,
         allow_missing_download: bool,
-    ) -> tuple[PreparedDraft, DraftSession]:
-        prepared = await self._prepare_new(
+    ) -> tuple[PreparedDraft, DraftSession] | PublicationCooldown:
+        prepared = await self._preparer.prepare(
             repository, requested_by_user_id=requested_by_user_id, allow_missing_download=allow_missing_download
         )
+        if isinstance(prepared, PublicationCooldown):
+            return prepared
         draft_message = await _send_draft(message, prepared.draft, prepared.banner)
         try:
             session = await state.begin(prepared, message_id=draft_message.message_id)
@@ -177,46 +219,15 @@ class DraftWorkflow:
         return prepared, session
 
     async def _replace_draft(self, message: Message, state: DraftState, session: DraftSession) -> None:
-        draft = await self._generation.generate(
+        draft, banner = await self._preparer.regenerate(
             session.repository, allow_missing_download=session.draft.download_url is None
         )
-        banner = await self._render_banner(draft, session.repository)
         replacement = await _send_draft(message, draft, banner)
         try:
             await state.save(session.revised(draft, message_id=replacement.message_id))
         except BaseException:
             await _delete_message(replacement, "Untracked revision remained after state storage failed")
             raise
-
-    async def _prepare_new(
-        self, repository: RepositoryRef, *, requested_by_user_id: int, allow_missing_download: bool
-    ) -> PreparedDraft:
-        details = await self._providers[repository.provider].fetch(repository)
-
-        registered = await register_repository(self._sessions, details, repository)
-        cooldown = await check_publication_eligibility(
-            self._sessions, registered, requested_by_user_id=requested_by_user_id
-        )
-        if not cooldown.allowed:
-            raise CooldownBlockedError(cooldown)
-
-        draft = await self._generation.generate(details, allow_missing_download=allow_missing_download)
-        banner = await self._render_banner(draft, details)
-        return PreparedDraft(details, registered, draft, banner)
-
-    async def _render_banner(self, draft: PostDraft, repository: RepositoryDetails) -> BannerImage:
-        return await render_banner(
-            self._http,
-            BannerRequest(
-                project_name=draft.title,
-                repository=repository.ref.full_name,
-                provider=repository.ref.provider.display_name,
-                primary_language=(repository.languages[0] if repository.languages else None),
-                license_name=repository.license,
-                release=(repository.release.tag if repository.release is not None else None),
-                topics=repository.topics[:3],
-            ),
-        )
 
     async def _log_creation_failure(
         self, owner: User, repository: RepositoryRef, started_at: float, error: Exception

@@ -29,7 +29,7 @@ from androidrepo_bot.db.engine import database_sessions
 from androidrepo_bot.generation.service import GenerationService, create_post_agent, create_zen_model
 from androidrepo_bot.posts.callbacks import router as post_callbacks
 from androidrepo_bot.posts.commands import router as post_commands
-from androidrepo_bot.posts.drafts import DraftWorkflow
+from androidrepo_bot.posts.drafts import DraftPreparer, DraftWorkflow
 from androidrepo_bot.posts.publication import PublicationWorkflow
 from androidrepo_bot.repositories.github import GitHubClient
 from androidrepo_bot.repositories.gitlab import GitLabClient
@@ -130,7 +130,7 @@ async def run_bot(settings: Settings) -> None:
 
         generation = GenerationService(agent=agent)
         admin_log = AdminLog(bot=bot, chat_id=settings.staff_chat_id, topic_id=settings.log_topic_id)
-        drafts = DraftWorkflow(
+        preparer = DraftPreparer(
             providers={
                 RepositoryProvider.GITHUB: GitHubClient(session=http, token=_secret_value(settings.github_token)),
                 RepositoryProvider.GITLAB: GitLabClient(session=http, token=_secret_value(settings.gitlab_token)),
@@ -138,8 +138,8 @@ async def run_bot(settings: Settings) -> None:
             generation=generation,
             http=http,
             sessions=sessions,
-            admin_log=admin_log,
         )
+        drafts = DraftWorkflow(preparer=preparer, admin_log=admin_log)
         publications = PublicationWorkflow(bot=bot, channel_id=settings.channel_id, sessions=sessions)
         dispatcher = build_dispatcher(settings, drafts, publications, admin_log)
 
