@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 from logging.config import fileConfig
 from os import environ
@@ -53,12 +51,14 @@ def do_run_migrations(connection: Connection) -> None:
 async def run_async_migrations() -> None:
     configuration = config.get_section(config.config_ini_section, {})
     configuration["sqlalchemy.url"] = database_url()
-    connectable = async_engine_from_config(configuration, prefix="sqlalchemy.", poolclass=pool.NullPool)
-
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
-
-    await connectable.dispose()
+    connectable = async_engine_from_config(
+        configuration, prefix="sqlalchemy.", poolclass=pool.NullPool, hide_parameters=True
+    )
+    try:
+        async with connectable.connect() as connection:
+            await connection.run_sync(do_run_migrations)
+    finally:
+        await connectable.dispose()
 
 
 def run_migrations_online() -> None:

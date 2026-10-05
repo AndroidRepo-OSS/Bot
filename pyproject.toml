@@ -9,17 +9,18 @@ license-files = ["LICENSE"]
 classifiers = ["Private :: Do Not Upload"]
 requires-python = ">=3.14"
 dependencies = [
-    "aiogram",
-    "aiohttp[speedups]>=3.14,<4",
-    "alembic>=1.18,<2",
+    "aiogram>=3.31,<4",
+    "aiohttp[speedups]>=3.14.4,<4",
+    "alembic>=1.20,<2",
     "asyncpg>=0.31,<1",
-    "pillow",
-    "pydantic>=2.13,<3",
-    "pydantic-ai-slim[openai]>=2.7,<3",
-    "pydantic-settings",
-    "sqlalchemy>=2.0.51,<2.1",
-    "structlog>=26.1.0",
-    "uvloop>=0.22.1",
+    "markdown-it-py>=4.2,<5",
+    "pillow>=12.3,<13",
+    "pydantic>=2.13.5,<3",
+    "pydantic-ai-slim[openai]>=2.54,<3",
+    "pydantic-settings>=2.15,<3",
+    "sqlalchemy[asyncio]>=2.1,<3",
+    "structlog>=26.1,<27",
+    "uvloop>=0.23,<1",
 ]
 
 [project.scripts]
@@ -27,10 +28,9 @@ androidrepo-bot = "androidrepo_bot.cli:main"
 
 [dependency-groups]
 dev = [
-    "pre-commit",
-    "pydantic-evals>=2.31.0",
-    "pyright",
-    "ruff",
+    "pre-commit>=4.6.2,<5",
+    "pyright>=1.1.414,<2",
+    "ruff>=0.16.10,<0.17",
 ]
 
 [build-system]
@@ -38,7 +38,7 @@ requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
 [tool.pyright]
-include = ["src", "evals"]
+include = ["src"]
 pythonVersion = "3.14"
 pythonPlatform = "Linux"
 typeCheckingMode = "strict"

@@ -150,7 +150,6 @@ async def fetch_nasa_artwork(session: aiohttp.ClientSession) -> SpaceArtwork | N
             nasa_id=identifier,
             duration_seconds=perf_counter() - started_at,
             error_type=type(error).__name__,
-            exc_info=True,
         )
         return None
     logger.info(
@@ -330,4 +329,4 @@ def _credit_for(center: str) -> str:
         return "NASA/GSFC"
     if normalized == "jsc":
         return "NASA/JSC"
-    return f"NASA/{center}"
+    return "NASA" if normalized == "nasa" else f"NASA/{center}"

@@ -155,7 +155,6 @@ class GenerationService:
                 **log_context,
                 duration_seconds=perf_counter() - started_at,
                 error_type=type(error).__name__,
-                exc_info=True,
             )
             msg = "The post generation agent could not produce a draft"
             raise GenerationError(msg) from error
@@ -194,42 +193,25 @@ class GenerationService:
 def resolve_draft(
     repository: RepositoryDetails, generated: GeneratedPost, *, allow_missing_download: bool = False
 ) -> PostDraft:
-    if generated.download_link_id is None and repository.download_link_ids:
-        msg = "A generated draft must use an available verified download candidate"
-        raise ValueError(msg)
-    if generated.download_link_id is None and not allow_missing_download:
-        msg = "A generated draft without a download source requires explicit approval"
-        raise ValueError(msg)
-    download_link = (
-        repository.link_by_id(generated.download_link_id) if generated.download_link_id is not None else None
-    )
-    if generated.download_link_id is not None and download_link is None:
-        msg = "Generated download link must resolve to a verified repository destination"
-        raise ValueError(msg)
-    if generated.download_link_id is not None and generated.download_link_id not in repository.download_link_ids:
-        msg = "Generated download link must resolve to a verified download candidate"
-        raise ValueError(msg)
+    """Resolve model-selected identifiers only after applying the complete draft contract."""
+    context = GenerationContext(repository=repository, allow_missing_download=allow_missing_download)
+    if errors := _generated_post_errors(context, generated):
+        raise ValueError(" ".join(errors))
 
-    links_by_url: dict[str, PostLink] = {}
+    links_by_id = {link.id: link for link in repository.links}
     repository_link = repository.repository_link
-    links_by_url[repository_link.url] = PostLink(label=repository_link.label, url=repository_link.url)
-
-    for selected_link in generated.links:
-        verified_link = repository.link_by_id(selected_link.id)
-        if selected_link.id not in repository.optional_post_link_ids or verified_link is None:
-            msg = f"Generated link ID does not resolve to a selectable repository destination: {selected_link.id}"
-            raise ValueError(msg)
-        if selected_link.id == generated.download_link_id:
-            msg = "Generated optional links must not duplicate the Download destination"
-            raise ValueError(msg)
-        links_by_url.setdefault(verified_link.url, PostLink(label=selected_link.label, url=verified_link.url))
+    links = (
+        PostLink(label=repository_link.label, url=repository_link.url),
+        *(PostLink(label=link.label, url=links_by_id[link.id].url) for link in generated.links),
+    )
+    download_url = links_by_id[generated.download_link_id].url if generated.download_link_id is not None else None
 
     return PostDraft(
         title=generated.project_name,
         summary=generated.summary,
         features=generated.features,
-        links=tuple(links_by_url.values()),
-        download_url=download_link.url if download_link is not None else None,
+        links=links,
+        download_url=download_url,
         tags=generated.tags,
     )
 

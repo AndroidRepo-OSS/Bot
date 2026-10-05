@@ -1,6 +1,6 @@
 from urllib.parse import urlsplit
 
-from androidrepo_bot.repositories.models import RepositoryProvider, RepositoryRef
+from androidrepo_bot.repositories.models import RepositoryProvider, RepositoryRef, require_web_url
 
 _REPOSITORY_ROOT_PARTS = 2
 
@@ -27,7 +27,8 @@ def _parse_repository_location(value: str) -> tuple[RepositoryProvider, str]:
         raise RepositoryUrlError(msg)
 
     try:
-        parsed = urlsplit(candidate)
+        # Validate before urlsplit, which silently removes some control characters.
+        parsed = urlsplit(require_web_url(candidate))
         port = parsed.port
     except ValueError as error:
         msg = "The repository URL is malformed."

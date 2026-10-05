@@ -3,14 +3,14 @@ import binascii
 from asyncio import to_thread
 from time import perf_counter
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from urllib.parse import quote
 
 import structlog
 from pydantic import Field
 
-from androidrepo_bot.errors import ExternalServiceError
-from androidrepo_bot.repositories.http import ProviderHttpClient, ProviderTransport
+from androidrepo_bot.errors import ExternalServiceError, RepositoryNotFoundError
+from androidrepo_bot.repositories.http import ProviderHttpClient
 from androidrepo_bot.repositories.links import build_repository_links
 from androidrepo_bot.repositories.models import RepositoryDetails, RepositoryRef, RepositoryRelease, require_web_url
 from androidrepo_bot.repositories.payloads import ProviderFilePath, ProviderPayload
@@ -35,10 +35,12 @@ class _GitHubLicensePayload(ProviderPayload):
 
 
 class _GitHubRepositoryPayload(ProviderPayload):
-    id: int
+    id: int = Field(gt=0)
     node_id: str | None = None
     name: str = Field(min_length=1)
     full_name: str = Field(min_length=1)
+    private: bool
+    visibility: Literal["public", "private", "internal"]
     description: str | None = None
     homepage: str | None = None
     topics: tuple[str, ...] = Field(default_factory=tuple)
@@ -59,7 +61,7 @@ class _GitHubReleasePayload(ProviderPayload):
 
 class GitHubClient:
     def __init__(self, *, session: aiohttp.ClientSession, token: str | None = None) -> None:
-        self._http: ProviderTransport = ProviderHttpClient(client=session, provider_name="GitHub")
+        self._http = ProviderHttpClient(client=session, provider_name="GitHub")
         self._headers = dict(_DEFAULT_HEADERS)
         if token:
             self._headers["Authorization"] = f"Bearer {token}"
@@ -71,6 +73,9 @@ class GitHubClient:
         root = f"https://api.github.com/repos/{repository.full_name}"
         response = await self._http.get(root, headers=self._headers)
         metadata = await self._http.parse(response, _GitHubRepositoryPayload.model_validate_json)
+        if metadata.private or metadata.visibility != "public":
+            msg = "Only public GitHub repositories are supported"
+            raise RepositoryNotFoundError(msg)
         _require_matching_repository(metadata.full_name, repository)
         logger.debug(
             "GitHub repository metadata fetched",

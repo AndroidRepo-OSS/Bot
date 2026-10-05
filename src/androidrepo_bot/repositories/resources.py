@@ -7,10 +7,10 @@ from androidrepo_bot.repositories.payloads import parse_language_ranking
 if TYPE_CHECKING:
     from collections.abc import Coroutine, Iterator, Mapping
 
-    from androidrepo_bot.repositories.http import ProviderTransport
+    from androidrepo_bot.repositories.http import ProviderHttpClient
 
 
-async def fetch_languages(client: ProviderTransport, root: str, headers: Mapping[str, str]) -> tuple[str, ...]:
+async def fetch_languages(client: ProviderHttpClient, root: str, headers: Mapping[str, str]) -> tuple[str, ...]:
     response = await client.get_optional(f"{root}/languages", headers=headers)
     if response is None:
         return ()

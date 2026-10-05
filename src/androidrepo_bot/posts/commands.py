@@ -2,31 +2,34 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 import structlog
-from aiogram import Bot, F, Router, flags
+from aiogram import F, Router, flags
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, CommandObject, StateFilter
-from aiogram.types import Message
+from aiogram.utils.callback_answer import CallbackAnswerMiddleware
 from aiogram.utils.chat_action import ChatActionMiddleware
 from aiogram.utils.formatting import Bold, BotCommand, Text, as_list
 from sqlalchemy.exc import SQLAlchemyError
 
 from androidrepo_bot.posts.state import DraftState, PostDraftState
-from androidrepo_bot.posts.telegram import delete_draft_messages
+from androidrepo_bot.posts.telegram import deactivate_previous, delete_draft_messages, pending_download
 from androidrepo_bot.posts.ui import DOWNLOAD_CALLBACK_PREFIX, DownloadDecision, DownloadDecisionCallback
 from androidrepo_bot.repositories.parsing import RepositoryUrlError, parse_repository_url
 
 if TYPE_CHECKING:
+    from aiogram import Bot
     from aiogram.fsm.context import FSMContext
-    from aiogram.types import CallbackQuery
+    from aiogram.types import CallbackQuery, Message
 
     from androidrepo_bot.admin import AdminLog
     from androidrepo_bot.posts.drafts import DraftWorkflow
     from androidrepo_bot.posts.publication import PublicationWorkflow
+    from androidrepo_bot.posts.state import DownloadConfirmation
     from androidrepo_bot.repositories.models import RepositoryRef
 
 logger = structlog.get_logger(__name__)
 router = Router(name=__name__)
 router.message.middleware(ChatActionMiddleware())
+router.callback_query.middleware(CallbackAnswerMiddleware())
 
 
 @router.message(Command("reconcile"))
@@ -43,17 +46,15 @@ async def handle_reconcile_command(message: Message, command: CommandObject, pub
         receipt = await publications.reconcile(
             operation_id, channel_message_id=channel_message_id, published_at=published_at
         )
-    except (SQLAlchemyError, ValueError) as error:
-        logger.warning(
-            "Publication reconciliation failed",
-            operation_id=operation_id,
-            error_type=type(error).__name__,
-            exc_info=True,
-        )
+    except ValueError as error:
         await message.answer(f"⚠️ Could not reconcile operation #{operation_id}: {error}")
         return
+    except SQLAlchemyError as error:
+        logger.warning("Publication reconciliation failed", operation_id=operation_id, error_type=type(error).__name__)
+        await message.answer("⚠️ Publication storage is temporarily unavailable. Try reconciliation again later.")
+        return
     if receipt is None:
-        await message.answer(f"✅ Operation #{operation_id} closed with no visible Publication.")
+        await message.answer(f"✅ Operation #{operation_id} closed with no visible publication.")
     else:
         await message.answer(
             f"✅ Publication record reconciled for channel message #{receipt.channel_message_id}; cooldown is active."
@@ -62,14 +63,14 @@ async def handle_reconcile_command(message: Message, command: CommandObject, pub
 
 @router.message(Command("cancel"), StateFilter(PostDraftState))
 async def handle_cancel_command(message: Message, state: FSMContext, bot: Bot, admin_log: AdminLog) -> None:
-    drafts = DraftState(state)
-    session = await drafts.load() if message.from_user is not None else None
+    user = message.from_user
+    if user is None:
+        return
+    session = await deactivate_previous(message, DraftState(state), bot)
     if session is not None:
         await delete_draft_messages(bot, message.chat.id, session)
-    await drafts.clear()
+        await admin_log.draft_cancelled(user=user, session=session, reason="Cancelled with /cancel")
     await message.answer("🗑️ Draft cancelled.")
-    if message.from_user is not None and session is not None:
-        await admin_log.draft_cancelled(user=message.from_user, session=session, reason="Cancelled with /cancel")
 
 
 @router.message(Command("post"))
@@ -89,48 +90,47 @@ async def handle_post(message: Message, command: CommandObject, state: FSMContex
 
 @router.callback_query(
     DownloadDecisionCallback.filter(F.action == DownloadDecision.GENERATE),
-    StateFilter(PostDraftState.awaiting_download_confirmation),
+    PostDraftState.awaiting_download_confirmation,
+    pending_download,
 )
-async def handle_generate_without_download(callback: CallbackQuery, state: FSMContext, drafts: DraftWorkflow) -> None:
+@flags.callback_answer(pre=True, text="Generating without a download source…")
+async def handle_generate_without_download(
+    callback: CallbackQuery,
+    *,
+    message: Message,
+    confirmation: DownloadConfirmation,
+    state: FSMContext,
+    drafts: DraftWorkflow,
+) -> None:
     draft_state = DraftState(state)
-    pending = await draft_state.pending_download()
-    message = callback.message
-    if pending is None or not isinstance(message, Message):
-        await callback.answer("This confirmation is no longer active.", show_alert=True)
-        return
-
-    await callback.answer("Generating without a download source…")
     await message.edit_reply_markup(reply_markup=None)
+    await draft_state.clear()
     session = await drafts.create(
-        message, draft_state, pending.repository, owner=callback.from_user, allow_missing_download=True
+        message, draft_state, confirmation.repository, owner=callback.from_user, allow_missing_download=True
     )
     if session is not None:
         try:
             await message.delete()
-        except TelegramAPIError:
-            logger.debug("Download warning message remained after draft generation", exc_info=True)
+        except TelegramAPIError as error:
+            logger.warning("Could not remove download warning", error_type=type(error).__name__)
 
 
 @router.callback_query(
     DownloadDecisionCallback.filter(F.action == DownloadDecision.CANCEL),
-    StateFilter(PostDraftState.awaiting_download_confirmation),
+    PostDraftState.awaiting_download_confirmation,
+    pending_download,
 )
-async def handle_cancel_without_download(callback: CallbackQuery, state: FSMContext) -> None:
-    draft_state = DraftState(state)
-    pending = await draft_state.pending_download()
-    message = callback.message
-    if pending is None or not isinstance(message, Message):
-        await callback.answer("This confirmation is no longer active.", show_alert=True)
-        return
-    await draft_state.clear()
+@flags.callback_answer(pre=True, text="Post generation cancelled.")
+async def handle_cancel_without_download(callback: CallbackQuery, *, message: Message, state: FSMContext) -> None:
+    await DraftState(state).clear()
     await message.edit_reply_markup(reply_markup=None)
-    await callback.answer("Post generation cancelled.")
     await message.answer("🗑️ Post generation cancelled.")
 
 
 @router.callback_query(F.data.startswith(f"{DOWNLOAD_CALLBACK_PREFIX}:"))
+@flags.callback_answer(text="This confirmation is no longer active.", show_alert=True)
 async def handle_stale_download_confirmation(callback: CallbackQuery) -> None:
-    await callback.answer("This confirmation is no longer active.", show_alert=True)
+    """The callback middleware explains rejected or expired confirmation controls."""
 
 
 async def _parse_repository(message: Message, command: CommandObject) -> RepositoryRef | None:

@@ -1,5 +1,5 @@
 import re
-from typing import Annotated, Self, cast
+from typing import Annotated, Self
 
 from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
@@ -24,22 +24,6 @@ class _StrictModel(BaseModel):
 
 def _normalize_text(value: object) -> object:
     return " ".join(value.split()) if isinstance(value, str) else value
-
-
-def _json_array_to_tuple(value: object) -> object:
-    return tuple(cast("list[object]", value)) if isinstance(value, list) else value
-
-
-def _normalize_tags(value: object) -> object:
-    values = _json_array_to_tuple(value)
-    if not isinstance(values, tuple):
-        return values
-
-    items = cast("tuple[object, ...]", values)
-    try:
-        return tuple(PostTag(item) if isinstance(item, str) else item for item in items)
-    except ValueError:
-        return items
 
 
 def _normalize_project_name(value: object) -> object:
@@ -133,6 +117,7 @@ LinkLabel = Annotated[
     ),
     AfterValidator(_validate_plain_text),
 ]
+GeneratedTag = Annotated[PostTag, Field(strict=False)]
 
 
 class GeneratedLink(_StrictModel):
@@ -184,8 +169,8 @@ class GeneratedPost(_StrictModel):
     summary: Summary
     features: Annotated[
         tuple[Feature, ...],
-        BeforeValidator(_json_array_to_tuple),
         Field(
+            strict=False,
             min_length=3,
             max_length=5,
             description=(
@@ -196,8 +181,11 @@ class GeneratedPost(_StrictModel):
     ]
     links: Annotated[
         tuple[GeneratedLink, ...],
-        BeforeValidator(_json_array_to_tuple),
-        Field(max_length=4, description="Useful non-repository destinations selected only by exact inspected link ID."),
+        Field(
+            strict=False,
+            max_length=4,
+            description="Useful non-repository destinations selected only by exact inspected link ID.",
+        ),
     ] = ()
     download_link_id: LinkId | None = Field(
         description=(
@@ -206,9 +194,9 @@ class GeneratedPost(_StrictModel):
         )
     )
     tags: Annotated[
-        tuple[PostTag, ...],
-        BeforeValidator(_normalize_tags),
+        tuple[GeneratedTag, ...],
         Field(
+            strict=False,
             min_length=1,
             max_length=3,
             description=(

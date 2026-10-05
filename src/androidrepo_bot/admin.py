@@ -136,6 +136,7 @@ class AdminLog:
         )
 
     async def _send(self, content: Text) -> None:
+        """Keep advisory staff logging from interrupting publication or recovery."""
         try:
             await self._bot.send_message(chat_id=self._chat_id, message_thread_id=self._topic_id, **content.as_kwargs())
         except TelegramAPIError as error:
@@ -144,7 +145,6 @@ class AdminLog:
                 chat_id=self._chat_id,
                 topic_id=self._topic_id,
                 error_type=type(error).__name__,
-                exc_info=True,
             )
 
 

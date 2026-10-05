@@ -1,127 +1,89 @@
-import html
 import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import TYPE_CHECKING, override
 from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
 
+from markdown_it import MarkdownIt
+
 from androidrepo_bot.repositories.models import RepositoryLink, RepositoryLinkKind, require_web_url, web_url_key
 
 if TYPE_CHECKING:
     from collections.abc import Collection
 
-_REFERENCE = re.compile(r"(?m)^\s{0,3}\[([^\[\]\n]{1,120})\]:\s*<?([^\s>\[]{1,2048})>?[^\n]{0,500}$")
-_BADGE_LINK = re.compile(
-    r"\[!\[([^\[\]\n]{0,120})]\((?:<[^<>\n]{1,2048}>|[^\s)\[]{1,2048})\)]"
-    r"\((?:<([^<>\n]{1,2048})>|([^\s)\[]{1,2048}))\)"
-)
-_MARKDOWN_LINK = re.compile(
-    r"(?<!!)\[(?!!)([^\[\]\n]{1,120})]"
-    r"\((?:<([^<>\n]{1,2048})>|([^\s)\[]{1,2048}))"
-    r"(?:\s+(?:\"[^\"\n\[]{0,500}\"|'[^'\n\[]{0,500}'))?\)"
-)
-_REFERENCE_LINK = re.compile(r"(?<!!)\[([^\[\]\n]{1,120})]\[([^\[\]\n]{0,120})]")
-_MARKDOWN_IMAGE = re.compile(
-    r"!\[[^\[\]\n]{0,120}]"
-    r"\((?:<[^<>\n]{1,2048}>|[^\s)\[]{1,2048})"
-    r"(?:\s+(?:\"[^\"\n\[]{0,500}\"|'[^'\n\[]{0,500}'))?\)"
-)
-_REFERENCE_IMAGE = re.compile(r"!\[[^\[\]\n]{0,120}]\[[^\[\]\n]{0,120}]")
-_AUTOLINK = re.compile(r"<(https?://[^<>\s\[]{1,2048})>", re.IGNORECASE)
 _BARE_URL = re.compile(r"(?<![\w@])https?://[^\s<>\"'\[]{1,2048}", re.IGNORECASE)
-_HTML_TAG = re.compile(r"<[^<>\n]{1,2048}>")
-_MARKDOWN_ESCAPE = re.compile(r"\\([\\`*{}\[\]()#+\-.!_>~|])")
 _WHITESPACE = re.compile(r"\s+")
 _README_SCAN_LIMIT = 50_000
 _MAX_LABEL_LENGTH = 120
 _MAX_README_LINKS = 20
-_MAX_MARKDOWN_INDENT = 3
-_MIN_FENCE_LENGTH = 3
+_HIDDEN_TAGS = frozenset({"code", "pre", "script", "style", "textarea", "template"})
 _DOCUMENTATION_TERMS = frozenset({"docs", "documentation", "guide", "manual", "wiki"})
 _SUPPORT_TERMS = frozenset({"help", "issues", "support"})
 _DONATION_TERMS = frozenset({"donate", "donation", "fund", "sponsor", "sponsors"})
+_RELEASE_PATHS = {
+    "github.com": re.compile(r"/[^/]+/[^/]+/releases(?:/|$)"),
+    "gitlab.com": re.compile(r"/(?:[^/]+/){2,}-/releases(?:/|$)"),
+}
 
 
 @dataclass(frozen=True, slots=True)
 class _LinkCandidate:
-    position: int
     label: str
     destination: str
 
 
-class _AnchorParser(HTMLParser):
-    def __init__(self, source: str) -> None:
+class _ReadmeLinkParser(HTMLParser):
+    """Inspect rendered markup without loading URLs or treating image sources as links."""
+
+    def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.candidates: list[_LinkCandidate] = []
-        self._line_offsets = [0, *(match.end() for match in re.finditer(r"\n", source))]
-        self._anchor: tuple[int, str, list[str]] | None = None
+        self._anchor: tuple[str, list[str]] | None = None
+        self._hidden_depth = 0
 
     @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in _HIDDEN_TAGS:
+            self._hidden_depth += 1
+        if self._hidden_depth:
+            return
         attributes = dict(attrs)
-        if tag.casefold() == "a" and (destination := attributes.get("href")):
-            line, column = self.getpos()
-            self._anchor = (self._line_offsets[line - 1] + column, destination, [])
-        elif tag.casefold() == "img" and self._anchor is not None and (alt := attributes.get("alt")):
-            self._anchor[2].append(alt)
+        if tag == "a" and (destination := attributes.get("href")):
+            self._anchor = (destination, [])
+        elif tag == "img" and self._anchor is not None and (alt := attributes.get("alt")):
+            self._anchor[1].append(alt)
 
     @override
     def handle_data(self, data: str) -> None:
+        if self._hidden_depth:
+            return
         if self._anchor is not None:
-            self._anchor[2].append(data)
+            self._anchor[1].append(data)
+            return
+        self.candidates.extend(
+            _LinkCandidate(match.group(), _trim_bare_url(match.group())) for match in _BARE_URL.finditer(data)
+        )
 
     @override
     def handle_endtag(self, tag: str) -> None:
-        if tag.casefold() != "a" or self._anchor is None:
+        if tag in _HIDDEN_TAGS and self._hidden_depth:
+            self._hidden_depth -= 1
             return
-        position, destination, label = self._anchor
-        self.candidates.append(_LinkCandidate(position, " ".join(label), destination))
+        if self._hidden_depth or tag != "a" or self._anchor is None:
+            return
+        destination, label = self._anchor
+        self.candidates.append(_LinkCandidate("".join(label), destination))
         self._anchor = None
 
 
 def _extract_candidates(readme: str) -> list[_LinkCandidate]:
-    visible = _mask_code_and_comments(readme[:_README_SCAN_LIMIT])
-    references = {_reference_key(match.group(1)): match.group(2) for match in _REFERENCE.finditer(visible)}
-    candidates = [
-        *(
-            _LinkCandidate(match.start(), match.group(1), match.group(2) or match.group(3))
-            for match in _BADGE_LINK.finditer(visible)
-        ),
-        *(
-            _LinkCandidate(match.start(), match.group(1), match.group(2) or match.group(3))
-            for match in _MARKDOWN_LINK.finditer(visible)
-        ),
-        *(
-            _LinkCandidate(match.start(), match.group(1), destination)
-            for match in _REFERENCE_LINK.finditer(visible)
-            if (destination := references.get(_reference_key(match.group(2) or match.group(1))))
-        ),
-        *(_LinkCandidate(match.start(), match.group(1), match.group(1)) for match in _AUTOLINK.finditer(visible)),
-    ]
-
-    parser = _AnchorParser(visible)
-    parser.feed(visible)
+    # CommonMark handles references, nested labels, escapes, and code blocks.
+    # The HTML stays in memory and is only parsed; no browser or renderer executes it.
+    rendered = MarkdownIt("commonmark").render(readme[:_README_SCAN_LIMIT])
+    parser = _ReadmeLinkParser()
+    parser.feed(rendered)
     parser.close()
-    candidates.extend(parser.candidates)
-
-    plain = visible
-    for pattern in (
-        _BADGE_LINK,
-        _MARKDOWN_LINK,
-        _REFERENCE_LINK,
-        _MARKDOWN_IMAGE,
-        _REFERENCE_IMAGE,
-        _REFERENCE,
-        _AUTOLINK,
-    ):
-        plain = pattern.sub(lambda match: _masked(match.group()), plain)
-    plain = _HTML_TAG.sub(lambda match: _masked(match.group()), plain)
-    candidates.extend(
-        _LinkCandidate(match.start(), match.group(), _trim_bare_url(match.group()))
-        for match in _BARE_URL.finditer(plain)
-    )
-    candidates.sort(key=lambda candidate: candidate.position)
-    return candidates
+    return parser.candidates
 
 
 def build_repository_links(
@@ -135,12 +97,14 @@ def build_repository_links(
     links = [
         RepositoryLink(id="repository", label="Repository", url=repository_url, kind=RepositoryLinkKind.REPOSITORY)
     ]
-    if release_url:
-        links.append(
-            RepositoryLink(id="release", label="Latest release", url=release_url, kind=RepositoryLinkKind.RELEASE)
-        )
-    if homepage and web_url_key(homepage) != web_url_key(repository_url):
-        links.append(RepositoryLink(id="website", label="Website", url=homepage, kind=RepositoryLinkKind.WEBSITE))
+    known_keys = {web_url_key(repository_url)}
+    for link_id, label, url, kind in (
+        ("release", "Latest release", release_url, RepositoryLinkKind.RELEASE),
+        ("website", "Website", homepage, RepositoryLinkKind.WEBSITE),
+    ):
+        if url and (key := web_url_key(url)) not in known_keys:
+            links.append(RepositoryLink(id=link_id, label=label, url=url, kind=kind))
+            known_keys.add(key)
     if readme:
         links.extend(
             _readme_links(repository_url, readme, readme_url=readme_url, known_urls={link.url for link in links})
@@ -157,13 +121,11 @@ def _readme_links(
         url = _resolve_url(candidate.destination, repository_url=repository_url, readme_url=readme_url)
         if url is None or (key := web_url_key(url)) in known_keys:
             continue
-        try:
-            label = _clean_label(candidate.label, url)
-            link = RepositoryLink(id=f"readme-{len(found) + 1}", label=label, url=url, kind=_classify_link(url, label))
-        except ValueError:
-            continue
+        label = _clean_label(candidate.label, url)
+        found.append(
+            RepositoryLink(id=f"readme-{len(found) + 1}", label=label, url=url, kind=_classify_link(url, label))
+        )
         known_keys.add(key)
-        found.append(link)
         if len(found) == _MAX_README_LINKS:
             break
     return found
@@ -173,6 +135,7 @@ def _classify_link(url: str, label: str) -> RepositoryLinkKind:
     parsed = urlsplit(url)
     hostname = (parsed.hostname or "").casefold()
     path = parsed.path.casefold()
+    parts = path.strip("/").split("/")
     terms = set(re.findall(r"[a-z0-9]+", label.casefold()))
 
     if hostname == "play.google.com" and path == "/store/apps/details":
@@ -181,13 +144,13 @@ def _classify_link(url: str, label: str) -> RepositoryLinkKind:
         hostname == "apt.izzysoft.de" and path.startswith("/fdroid/index/apk/")
     ):
         kind = RepositoryLinkKind.PACKAGE_REPOSITORY
-    elif (hostname == "github.com" and "/releases" in path) or (hostname == "gitlab.com" and "/-/releases" in path):
+    elif (release_path := _RELEASE_PATHS.get(hostname)) and release_path.match(path):
         kind = RepositoryLinkKind.RELEASE
     elif hostname in {"github.com", "gitlab.com"} and path.endswith("/issues"):
         kind = RepositoryLinkKind.SUPPORT
     elif hostname in {"ko-fi.com", "opencollective.com", "www.buymeacoffee.com"} or terms & _DONATION_TERMS:
         kind = RepositoryLinkKind.DONATION
-    elif terms & _DOCUMENTATION_TERMS or any(part in path.split("/") for part in _DOCUMENTATION_TERMS):
+    elif terms & _DOCUMENTATION_TERMS or _DOCUMENTATION_TERMS.intersection(parts):
         kind = RepositoryLinkKind.DOCUMENTATION
     elif terms & _SUPPORT_TERMS:
         kind = RepositoryLinkKind.SUPPORT
@@ -197,8 +160,8 @@ def _classify_link(url: str, label: str) -> RepositoryLinkKind:
 
 
 def _resolve_url(destination: str, *, repository_url: str, readme_url: str | None) -> str | None:
-    destination = html.unescape(_MARKDOWN_ESCAPE.sub(r"\1", destination.strip()))
-    if not destination:
+    destination = destination.strip()
+    if not destination or not destination.isprintable():
         return None
     resolved = (
         f"{repository_url.rstrip('/')}{destination}"
@@ -218,7 +181,6 @@ def _fallback_readme_url(repository_url: str) -> str:
 
 
 def _clean_label(label: str, url: str) -> str:
-    label = html.unescape(_MARKDOWN_ESCAPE.sub(r"\1", _HTML_TAG.sub(" ", label)))
     label = _WHITESPACE.sub(" ", label.strip(" *_~`|"))
     if not label or label.casefold().startswith(("http://", "https://")):
         parsed = urlsplit(url)
@@ -227,82 +189,9 @@ def _clean_label(label: str, url: str) -> str:
     return f"{label[: _MAX_LABEL_LENGTH - 3].rstrip()}..." if len(label) > _MAX_LABEL_LENGTH else label
 
 
-def _mask_code_and_comments(source: str) -> str:
-    source = _mask_html_comments(source)
-    source = _mask_fenced_code(source)
-    return _mask_inline_code(source)
-
-
-def _mask_html_comments(source: str) -> str:
-    parts: list[str] = []
-    cursor = 0
-    while (start := source.find("<!--", cursor)) >= 0:
-        parts.append(source[cursor:start])
-        end = source.find("-->", start + 4)
-        if end < 0:
-            parts.append(_masked(source[start:]))
-            return "".join(parts)
-        end += 3
-        parts.append(_masked(source[start:end]))
-        cursor = end
-    parts.append(source[cursor:])
-    return "".join(parts)
-
-
-def _mask_fenced_code(source: str) -> str:
-    lines = source.splitlines(keepends=True)
-    fence_character: str | None = None
-    fence_length = 0
-    for index, line in enumerate(lines):
-        content = line.rstrip("\r\n")
-        candidate = content.lstrip(" \t")
-        indentation = len(content) - len(candidate)
-        marker_length = (
-            len(candidate) - len(candidate.lstrip(candidate[0]))
-            if indentation <= _MAX_MARKDOWN_INDENT and candidate and candidate[0] in "`~"
-            else 0
-        )
-
-        if fence_character is None:
-            if marker_length < _MIN_FENCE_LENGTH:
-                continue
-            fence_character = candidate[0]
-            fence_length = marker_length
-            lines[index] = _masked(line)
-            continue
-
-        lines[index] = _masked(line)
-        if marker_length >= fence_length and candidate[0] == fence_character and not candidate[marker_length:].strip():
-            fence_character = None
-            fence_length = 0
-    return "".join(lines)
-
-
-def _mask_inline_code(source: str) -> str:
-    characters = list(source)
-    cursor = 0
-    while (start := source.find("`", cursor)) >= 0:
-        delimiter_end = start + 1
-        while delimiter_end < len(source) and source[delimiter_end] == "`":
-            delimiter_end += 1
-        delimiter = source[start:delimiter_end]
-        end = source.find(delimiter, delimiter_end)
-        if end < 0:
-            cursor = delimiter_end
-            continue
-        end += len(delimiter)
-        characters[start:end] = _masked(source[start:end])
-        cursor = end
-    return "".join(characters)
-
-
-def _masked(value: str) -> str:
-    return "".join(character if character in {"\n", "\r"} else " " for character in value)
-
-
-def _reference_key(value: str) -> str:
-    return _WHITESPACE.sub(" ", value.strip()).casefold()
-
-
 def _trim_bare_url(url: str) -> str:
-    return url.rstrip(".,;:!?)]}")
+    url = url.rstrip(".,;:!?")
+    for opening, closing in (("(", ")"), ("[", "]"), ("{", "}")):
+        while url.endswith(closing) and url.count(closing) > url.count(opening):
+            url = url[:-1]
+    return url

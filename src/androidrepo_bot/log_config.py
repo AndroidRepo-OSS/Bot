@@ -12,7 +12,8 @@ if TYPE_CHECKING:
 
 _BEARER_TOKEN_RE = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/-]+=*")
 _QUERY_SECRET_RE = re.compile(r"(?i)\b(api[_-]?key|password|secret|token)=([^&\s]+)")
-_TELEGRAM_BOT_TOKEN_RE = re.compile(r"bot\d+:[A-Za-z0-9_-]+")
+_TELEGRAM_BOT_TOKEN_RE = re.compile(r"\b(?:bot)?\d{5,}:[A-Za-z0-9_-]+")
+_URL_CREDENTIAL_RE = re.compile(r"(?i)(\b[a-z][a-z0-9+.-]*://)[^/\s@]+@")
 _SECRET_KEY_RE = re.compile(r"(?i)(?:.*[_-])?(?:api[_-]?key|password|secret|token|authorization)")
 
 
@@ -82,13 +83,14 @@ def configure_logging(level: LogLevel) -> None:
 
 def _redact_secrets(_: object, __: str, event_dict: structlog.types.EventDict) -> structlog.types.EventDict:
     for key, value in event_dict.items():
-        event_dict[key] = _redact_value(value)
+        event_dict[key] = "<redacted>" if _SECRET_KEY_RE.fullmatch(key) else _redact_value(value)
     return event_dict
 
 
 def _redact_value(value: object) -> object:
     if isinstance(value, str):
-        redacted = _TELEGRAM_BOT_TOKEN_RE.sub("bot<redacted>", value)
+        redacted = _URL_CREDENTIAL_RE.sub(r"\1<redacted>@", value)
+        redacted = _TELEGRAM_BOT_TOKEN_RE.sub("<redacted>", redacted)
         redacted = _BEARER_TOKEN_RE.sub("Bearer <redacted>", redacted)
         return _QUERY_SECRET_RE.sub(r"\1=<redacted>", redacted)
     if isinstance(value, Mapping):

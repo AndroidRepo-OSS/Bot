@@ -8,6 +8,7 @@ from aiogram.exceptions import TelegramAPIError, TelegramNetworkError, TelegramS
 from sqlalchemy.exc import SQLAlchemyError
 
 from androidrepo_bot.db import publications as publication_db
+from androidrepo_bot.db.publications import PublicationReceipt
 from androidrepo_bot.posts.ui import published_post_keyboard
 
 if TYPE_CHECKING:
@@ -19,14 +20,6 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 _RECONCILIATION_ATTEMPTS = 3
 _COPY_TIMEOUT_SECONDS = 60
-
-
-@dataclass(frozen=True, slots=True)
-class PublicationReceipt:
-    operation_id: int
-    channel_id: int
-    channel_message_id: int
-    published_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,12 +61,17 @@ type PublicationOutcome = (
 
 
 class PublicationWorkflow:
+    """Coordinate the database reservation with Telegram's non-transactional copy."""
+
     def __init__(self, *, bot: Bot, channel_id: int, sessions: async_sessionmaker[AsyncSession]) -> None:
         self._bot = bot
         self._channel_id = channel_id
         self._sessions = sessions
 
     async def publish(self, session: DraftSession, *, source_chat_id: int, actor_user_id: int) -> PublicationOutcome:
+        if session.owner_user_id != actor_user_id:
+            msg = "only the draft owner can publish it"
+            raise ValueError(msg)
         reservation = await publication_db.reserve_publication(
             self._sessions,
             publication_db.PublicationIntent(
@@ -105,10 +103,9 @@ class PublicationWorkflow:
         if channel_message_id is None or published_at is None:
             msg = "a visible Publication requires both its channel message ID and publication time"
             raise ValueError(msg)
-        stored = await publication_db.reconcile_visible_publication(
+        return await publication_db.reconcile_visible_publication(
             self._sessions, operation_id, channel_message_id=channel_message_id, published_at=published_at
         )
-        return _receipt(stored)
 
     async def _copy_reserved_publication(
         self, operation_id: int, session: DraftSession, *, source_chat_id: int
@@ -121,6 +118,10 @@ class PublicationWorkflow:
                     message_id=session.message_id,
                     reply_markup=published_post_keyboard(session.draft),
                 )
+        except CancelledError:
+            # Cancellation cannot prove that Telegram rejected the copy.
+            await self._mark_delivery(operation_id, uncertain=True)
+            raise
         except (TimeoutError, TelegramNetworkError, TelegramServerError) as error:
             if await self._mark_delivery(operation_id, uncertain=True):
                 return PublicationRecoveryRequired(operation_id, type(error).__name__)
@@ -136,8 +137,10 @@ class PublicationWorkflow:
     async def _complete_after_copy(
         self, operation_id: int, channel_message_id: int, published_at: datetime
     ) -> PublicationOutcome:
+        # Once Telegram returns a receipt, update cancellation must not abandon it.
         completion = create_task(
-            self._store_or_compensate(operation_id, channel_message_id=channel_message_id, published_at=published_at)
+            self._store_or_compensate(operation_id, channel_message_id=channel_message_id, published_at=published_at),
+            name=f"publication-{operation_id}",
         )
         try:
             return await shield(completion)
@@ -154,7 +157,6 @@ class PublicationWorkflow:
         self, operation_id: int, *, channel_message_id: int, published_at: datetime
     ) -> PublicationOutcome:
         receipt = PublicationReceipt(operation_id, self._channel_id, channel_message_id, published_at)
-        storage_error_type = "PublicationPersistenceError"
         try:
             stored = await publication_db.complete_publication(
                 self._sessions, operation_id, channel_message_id=channel_message_id, published_at=published_at
@@ -166,10 +168,9 @@ class PublicationWorkflow:
                 operation_id=operation_id,
                 channel_message_id=channel_message_id,
                 error_type=storage_error_type,
-                exc_info=True,
             )
         else:
-            return PublicationCompleted(_receipt(stored))
+            return PublicationCompleted(stored)
 
         return await self._compensate(receipt, storage_error_type=storage_error_type)
 
@@ -184,7 +185,7 @@ class PublicationWorkflow:
                 published_at=receipt.published_at,
             )
         except (SQLAlchemyError, ValueError) as compensation_error:
-            logger.exception(
+            logger.warning(
                 "Could not persist compensation intent; leaving the Publication visible",
                 operation_id=operation_id,
                 error_type=type(compensation_error).__name__,
@@ -200,7 +201,7 @@ class PublicationWorkflow:
         try:
             await publication_db.finish_publication_compensation(self._sessions, operation_id)
         except (SQLAlchemyError, ValueError) as compensation_error:
-            logger.exception(
+            logger.warning(
                 "Telegram compensation succeeded but its durable state is unresolved",
                 operation_id=operation_id,
                 error_type=type(compensation_error).__name__,
@@ -210,8 +211,11 @@ class PublicationWorkflow:
 
     async def _delete_publication(self, receipt: PublicationReceipt) -> Exception | None:
         try:
-            deleted = await self._bot.delete_message(chat_id=self._channel_id, message_id=receipt.channel_message_id)
-        except TelegramAPIError as error:
+            async with timeout(_COPY_TIMEOUT_SECONDS):
+                deleted = await self._bot.delete_message(
+                    chat_id=self._channel_id, message_id=receipt.channel_message_id
+                )
+        except (TelegramAPIError, TimeoutError) as error:
             return error
         if deleted:
             return None
@@ -226,7 +230,6 @@ class PublicationWorkflow:
                 operation_id=receipt.operation_id,
                 channel_message_id=receipt.channel_message_id,
                 error_type=type(error).__name__,
-                exc_info=(type(error), error, error.__traceback__),
             )
         last_error: Exception = error or RuntimeError("Publication reconciliation required")
         for attempt in range(_RECONCILIATION_ATTEMPTS):
@@ -239,7 +242,7 @@ class PublicationWorkflow:
                 )
             except (SQLAlchemyError, ValueError) as reconciliation_error:
                 last_error = reconciliation_error
-                logger.exception(
+                logger.warning(
                     "Visible Publication reconciliation failed",
                     operation_id=receipt.operation_id,
                     attempt=attempt + 1,
@@ -248,25 +251,25 @@ class PublicationWorkflow:
                 if attempt + 1 < _RECONCILIATION_ATTEMPTS:
                     await sleep(0.2 * 2**attempt)
                 continue
-            return PublicationCompleted(_receipt(stored), reconciled=True)
+            return PublicationCompleted(stored, reconciled=True)
+        logger.error(
+            "Publication requires staff reconciliation",
+            operation_id=receipt.operation_id,
+            channel_message_id=receipt.channel_message_id,
+            error_type=type(last_error).__name__,
+        )
         return PublicationRecoveryRequired(receipt.operation_id, type(last_error).__name__, receipt)
 
     async def _mark_delivery(self, operation_id: int, *, uncertain: bool) -> bool:
         transition = publication_db.mark_publication_uncertain if uncertain else publication_db.mark_publication_failed
         try:
             await transition(self._sessions, operation_id)
-        except SQLAlchemyError, ValueError:
-            logger.exception(
-                "Could not persist Telegram delivery outcome", operation_id=operation_id, delivery_uncertain=uncertain
+        except (SQLAlchemyError, ValueError) as error:
+            logger.warning(
+                "Could not persist Telegram delivery outcome",
+                operation_id=operation_id,
+                delivery_uncertain=uncertain,
+                error_type=type(error).__name__,
             )
             return False
         return True
-
-
-def _receipt(stored: publication_db.StoredPublication) -> PublicationReceipt:
-    return PublicationReceipt(
-        operation_id=stored.operation_id,
-        channel_id=stored.channel_id,
-        channel_message_id=stored.channel_message_id,
-        published_at=stored.published_at,
-    )

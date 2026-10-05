@@ -252,10 +252,6 @@ class RepositoryDetails:
         object.__setattr__(self, "links", links)
 
     @property
-    def selectable_link_ids(self) -> frozenset[str]:
-        return frozenset(link.id for link in self.links if link.id != REPOSITORY_LINK_ID)
-
-    @property
     def download_link_ids(self) -> frozenset[str]:
         return frozenset(link.id for link in self.links if link.kind.is_download_candidate)
 
@@ -270,9 +266,6 @@ class RepositoryDetails:
     @property
     def repository_link(self) -> RepositoryLink:
         return next(link for link in self.links if link.id == REPOSITORY_LINK_ID)
-
-    def link_by_id(self, link_id: str) -> RepositoryLink | None:
-        return next((link for link in self.links if link.id == link_id), None)
 
 
 class RepositoryClient(Protocol):

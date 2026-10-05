@@ -13,8 +13,6 @@ class ArtworkDecodeError(ValueError):
 def decode_artwork(content: bytes) -> Image.Image:
     try:
         return _decode_artwork(content)
-    except ArtworkDecodeError:
-        raise
     except (Image.DecompressionBombError, Image.DecompressionBombWarning, OSError, UnidentifiedImageError) as error:
         msg = "Banner source image is not a safe supported image"
         raise ArtworkDecodeError(msg) from error
@@ -24,11 +22,8 @@ def _decode_artwork(content: bytes) -> Image.Image:
     with Image.open(BytesIO(content), formats=_ARTWORK_FORMATS) as source:
         _enforce_pixel_limit(source)
         source.load()
-        transposed = ImageOps.exif_transpose(source)
-        try:
+        with ImageOps.exif_transpose(source) as transposed:
             return transposed.convert("RGB")
-        finally:
-            transposed.close()
 
 
 def _enforce_pixel_limit(image: Image.Image) -> None:

@@ -1,15 +1,15 @@
 from asyncio import to_thread
 from time import perf_counter
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from urllib.parse import quote, unquote, urlsplit
 
 import structlog
 from pydantic import Field
 
-from androidrepo_bot.errors import ExternalServiceError
-from androidrepo_bot.repositories.http import ProviderHttpClient, ProviderTransport
+from androidrepo_bot.errors import ExternalServiceError, RepositoryNotFoundError
+from androidrepo_bot.repositories.http import ProviderHttpClient
 from androidrepo_bot.repositories.links import build_repository_links
-from androidrepo_bot.repositories.models import RepositoryDetails, RepositoryRef, RepositoryRelease
+from androidrepo_bot.repositories.models import RepositoryDetails, RepositoryRef, RepositoryRelease, require_web_url
 from androidrepo_bot.repositories.payloads import ProviderPayload, require_repository_path
 from androidrepo_bot.repositories.resources import fetch_languages, fetch_repository_resources
 
@@ -26,9 +26,10 @@ class _GitLabLicensePayload(ProviderPayload):
 
 
 class _GitLabProjectPayload(ProviderPayload):
-    id: int
+    id: int = Field(gt=0)
     name: str = Field(min_length=1)
     path_with_namespace: str = Field(min_length=1)
+    visibility: Literal["public", "private", "internal"]
     description: str | None = None
     readme_url: str | None = None
     default_branch: str | None = None
@@ -44,7 +45,7 @@ class _GitLabReleasePayload(ProviderPayload):
 
 class GitLabClient:
     def __init__(self, *, session: aiohttp.ClientSession, token: str | None = None) -> None:
-        self._http: ProviderTransport = ProviderHttpClient(client=session, provider_name="GitLab")
+        self._http = ProviderHttpClient(client=session, provider_name="GitLab")
         self._headers = {"PRIVATE-TOKEN": token} if token else {}
 
     async def fetch(self, repository: RepositoryRef) -> RepositoryDetails:
@@ -55,6 +56,9 @@ class GitLabClient:
         root = f"https://gitlab.com/api/v4/projects/{project_id}"
         response = await self._http.get(root, headers=self._headers, params={"license": "true"})
         metadata = await self._http.parse(response, _GitLabProjectPayload.model_validate_json)
+        if metadata.visibility != "public":
+            msg = "Only public GitLab repositories are supported"
+            raise RepositoryNotFoundError(msg)
         _require_matching_repository(metadata.path_with_namespace, repository)
         logger.debug(
             "GitLab project metadata fetched",
@@ -106,7 +110,7 @@ class GitLabClient:
     async def _fetch_readme(
         self, root: str, repository: RepositoryRef, readme_url: str | None, default_branch: str | None
     ) -> tuple[str, str] | None:
-        file_path = _readme_path(readme_url, default_branch=default_branch)
+        file_path = _readme_path(readme_url, repository=repository, default_branch=default_branch)
         if file_path is None:
             logger.debug("GitLab README path unavailable")
             return None
@@ -140,20 +144,24 @@ class GitLabClient:
         )
 
 
-def _readme_path(readme_url: str | None, *, default_branch: str | None) -> str | None:
+def _readme_path(readme_url: str | None, *, repository: RepositoryRef, default_branch: str | None) -> str | None:
     if not readme_url or not default_branch:
         return None
 
-    parsed = urlsplit(readme_url)
+    try:
+        parsed = urlsplit(require_web_url(readme_url))
+    except ValueError:
+        return None
     if parsed.scheme.casefold() != "https" or (parsed.hostname or "").casefold() != "gitlab.com":
         return None
-    marker = f"/-/blob/{quote(default_branch, safe='')}/"
-    _, found, file_path = parsed.path.partition(marker)
-    if not found:
+    path = unquote(parsed.path)
+    root = f"/{repository.full_name}/-/blob/"
+    branch_path = path[len(root) :]
+    if not path.casefold().startswith(root.casefold()) or not branch_path.startswith(f"{default_branch}/"):
         return None
 
     try:
-        return require_repository_path(unquote(file_path))
+        return require_repository_path(branch_path[len(default_branch) + 1 :])
     except ValueError:
         return None
 

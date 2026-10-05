@@ -9,7 +9,7 @@ from email.utils import parsedate_to_datetime
 from http import HTTPStatus
 from time import perf_counter
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 import aiohttp
@@ -61,18 +61,6 @@ class ProviderResponse:
     @property
     def text(self) -> str:
         return self.content.decode("utf-8", errors="replace")
-
-
-class ProviderTransport(Protocol):
-    async def get(
-        self, url: str, *, headers: Mapping[str, str] | None = None, params: Mapping[str, str] | None = None
-    ) -> ProviderResponse: ...
-
-    async def get_optional(
-        self, url: str, *, headers: Mapping[str, str] | None = None, params: Mapping[str, str] | None = None
-    ) -> ProviderResponse | None: ...
-
-    async def parse[ParsedT](self, response: ProviderResponse, parser: PayloadParser[ParsedT]) -> ParsedT: ...
 
 
 @asynccontextmanager
@@ -245,7 +233,6 @@ async def _retry_transport_failure(
             **context,
             attempt=attempt + 1,
             error_type=type(error).__name__,
-            exc_info=not is_timeout,
         )
         return False
     delay = _retry_delay(attempt)

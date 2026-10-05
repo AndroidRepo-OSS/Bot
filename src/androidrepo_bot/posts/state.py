@@ -1,5 +1,4 @@
 from dataclasses import dataclass, replace
-from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from aiogram.fsm.state import State, StatesGroup
@@ -22,28 +21,17 @@ class PostDraftState(StatesGroup):
     awaiting_download_confirmation = State()
 
 
-class DraftPhase(StrEnum):
-    ACTIVE = "active"
-    CONFIRMING_PUBLICATION = "confirming_publication"
-
-
 @dataclass(frozen=True, slots=True)
 class DraftSession:
+    owner_user_id: int
     message_id: int
     repository: RepositoryDetails
     draft: PostDraft
     registered_repository: RegisteredRepository
-    phase: DraftPhase = DraftPhase.ACTIVE
     notice_message_id: int | None = None
 
-    def confirming_publication(self) -> DraftSession:
-        return replace(self, phase=DraftPhase.CONFIRMING_PUBLICATION)
-
-    def active(self) -> DraftSession:
-        return replace(self, phase=DraftPhase.ACTIVE)
-
     def revised(self, draft: PostDraft, *, message_id: int) -> DraftSession:
-        return replace(self, draft=draft, message_id=message_id, phase=DraftPhase.ACTIVE)
+        return replace(self, draft=draft, message_id=message_id)
 
     def with_notice(self, notice_message_id: int) -> DraftSession:
         return replace(self, notice_message_id=notice_message_id)
@@ -52,21 +40,26 @@ class DraftSession:
 @dataclass(frozen=True, slots=True)
 class DownloadConfirmation:
     repository: RepositoryRef
+    message_id: int
+    owner_user_id: int
 
 
 class DraftState:
+    """Typed access to the process-local FSM storage, isolated per staff member."""
+
     def __init__(self, context: FSMContext) -> None:
         self._context = context
 
     async def load(self) -> DraftSession | None:
-        phase = _phase_for_state(await self._context.get_state())
-        session = (await self._context.get_data()).get(_SESSION_KEY)
-        if phase is None or not isinstance(session, DraftSession) or session.phase is not phase:
+        status = await self._context.get_state()
+        if status not in {PostDraftState.active.state, PostDraftState.confirming_publication.state}:
             return None
-        return session
+        session = await self._context.get_value(_SESSION_KEY)
+        return session if isinstance(session, DraftSession) else None
 
-    async def begin(self, prepared: PreparedDraft, *, message_id: int) -> DraftSession:
+    async def begin(self, prepared: PreparedDraft, *, message_id: int, owner_user_id: int) -> DraftSession:
         session = DraftSession(
+            owner_user_id=owner_user_id,
             message_id=message_id,
             repository=prepared.repository,
             draft=prepared.draft,
@@ -75,37 +68,21 @@ class DraftState:
         await self.save(session)
         return session
 
-    async def save(self, session: DraftSession) -> None:
+    async def save(self, session: DraftSession, *, status: State = PostDraftState.active) -> None:
         await self._context.set_data({_SESSION_KEY: session})
-        await self._context.set_state(_state_for_phase(session.phase))
+        await self._context.set_state(status)
 
-    async def wait_for_download(self, repository: RepositoryRef) -> None:
-        await self._context.set_data({_DOWNLOAD_CONFIRMATION_KEY: DownloadConfirmation(repository)})
+    async def wait_for_download(self, repository: RepositoryRef, *, message_id: int, owner_user_id: int) -> None:
+        await self._context.set_data({
+            _DOWNLOAD_CONFIRMATION_KEY: DownloadConfirmation(repository, message_id, owner_user_id)
+        })
         await self._context.set_state(PostDraftState.awaiting_download_confirmation)
 
     async def pending_download(self) -> DownloadConfirmation | None:
         if await self._context.get_state() != PostDraftState.awaiting_download_confirmation.state:
             return None
-        pending = (await self._context.get_data()).get(_DOWNLOAD_CONFIRMATION_KEY)
+        pending = await self._context.get_value(_DOWNLOAD_CONFIRMATION_KEY)
         return pending if isinstance(pending, DownloadConfirmation) else None
 
-    async def clear(self) -> DraftSession | None:
-        session = await self.load()
+    async def clear(self) -> None:
         await self._context.clear()
-        return session
-
-
-def _state_for_phase(phase: DraftPhase) -> State:
-    match phase:
-        case DraftPhase.ACTIVE:
-            return PostDraftState.active
-        case DraftPhase.CONFIRMING_PUBLICATION:
-            return PostDraftState.confirming_publication
-
-
-def _phase_for_state(state: str | None) -> DraftPhase | None:
-    if state == PostDraftState.active.state:
-        return DraftPhase.ACTIVE
-    if state == PostDraftState.confirming_publication.state:
-        return DraftPhase.CONFIRMING_PUBLICATION
-    return None

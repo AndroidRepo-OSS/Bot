@@ -1,9 +1,7 @@
-fix = true
 extend-exclude = [".agents"]
 line-length = 120
 preview = true
 show-fixes = true
-unsafe-fixes = true
 
 src = ["src"]
 
@@ -57,7 +55,7 @@ split-on-trailing-comma = false
 known-first-party = ["androidrepo_bot"]
 
 [lint.flake8-tidy-imports]
-ban-relative-imports = "parents"
+ban-relative-imports = "all"
 
 [lint.flake8-tidy-imports.banned-api]
 "logging.getLogger".msg = "Use structlog.get_logger for application logging."

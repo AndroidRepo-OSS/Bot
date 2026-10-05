@@ -145,18 +145,20 @@ class DraftWorkflow:
             await self._log_creation_failure(owner, repository, started_at, error)
             return None
         except MissingDownloadSourceError as error:
-            await state.wait_for_download(repository)
+            await state.clear()
+            warning = await message.answer(
+                **as_list(
+                    as_list(Text("⚠️ ", Bold("No official download source found")), str(error)),
+                    "Generate the post without a Download button?",
+                    sep="\n\n",
+                ).as_kwargs(),
+                reply_markup=missing_download_keyboard(),
+            )
             try:
-                await message.answer(
-                    **as_list(
-                        as_list(Text("⚠️ ", Bold("No official download source found")), str(error)),
-                        "Generate the post without a Download button?",
-                        sep="\n\n",
-                    ).as_kwargs(),
-                    reply_markup=missing_download_keyboard(),
-                )
-            except TelegramAPIError:
+                await state.wait_for_download(repository, message_id=warning.message_id, owner_user_id=owner.id)
+            except BaseException:
                 await state.clear()
+                await _delete_message(warning, "Untracked download confirmation remained after state storage failed")
                 raise
             return None
         except (RepositoryAccessError, GenerationError, SQLAlchemyError, TelegramAPIError, ValueError) as error:
@@ -168,8 +170,8 @@ class DraftWorkflow:
         if prepared.repository.readme is None:
             try:
                 notice = await message.answer("⚠️ No README was available, so this draft uses repository metadata only.")
-            except TelegramAPIError:
-                logger.warning("Could not send missing README notice", exc_info=True)
+            except TelegramAPIError as error:
+                logger.warning("Could not send missing README notice", error_type=type(error).__name__)
             else:
                 session = session.with_notice(notice.message_id)
                 await state.save(session)
@@ -185,7 +187,8 @@ class DraftWorkflow:
     async def revise(self, message: Message, state: DraftState, session: DraftSession) -> bool:
         try:
             await self._replace_draft(message, state, session)
-        except GenerationError, ValueError, TelegramAPIError:
+        except (GenerationError, ValueError, TelegramAPIError) as error:
+            logger.warning("Could not regenerate the draft", error_type=type(error).__name__)
             await message.answer(
                 **as_list(
                     Bold("Could not regenerate the draft"), "The current draft is still available. Try again later."
@@ -212,7 +215,9 @@ class DraftWorkflow:
             return prepared
         draft_message = await _send_draft(message, prepared.draft, prepared.banner)
         try:
-            session = await state.begin(prepared, message_id=draft_message.message_id)
+            session = await state.begin(
+                prepared, message_id=draft_message.message_id, owner_user_id=requested_by_user_id
+            )
         except BaseException:
             await _delete_message(draft_message, "Untracked draft remained after state storage failed")
             raise
@@ -243,8 +248,8 @@ class DraftWorkflow:
 async def _delete_message(message: Message, log_message: str) -> None:
     try:
         await message.delete()
-    except TelegramAPIError:
-        logger.debug(log_message, message_id=message.message_id, exc_info=True)
+    except TelegramAPIError as error:
+        logger.warning(log_message, message_id=message.message_id, error_type=type(error).__name__)
 
 
 async def _send_draft(message: Message, draft: PostDraft, banner: BannerImage) -> Message:

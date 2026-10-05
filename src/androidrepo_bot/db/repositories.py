@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import Insert, insert
 
 from androidrepo_bot.db.models import RepositoryAlias, RepositoryApp
@@ -36,7 +37,7 @@ async def register_repository(
     return RegisteredRepository(id=repository_id, ref=repository.ref)
 
 
-def _repository_upsert(repository: RepositoryDetails, seen_at: datetime) -> ReturningInsert[tuple[int]]:
+def _repository_upsert(repository: RepositoryDetails, seen_at: datetime) -> ReturningInsert[int]:
     statement = insert(RepositoryApp).values(
         provider=repository.ref.provider.value,
         provider_repository_id=repository.provider_repository_id,
@@ -54,7 +55,9 @@ def _repository_upsert(repository: RepositoryDetails, seen_at: datetime) -> Retu
             "current_name": statement.excluded.current_name,
             "current_url": statement.excluded.current_url,
             "display_name": statement.excluded.display_name,
-            "last_seen_at": statement.excluded.last_seen_at,
+            # Concurrent instances may reach the upsert in a different order.
+            "first_seen_at": func.least(RepositoryApp.first_seen_at, statement.excluded.first_seen_at),
+            "last_seen_at": func.greatest(RepositoryApp.last_seen_at, statement.excluded.last_seen_at),
         },
     ).returning(RepositoryApp.id)
 
@@ -73,6 +76,6 @@ def _alias_upsert(repository_id: int, repository: RepositoryRef, observed_at: da
         set_={
             "namespace": statement.excluded.namespace,
             "name": statement.excluded.name,
-            "observed_at": statement.excluded.observed_at,
+            "observed_at": func.greatest(RepositoryAlias.observed_at, statement.excluded.observed_at),
         },
     )

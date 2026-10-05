@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -46,7 +44,7 @@ def missing_download_keyboard() -> InlineKeyboardMarkup:
         text="Generate without download", callback_data=DownloadDecisionCallback(action=DownloadDecision.GENERATE)
     )
     builder.button(text="Cancel", callback_data=DownloadDecisionCallback(action=DownloadDecision.CANCEL))
-    builder.adjust(1, 1)
+    builder.adjust(1)
     return builder.as_markup()
 
 
@@ -70,7 +68,7 @@ def publish_confirmation_keyboard(draft: PostDraft) -> InlineKeyboardMarkup:
         builder.button(text="📥 Download", url=draft.download_url)
     builder.button(text="✅ Publish now", callback_data=PostCallback(action=PostAction.CONFIRM_PUBLISH))
     builder.button(text="↩️ Back", callback_data=PostCallback(action=PostAction.BACK))
-    builder.adjust(*(1, 1, 1) if draft.download_url is not None else (1, 1))
+    builder.adjust(1)
     return builder.as_markup()
 
 
