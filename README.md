@@ -95,7 +95,8 @@ At startup, the application validates settings, opens one shared
 PydanticAI agent, registers Telegram commands, and begins polling. Shutdown
 stops admission of new work, drains admitted update handlers, emits a
 best-effort stop audit, and closes resources through one central
-`AsyncExitStack`.
+`AsyncExitStack`. The dispatcher tracks updates through public aiogram
+lifecycle hooks, including handlers waiting for FSM isolation.
 
 ## Configuration
 
@@ -153,7 +154,9 @@ identity and publication history remain persistent in PostgreSQL.
    paths, GitHub subpaths, and GitLab `/-/` subresources.
 4. After a new URL is valid, the bot deactivates the previous owned draft
    controls and replaces its active session.
-5. The bot loads normalized provider metadata, README content when available,
+5. The provider must confirm public visibility, including when an API token is
+   configured. Private/internal projects are rejected before further evidence
+   is loaded. The bot then loads normalized metadata, README content when available,
    latest-release metadata, languages, license, topics, homepage, and verified
    links. Missing README content is allowed; the resulting draft uses metadata
    only and the bot sends a warning.
@@ -185,8 +188,8 @@ The agent may make at most three model requests, each capped at 2,048 output
 tokens, with a cumulative 6,144-output-token limit and a 120-second deadline.
 
 The model never supplies a destination URL to the final post. Repository links
-are classified before generation; only verified release, Android app-store,
-and package-repository destinations are eligible for the Download button, and
+are extracted with a CommonMark parser, validated, and classified before
+generation; only verified release, Android app-store, and package-repository destinations are eligible for the Download button, and
 donation links cannot be selected as optional post links. The model selects
 stable IDs, the service resolves them through the same repository snapshot, and
 the mandatory repository destination is always added. Unknown,
@@ -209,7 +212,9 @@ photo-caption limit.
   channel copy.
 - Callbacks must belong to the session owner and originate from the active
   draft message. Stale, foreign, and malformed callbacks receive an alert and
-  cannot mutate or publish the session.
+  cannot mutate or publish the session. Missing-download confirmations are also
+  bound to their originating message and owner, so an old confirmation cannot
+  authorize a newer repository.
 
 `PublicationWorkflow` reserves one durable publication operation per
 repository before copying to the channel. A PostgreSQL transaction-level
@@ -233,7 +238,8 @@ Failure to deliver an audit message does not fail the underlying workflow.
 
 ```text
 src/androidrepo_bot/
-├── app.py              # composition root, Telegram middleware, lifecycle
+├── app.py              # composition root and resource ownership
+├── dispatcher.py       # Telegram admission, graceful drain, safe error reporting
 ├── config.py           # validated AR_* settings
 ├── start.py            # global /start presentation
 ├── posts/              # routes, preparation/publication workflows, FSM, and UI
@@ -256,7 +262,10 @@ Telegram updates, `DraftPreparer` owns provider-to-banner draft preparation,
 reconciliation protocol. Generated draft and tag models live with the
 generation boundary rather than the Telegram layer.
 Typed draft sessions live directly in aiogram's in-memory FSM storage through
-`state.py`; Telegram-specific session message operations stay in `telegram.py`.
+`state.py`, with native FSM states as the sole workflow-phase source. Reusable
+async filters inject verified callback context; aiogram's callback-answer and
+chat-action middleware handle acknowledgements and progress. Telegram-specific
+message operations stay in `telegram.py`.
 
 Repository provider responses are bounded, parsed as untrusted JSON, and
 validated before normalization. Transient provider failures use bounded
@@ -314,23 +323,26 @@ Run checks from the repository root:
 uv lock --check
 uv sync --locked --all-groups
 uv run ruff format --check .
-uv run ruff check .
+uv run ruff check --no-fix .
 uv run pyright
 uv run pre-commit run --all-files
 uv build
 ```
 
-Pyright runs in strict mode across runtime code and eval definitions. To run
-the prompt-quality dataset against the configured OpenCode Zen model, export
-`AR_OPENCODE_ZEN_API_KEY` and optionally
-`AR_OPENCODE_ZEN_MODEL`, then run:
+Pyright runs in strict mode across runtime code. Ruff does not apply fixes
+unless requested; pre-commit applies safe fixes and formatting. Review its diff
+and rerun affected checks. No lint or type diagnostics are suppressed.
 
-```bash
-uv run python -m evals.generation
-```
+This repository intentionally has no test suite or model-evaluation dataset.
+Validation uses formatting, lint, strict typing, packaging, offline smoke
+commands, and scoped manual checks. Database concurrency and actual Telegram
+behavior still require a disposable integration environment.
 
-The eval dataset covers every structured outcome, download-policy variants,
-sparse evidence, and prompt-injection text embedded in a grounded README.
+The dependency baseline includes aiogram 3.31, SQLAlchemy 2.1, Pydantic 2.13,
+PydanticAI 2.54, Pillow 12.3, and markdown-it-py 4.2; exact versions are pinned
+in `uv.lock`. Upgrades use `uv lock --upgrade`, followed by the full checks.
+The local skills in `.agents/skills/` document the Telegram, publication, and
+evidence workflows; root [AGENTS.md](AGENTS.md) contains project conventions.
 
 The built wheel must contain the complete package, database migrations, banner
 assets, and `androidrepo-bot` console-script metadata. The package is marked

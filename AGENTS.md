@@ -1,63 +1,59 @@
-# Repository Instructions
+# Android Repository Bot
 
-## Project Scope
+Private Python 3.14 application that turns public GitHub/GitLab evidence into
+staff-approved Telegram posts. Read the relevant implementation before editing;
+prefer direct, typed code and the existing libraries over generic frameworks.
 
-This repository contains a private Python 3.14 Telegram bot that turns public GitHub and GitLab repositories into
-staff-reviewed Android Repository channel posts. Staff approval, evidence-grounded copy, duplicate-publication
-prevention, and recoverable delivery are core product guarantees.
+## Code map
 
-## Architecture
+- `app.py`: composition and resource ownership.
+- `dispatcher.py`: aiogram admission, graceful draining, and safe error reporting.
+- `posts/`: Telegram routes, native FSM phases, draft preparation, and publication.
+- `repositories/`: public-provider access, normalized evidence, bounded HTTP, links.
+- `generation/`: prompts, structured outcomes, evidence-to-destination resolution.
+- `media/`: NASA assets, validated media values, Pillow rendering, bundled licenses.
+- `db/`: SQLAlchemy transactions and packaged Alembic revisions.
 
-Runtime code lives in `src/androidrepo_bot/`.
+## Invariants
 
-- `app.py`: composition root, middleware, process lifecycle, and dependency wiring.
-- `posts/`: Telegram commands, callbacks, typed FSM state, draft preparation, and publication workflow.
-- `repositories/`: provider clients, URL parsing, bounded HTTP access, and repository evidence normalization.
-- `generation/`: prompt, output schema, and model orchestration.
-- `media/`: NASA asset lookup, banner rendering, and packaged assets.
-- `db/`: SQLAlchemy models and operations plus packaged Alembic migrations.
+- Admit workflow actions only from the configured staff chat/topic. Bind draft
+  and download-confirmation callbacks to their owner and active message.
+- Fetch only public repositories. Bound and validate provider/model/Telegram
+  input. Generated links resolve from inspected evidence, never model URLs.
+- Commit a durable reservation before channel delivery. Preserve receipt,
+  cooldown, compensation, reconciliation, and cross-process locking behavior.
+  Uncertain delivery must block a second copy until staff reconciliation.
+- Drain admitted work before closing HTTP, database, agent, or FSM resources.
+  Keep cancellation and external side effects explicit.
+- Log safe context and exception types. Never expose tokens, raw provider/model
+  errors, private Telegram content, or secret-bearing URLs.
 
-Keep provider and Telegram details at their boundaries. Business workflows should depend on normalized data and explicit
-outcomes rather than raw HTTP payloads, Telegram updates, or loosely typed dictionaries.
+## Implementation
 
-## Product Invariants
+Use Python 3.14 typing, absolute package imports, async I/O, and
+`structlog.get_logger()`. Prefer aiogram filters, callback data, middleware,
+formatting, flags, and dependency injection. Use Pydantic for input constraints
+and immutable dataclasses for internal workflow values where appropriate.
 
-- Treat repository content, provider responses, model output, and Telegram input as untrusted. Bound reads, validate
-  structure, and reject unsafe URLs or identifiers before use.
-- Generated claims must be supported by inspected repository evidence. The model selects stable identifiers; application
-  code resolves final URLs from validated evidence.
-- Publication must remain durable and idempotent across retries, concurrent bot instances, database failures, and
-  ambiguous Telegram delivery. Do not weaken reservation, receipt, compensation, cooldown, or reconciliation behavior.
-- A failure after channel delivery must never silently permit a duplicate publication. Preserve enough durable state for
-  safe staff reconciliation.
-- Draft ownership and staff-chat/topic authorization must be enforced before state changes or publication.
-- Logs and staff-facing errors must not expose credentials, authorization headers, private Telegram content, or
-  secret-bearing URLs.
+Keep responsibilities at existing boundaries. Remove unused layers and repeated
+state rather than adding compatibility adapters. Comment recovery assumptions
+and non-obvious constraints. Fix diagnostics at their source; do not introduce
+lint/type suppressions or weaken strict checking.
 
-## Implementation Conventions
+Add/remove dependencies with `uv`; update `pyproject.toml` and `uv.lock`
+together. Validate changes against the resolved library versions. New schema
+changes require a new Alembic revision; do not edit deployed revisions. Reflect
+configuration changes in `.env.example` and the README table. Preserve asset
+attribution and license files.
 
-- Use explicit type annotations and asynchronous APIs for network, Telegram, and database I/O.
-- Prefer absolute package imports and `structlog.get_logger()` for application logging.
-- Keep side effects at module boundaries and make state transitions explicit. Use early returns for invalid or terminal
-  states; keep the successful path easy to follow.
-- Fix diagnostics at their source. Ruff and Pyright configuration define formatting, lint, and typing behavior.
-- Keep changes focused. Avoid unrelated refactors, compatibility layers, or new abstractions without a concrete caller or
-  invariant to protect.
+Do not add test suites, fixtures, or eval datasets unless explicitly requested.
+Temporary, offline smoke commands are useful when they check behavior beyond
+static analysis. Do not run paid generation or send real Telegram messages as
+an incidental verification step.
 
-## Database, Configuration, and Assets
+## Verification and handoff
 
-- Apply schema changes with a new Alembic revision under `src/androidrepo_bot/db/migrations/versions/`. Do not rewrite an
-  existing revision that may already be deployed.
-- Keep database state transitions transactional. When behavior spans PostgreSQL and Telegram, account explicitly for the
-  non-transactional external side effect and its recovery path.
-- Add or remove dependencies with `uv` and commit `pyproject.toml` and `uv.lock` together.
-- Reflect configuration changes in `.env.example` and the README configuration table. Never commit a real `.env` file.
-- Preserve asset license files and update `src/androidrepo_bot/media/assets/README.md` when packaged assets change.
-
-## Verification
-
-Before handing off code, dependency, migration, or build-configuration changes, run the full verification sequence from
-the repository root:
+From the repository root, run:
 
 ```bash
 uv lock --check
@@ -68,16 +64,19 @@ uv run pre-commit run --all-files
 uv build
 ```
 
-For instruction-only or prose-only changes, run `uv run pre-commit run --all-files` at minimum. Pre-commit may modify
-files; review its diff and rerun affected checks. Do not report a check as passing unless it completed successfully.
+For prose/instruction-only edits, run pre-commit at minimum. Review its changes
+and repeat affected checks. Do not claim a check passed before it completes.
+Use disposable PostgreSQL for database integration when available; disclose
+when migration/concurrency verification was limited to offline checks.
 
-Use `docker compose up --build bot` only when integration behavior requires PostgreSQL, migrations, or a running bot.
-Local execution uses `uv run androidrepo-bot` after PostgreSQL and `.env` are configured.
+Summarize behavior, risks, and actual verification. Explicitly state schema,
+environment, dependency, and asset-license changes. Include a rendered example
+for visible Telegram/banner changes. Use Conventional Commits if committing;
+do not combine unrelated user work.
 
-## Commits and Handoff
+## Local skills
 
-Use Conventional Commits: `<type>[optional scope][optional !]: <imperative lowercase description>`. Keep unrelated work
-in separate commits. Mark breaking changes with `!` and a `BREAKING CHANGE:` footer.
-
-Pull requests and handoffs must summarize behavior, risks, and verification. Call out schema, environment, dependency,
-and asset-license changes explicitly. Include screenshots for visible Telegram UI or banner changes.
+The repository-maintained skills in `.agents/skills/` cover Telegram workflows,
+durable publication, and evidence boundaries. They contain project-specific
+constraints; use only the skill relevant to the task. They are local sources,
+not vendor skill snapshots.
