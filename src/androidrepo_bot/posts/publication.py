@@ -8,8 +8,8 @@ from aiogram.exceptions import TelegramAPIError, TelegramNetworkError, TelegramS
 from sqlalchemy.exc import SQLAlchemyError
 
 from androidrepo_bot.db import publications as publication_db
-from androidrepo_bot.db.publications import PublicationReceipt
-from androidrepo_bot.posts.ui import published_post_keyboard
+from androidrepo_bot.db.publications import BlockedPublication, PublicationInProgress, PublicationReceipt
+from androidrepo_bot.posts.telegram import published_post_keyboard
 
 if TYPE_CHECKING:
     from aiogram import Bot
@@ -29,16 +29,6 @@ class PublicationCompleted:
 
 
 @dataclass(frozen=True, slots=True)
-class PublicationBlocked:
-    cooldown: publication_db.PublicationCooldown
-
-
-@dataclass(frozen=True, slots=True)
-class PublicationInProgress:
-    operation_id: int
-
-
-@dataclass(frozen=True, slots=True)
 class PublicationCompensated:
     operation_id: int
     error_type: str
@@ -53,7 +43,7 @@ class PublicationRecoveryRequired:
 
 type PublicationOutcome = (
     PublicationCompleted
-    | PublicationBlocked
+    | BlockedPublication
     | PublicationInProgress
     | PublicationCompensated
     | PublicationRecoveryRequired
@@ -85,10 +75,8 @@ class PublicationWorkflow:
             ),
         )
         match reservation:
-            case publication_db.BlockedPublication(cooldown):
-                return PublicationBlocked(cooldown)
-            case publication_db.PublicationInProgress(operation_id):
-                return PublicationInProgress(operation_id)
+            case BlockedPublication() | PublicationInProgress():
+                return reservation
             case publication_db.PublicationNeedsRecovery(operation_id):
                 return PublicationRecoveryRequired(operation_id, "UnresolvedPublication")
             case publication_db.ReservedPublication(operation_id):
@@ -261,9 +249,10 @@ class PublicationWorkflow:
         return PublicationRecoveryRequired(receipt.operation_id, type(last_error).__name__, receipt)
 
     async def _mark_delivery(self, operation_id: int, *, uncertain: bool) -> bool:
-        transition = publication_db.mark_publication_uncertain if uncertain else publication_db.mark_publication_failed
         try:
-            await transition(self._sessions, operation_id)
+            await publication_db.mark_publication_delivery(
+                self._sessions, operation_id, "uncertain" if uncertain else "failed"
+            )
         except (SQLAlchemyError, ValueError) as error:
             logger.warning(
                 "Could not persist Telegram delivery outcome",

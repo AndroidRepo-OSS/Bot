@@ -12,13 +12,16 @@ API is uncertain. Keep application composition in `app.py`.
 - Admission runs after aiogram's user-context middleware and before its FSM
   middleware. Only `/start` is public; other work requires the configured
   staff chat, post topic, and an identified user.
-- Use native `Command`, `StateFilter`, typed `CallbackData`, handler flags,
+- Command routes include public `/start`; presentation, callback filters, and
+  message operations live together in `posts/telegram.py`. Use native `Command`,
+  `StateFilter`, typed `CallbackData`, handler flags,
   `CallbackAnswerMiddleware`, and dependency injection. Keep extra wrappers
   only when they enforce an application invariant.
 - `DraftState` holds typed immutable values in process-local `MemoryStorage`.
   `PostDraftState` is the single source of workflow phase. Preserve per-user
   isolation; restarting the process discards drafts.
-- `active_draft` and `pending_download` bind callbacks to both owner and
+- `active_draft` also injects typed FSM access with the verified draft context.
+  `active_draft` and `pending_download` bind callbacks to both owner and
   message. A valid callback payload or matching FSM phase alone is insufficient.
 - Regeneration keeps the existing draft usable on failure. Store its successful
   replacement before deleting the previous message. Audit delivery and draft

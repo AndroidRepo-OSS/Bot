@@ -195,14 +195,6 @@ async def finish_publication_compensation(sessions: async_sessionmaker[AsyncSess
         operation.updated_at = now
 
 
-async def mark_publication_uncertain(sessions: async_sessionmaker[AsyncSession], operation_id: int) -> None:
-    await _close_without_receipt(sessions, operation_id, "uncertain")
-
-
-async def mark_publication_failed(sessions: async_sessionmaker[AsyncSession], operation_id: int) -> None:
-    await _close_without_receipt(sessions, operation_id, "failed")
-
-
 async def reconcile_absent_publication(sessions: async_sessionmaker[AsyncSession], operation_id: int) -> None:
     async with sessions.begin() as session:
         operation = await _locked_operation(session, operation_id)
@@ -267,7 +259,7 @@ async def _require_active_workflow(session: AsyncSession, operation: Publication
         raise ValueError(msg)
 
 
-async def _close_without_receipt(
+async def mark_publication_delivery(
     sessions: async_sessionmaker[AsyncSession], operation_id: int, status: _ReceiptlessStatus
 ) -> None:
     async with sessions.begin() as session:

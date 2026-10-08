@@ -23,19 +23,20 @@ from androidrepo_bot.errors import (
     MissingDownloadSourceError,
     NotAndroidProjectError,
 )
-from androidrepo_bot.generation.models import PostDraft, PostLink
-from androidrepo_bot.generation.prompt import (
-    DRAFT_TEXT_BUDGET,
-    POST_INSTRUCTIONS,
-    PROMPT_VERSION,
-    build_generation_prompt,
-)
-from androidrepo_bot.generation.schema import (
+from androidrepo_bot.generation.models import (
     GeneratedOutput,
     GeneratedPost,
     InsufficientRepositoryEvidence,
     MissingDownloadSource,
     NotAndroidProject,
+    PostDraft,
+    PostLink,
+)
+from androidrepo_bot.generation.prompt import (
+    DRAFT_TEXT_BUDGET,
+    POST_INSTRUCTIONS,
+    PROMPT_VERSION,
+    build_generation_prompt,
 )
 
 if TYPE_CHECKING:
@@ -111,83 +112,77 @@ def create_post_agent(model: Model) -> PostAgent:
     return agent
 
 
-class GenerationService:
-    def __init__(self, *, agent: PostAgent) -> None:
-        self._agent = agent
+async def generate(
+    agent: PostAgent, repository: RepositoryDetails, /, *, allow_missing_download: bool = False
+) -> PostDraft:
+    log_context = {
+        "operation": "generation",
+        "provider": repository.ref.provider.value,
+        "repository": repository.ref.full_name,
+        "timeout_seconds": _GENERATION_TIMEOUT_SECONDS,
+    }
+    started_at = perf_counter()
+    logger.info(
+        "Post AI operation started",
+        **log_context,
+        has_readme=repository.readme is not None,
+        has_release=repository.release is not None,
+        language_count=len(repository.languages),
+        link_count=len(repository.links),
+    )
 
-    async def generate(self, repository: RepositoryDetails, /, *, allow_missing_download: bool = False) -> PostDraft:
-        log_context = {
-            "operation": "generation",
-            "provider": repository.ref.provider.value,
-            "repository": repository.ref.full_name,
-            "timeout_seconds": _GENERATION_TIMEOUT_SECONDS,
-        }
-        started_at = perf_counter()
-        logger.info(
-            "Post AI operation started",
-            **log_context,
-            has_readme=repository.readme is not None,
-            has_release=repository.release is not None,
-            language_count=len(repository.languages),
-            link_count=len(repository.links),
-        )
+    stage_started_at = perf_counter()
+    generation_prompt = build_generation_prompt(repository)
+    logger.debug("Post AI evidence prompt prepared", **log_context, duration_seconds=perf_counter() - stage_started_at)
 
-        stage_started_at = perf_counter()
-        generation_prompt = build_generation_prompt(repository)
-        logger.debug(
-            "Post AI evidence prompt prepared", **log_context, duration_seconds=perf_counter() - stage_started_at
-        )
-
-        stage_started_at = perf_counter()
-        try:
-            async with timeout(_GENERATION_TIMEOUT_SECONDS):
-                result = await self._agent.run(
-                    generation_prompt,
-                    deps=GenerationContext(repository=repository, allow_missing_download=allow_missing_download),
-                    model_settings=ModelSettings(timeout=_GENERATION_TIMEOUT_SECONDS),
-                    usage_limits=UsageLimits(
-                        request_limit=_MODEL_REQUEST_LIMIT, output_tokens_limit=_OUTPUT_TOKEN_LIMIT
-                    ),
-                )
-        except Exception as error:
-            logger.warning(
-                "Post AI operation failed",
-                **log_context,
-                duration_seconds=perf_counter() - started_at,
-                error_type=type(error).__name__,
+    stage_started_at = perf_counter()
+    try:
+        async with timeout(_GENERATION_TIMEOUT_SECONDS):
+            result = await agent.run(
+                generation_prompt,
+                deps=GenerationContext(repository=repository, allow_missing_download=allow_missing_download),
+                model_settings=ModelSettings(timeout=_GENERATION_TIMEOUT_SECONDS),
+                usage_limits=UsageLimits(request_limit=_MODEL_REQUEST_LIMIT, output_tokens_limit=_OUTPUT_TOKEN_LIMIT),
             )
-            msg = "The post generation agent could not produce a draft"
-            raise GenerationError(msg) from error
-
-        logger.debug(
-            "Post AI model run completed",
-            **log_context,
-            duration_seconds=perf_counter() - stage_started_at,
-            output_type=type(result.output).__name__,
-        )
-        output = result.output
-        if isinstance(output, NotAndroidProject):
-            raise NotAndroidProjectError(output.reason)
-        if isinstance(output, InsufficientRepositoryEvidence):
-            raise InsufficientRepositoryEvidenceError(output.reason)
-        if isinstance(output, MissingDownloadSource):
-            raise MissingDownloadSourceError(output.reason)
-
-        draft = resolve_draft(repository, output, allow_missing_download=allow_missing_download)
-
-        logger.info(
-            "Post AI operation completed",
+    except Exception as error:
+        logger.warning(
+            "Post AI operation failed",
             **log_context,
             duration_seconds=perf_counter() - started_at,
-            model_requests=result.usage.requests,
-            input_tokens=result.usage.input_tokens,
-            output_tokens=result.usage.output_tokens,
-            total_tokens=result.usage.total_tokens,
-            feature_count=len(draft.features),
-            link_count=len(draft.links),
-            tag_count=len(draft.tags),
+            error_type=type(error).__name__,
         )
-        return draft
+        msg = "The post generation agent could not produce a draft"
+        raise GenerationError(msg) from error
+
+    logger.debug(
+        "Post AI model run completed",
+        **log_context,
+        duration_seconds=perf_counter() - stage_started_at,
+        output_type=type(result.output).__name__,
+    )
+    output = result.output
+    if isinstance(output, NotAndroidProject):
+        raise NotAndroidProjectError(output.reason)
+    if isinstance(output, InsufficientRepositoryEvidence):
+        raise InsufficientRepositoryEvidenceError(output.reason)
+    if isinstance(output, MissingDownloadSource):
+        raise MissingDownloadSourceError(output.reason)
+
+    draft = resolve_draft(repository, output, allow_missing_download=allow_missing_download)
+
+    logger.info(
+        "Post AI operation completed",
+        **log_context,
+        duration_seconds=perf_counter() - started_at,
+        model_requests=result.usage.requests,
+        input_tokens=result.usage.input_tokens,
+        output_tokens=result.usage.output_tokens,
+        total_tokens=result.usage.total_tokens,
+        feature_count=len(draft.features),
+        link_count=len(draft.links),
+        tag_count=len(draft.tags),
+    )
+    return draft
 
 
 def resolve_draft(

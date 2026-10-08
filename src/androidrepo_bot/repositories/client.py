@@ -1,39 +1,37 @@
 from __future__ import annotations
 
+from asyncio import TaskGroup, to_thread
 from asyncio import sleep as async_sleep
-from asyncio import to_thread
-from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from http import HTTPStatus
 from time import perf_counter
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated, Any, Never, TypeIs
 from urllib.parse import urlsplit
 
 import aiohttp
 import structlog
+from pydantic import AfterValidator, BaseModel, ConfigDict, TypeAdapter
 
 from androidrepo_bot.errors import (
     ExternalServiceError,
     ExternalServiceTimeoutError,
     RateLimitError,
+    RepositoryAccessError,
     RepositoryNotFoundError,
 )
 from androidrepo_bot.http import ResponseTooLargeError, read_bounded_response
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Callable, Mapping
+    from collections.abc import Callable, Mapping
 
     type PayloadParser[ParsedT] = Callable[[bytes], ParsedT]
+    from collections.abc import Coroutine, Iterator
 
 logger = structlog.get_logger(__name__)
 _MAX_RESPONSE_BYTES = 4 * 1024 * 1024
-_READ_BUFFER_BYTES = 64 * 1024
-_MAX_RESPONSE_HEADERS = 128
-_MAX_HEADER_LINE_BYTES = 8 * 1024
-_SSL_TRANSPORT_CLOSE_DELAY_SECONDS = 0.25
 _MAX_RETRIES = 2
 _RETRY_BACKOFF_SECONDS = 0.25
 _MAX_RETRY_DELAY_SECONDS = 5.0
@@ -61,30 +59,6 @@ class ProviderResponse:
     @property
     def text(self) -> str:
         return self.content.decode("utf-8", errors="replace")
-
-
-@asynccontextmanager
-async def create_http_session() -> AsyncGenerator[aiohttp.ClientSession]:
-    connector = aiohttp.TCPConnector(limit=20, limit_per_host=10, keepalive_timeout=30.0)
-    client_timeout = aiohttp.ClientTimeout(total=30.0, connect=10.0, sock_connect=10.0, sock_read=30.0)
-    session = aiohttp.ClientSession(
-        connector=connector,
-        timeout=client_timeout,
-        raise_for_status=False,
-        cookie_jar=aiohttp.DummyCookieJar(),
-        headers={"User-Agent": "androidrepo-bot/0.1"},
-        auto_decompress=True,
-        trust_env=False,
-        read_bufsize=_READ_BUFFER_BYTES,
-        max_line_size=_MAX_HEADER_LINE_BYTES,
-        max_field_size=_MAX_HEADER_LINE_BYTES,
-        max_headers=_MAX_RESPONSE_HEADERS,
-    )
-    try:
-        yield session
-    finally:
-        await session.close()
-        await async_sleep(_SSL_TRANSPORT_CLOSE_DELAY_SECONDS)
 
 
 class ProviderHttpClient:
@@ -267,3 +241,80 @@ def _retry_delay(attempt: int, *, retry_after: str | None = None) -> float:
     if (server_delay := _retry_after_delay(retry_after)) is not None:
         return min(server_delay, _MAX_RETRY_DELAY_SECONDS)
     return min(_RETRY_BACKOFF_SECONDS * 2**attempt, _MAX_RETRY_DELAY_SECONDS)
+
+
+_ASCII_CONTROL_LIMIT = 32
+_ASCII_DELETE = 127
+
+
+def require_repository_path(value: str) -> str:
+    candidate = value.strip().strip("/")
+    parts = candidate.split("/")
+    if (
+        not candidate
+        or "\\" in candidate
+        or any(
+            character.isspace() or ord(character) < _ASCII_CONTROL_LIMIT or ord(character) == _ASCII_DELETE
+            for character in candidate
+        )
+        or any(part in {"", ".", ".."} for part in parts)
+    ):
+        msg = "Repository file path is invalid"
+        raise ValueError(msg)
+    return candidate
+
+
+type ProviderFilePath = Annotated[str, AfterValidator(require_repository_path)]
+
+
+class ProviderPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore", frozen=True, strict=True, allow_inf_nan=False)
+
+
+_LANGUAGE_USAGE_ADAPTER = TypeAdapter(dict[str, int | float], config=ConfigDict(strict=True, allow_inf_nan=False))
+
+
+def parse_language_ranking(content: bytes) -> tuple[str, ...]:
+    languages = _LANGUAGE_USAGE_ADAPTER.validate_json(content)
+    return tuple(name for name, _ in sorted(languages.items(), key=lambda item: (-item[1], item[0].casefold())))
+
+
+async def fetch_languages(client: ProviderHttpClient, root: str, headers: Mapping[str, str]) -> tuple[str, ...]:
+    response = await client.get_optional(f"{root}/languages", headers=headers)
+    if response is None:
+        return ()
+    return await client.parse(response, parse_language_ranking)
+
+
+async def fetch_repository_resources[ReadmeT, ReleaseT](
+    readme: Coroutine[Any, Any, ReadmeT],
+    languages: Coroutine[Any, Any, tuple[str, ...]],
+    release: Coroutine[Any, Any, ReleaseT],
+) -> tuple[ReadmeT, tuple[str, ...], ReleaseT]:
+    try:
+        async with TaskGroup() as tasks:
+            readme_task = tasks.create_task(readme)
+            languages_task = tasks.create_task(languages)
+            release_task = tasks.create_task(release)
+    except ExceptionGroup as error:
+        _raise_resource_error(error)
+    return readme_task.result(), languages_task.result(), release_task.result()
+
+
+def _raise_resource_error(error: ExceptionGroup[Exception], /) -> Never:
+    for exception in _iter_group_exceptions(error):
+        if isinstance(exception, (RepositoryAccessError, ValueError)):
+            raise exception from error
+    raise error
+
+
+def _iter_group_exceptions(error: BaseExceptionGroup[BaseException]) -> Iterator[BaseException]:
+    for exception in error.exceptions:
+        if _is_base_exception_group(exception):
+            yield from _iter_group_exceptions(exception)
+        else:
+            yield exception
+
+
+def _is_base_exception_group(value: BaseException) -> TypeIs[BaseExceptionGroup[BaseException]]:
+    return isinstance(value, BaseExceptionGroup)

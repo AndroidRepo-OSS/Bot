@@ -7,20 +7,15 @@ from aiogram.utils.callback_answer import CallbackAnswerMiddleware
 from aiogram.utils.formatting import Bold, Text, as_list
 from sqlalchemy.exc import SQLAlchemyError
 
-from androidrepo_bot.posts.publication import (
-    PublicationBlocked,
-    PublicationCompensated,
-    PublicationCompleted,
-    PublicationInProgress,
-    PublicationOutcome,
-    PublicationRecoveryRequired,
-)
+from androidrepo_bot.db.publications import BlockedPublication, PublicationInProgress
+from androidrepo_bot.posts.publication import PublicationCompensated, PublicationCompleted, PublicationRecoveryRequired
 from androidrepo_bot.posts.state import DraftState, PostDraftState
-from androidrepo_bot.posts.telegram import active_draft, bound_bot, delete_draft_messages
-from androidrepo_bot.posts.ui import (
+from androidrepo_bot.posts.telegram import (
     POST_CALLBACK_PREFIX,
     PostAction,
     PostCallback,
+    active_draft,
+    delete_draft_messages,
     draft_keyboard,
     publish_confirmation_keyboard,
 )
@@ -28,13 +23,14 @@ from androidrepo_bot.posts.ui import (
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from aiogram.fsm.context import FSMContext
-    from aiogram.types import CallbackQuery, Message, User
+    from aiogram import Bot
+    from aiogram.types import CallbackQuery, Message
 
     from androidrepo_bot.admin import AdminLog
     from androidrepo_bot.posts.drafts import DraftWorkflow
     from androidrepo_bot.posts.publication import PublicationWorkflow
     from androidrepo_bot.posts.state import DraftSession
+    from androidrepo_bot.posts.telegram import DraftContext
 
 router = Router(name=__name__)
 router.callback_query.middleware(CallbackAnswerMiddleware())
@@ -42,12 +38,10 @@ router.callback_query.middleware(CallbackAnswerMiddleware())
 
 @router.callback_query(PostCallback.filter(F.action == PostAction.PUBLISH), PostDraftState.active, active_draft)
 @flags.callback_answer(text="Ready to publish. Confirm below.")
-async def handle_publish_request(
-    callback: CallbackQuery, draft_context: tuple[Message, DraftSession], state: FSMContext
-) -> None:
-    message, session = draft_context
+async def handle_publish_request(callback: CallbackQuery, draft_context: DraftContext) -> None:
+    message, session, state = draft_context
     await message.edit_reply_markup(reply_markup=publish_confirmation_keyboard(session.draft))
-    await DraftState(state).save(session, status=PostDraftState.confirming_publication)
+    await state.save(session, status=PostDraftState.confirming_publication)
 
 
 @router.callback_query(
@@ -56,12 +50,12 @@ async def handle_publish_request(
 @flags.callback_answer(pre=True, text="Publishing…")
 async def handle_publish_confirmation(
     callback: CallbackQuery,
-    draft_context: tuple[Message, DraftSession],
-    state: FSMContext,
+    draft_context: DraftContext,
     admin_log: AdminLog,
     publications: PublicationWorkflow,
+    bot: Bot,
 ) -> None:
-    message, session = draft_context
+    message, session, state = draft_context
     try:
         outcome = await publications.publish(
             session, source_chat_id=message.chat.id, actor_user_id=callback.from_user.id
@@ -75,22 +69,9 @@ async def handle_publish_confirmation(
         await admin_log.publication_failed(user=callback.from_user, session=session, error_type=type(error).__name__)
         return
 
-    await _handle_publication_outcome(
-        outcome, context=draft_context, state=DraftState(state), user=callback.from_user, admin_log=admin_log
-    )
-
-
-async def _handle_publication_outcome(
-    outcome: PublicationOutcome,
-    *,
-    context: tuple[Message, DraftSession],
-    state: DraftState,
-    user: User,
-    admin_log: AdminLog,
-) -> None:
-    message, session = context
+    user = callback.from_user
     match outcome:
-        case PublicationBlocked(cooldown):
+        case BlockedPublication(cooldown):
             await _restore_active_draft(message, state, session)
             await message.answer(**_publication_cooldown_message(cooldown.blocked_until).as_kwargs())
         case PublicationInProgress():
@@ -114,7 +95,7 @@ async def _handle_publication_outcome(
             )
         case PublicationCompleted(receipt=receipt, reconciled=reconciled):
             await state.clear()
-            await delete_draft_messages(bound_bot(message), message.chat.id, session)
+            await delete_draft_messages(bot, message.chat.id, session)
             if reconciled:
                 await message.answer(
                     "⚠️ Published to the channel after recovering a persistence or deletion failure. "
@@ -135,20 +116,16 @@ async def _handle_publication_outcome(
     PostCallback.filter(F.action == PostAction.BACK), PostDraftState.confirming_publication, active_draft
 )
 @flags.callback_answer(text="Publication cancelled. Draft kept.")
-async def handle_publish_back(
-    callback: CallbackQuery, draft_context: tuple[Message, DraftSession], state: FSMContext
-) -> None:
-    message, session = draft_context
-    await _restore_active_draft(message, DraftState(state), session)
+async def handle_publish_back(callback: CallbackQuery, draft_context: DraftContext) -> None:
+    message, session, state = draft_context
+    await _restore_active_draft(message, state, session)
 
 
 @router.callback_query(PostCallback.filter(F.action == PostAction.REGENERATE), PostDraftState.active, active_draft)
 @flags.callback_answer(pre=True, text="Regenerating draft…")
-async def handle_regenerate(
-    callback: CallbackQuery, draft_context: tuple[Message, DraftSession], state: FSMContext, drafts: DraftWorkflow
-) -> None:
-    message, session = draft_context
-    await drafts.revise(message, DraftState(state), session)
+async def handle_regenerate(callback: CallbackQuery, draft_context: DraftContext, drafts: DraftWorkflow) -> None:
+    message, session, state = draft_context
+    await drafts.revise(message, state, session)
 
 
 @router.callback_query(
@@ -157,12 +134,10 @@ async def handle_regenerate(
     active_draft,
 )
 @flags.callback_answer(pre=True, text="Draft cancelled.")
-async def handle_cancel(
-    callback: CallbackQuery, draft_context: tuple[Message, DraftSession], state: FSMContext, admin_log: AdminLog
-) -> None:
-    message, session = draft_context
-    await DraftState(state).clear()
-    await delete_draft_messages(bound_bot(message), message.chat.id, session)
+async def handle_cancel(callback: CallbackQuery, draft_context: DraftContext, admin_log: AdminLog, bot: Bot) -> None:
+    message, session, state = draft_context
+    await state.clear()
+    await delete_draft_messages(bot, message.chat.id, session)
     await message.answer("🗑️ Draft cancelled.")
     await admin_log.draft_cancelled(user=callback.from_user, session=session, reason="Cancelled from draft controls")
 

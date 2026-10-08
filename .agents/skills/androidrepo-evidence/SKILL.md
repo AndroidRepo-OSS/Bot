@@ -6,8 +6,12 @@ description: Change GitHub/GitLab evidence fetching, README link extraction, str
 # Evidence boundaries
 
 Start with the relevant provider in `repositories/`, normalized models, and
-`generation/service.py`. Treat provider responses, repository text, generated
-output, and artwork metadata as untrusted values.
+`generation/service.py`. Shared provider transport, payload helpers, and
+resource collection live in `repositories/client.py`; the shared HTTP session
+and bounded reads live in `http.py`. Generated schemas and draft values share
+`generation/models.py`, and `generate` receives the application-owned agent.
+Treat provider responses, repository text, generated output, and artwork
+metadata as untrusted values.
 
 - Accept public GitHub/GitLab repository roots only. Validate provider-reported
   visibility before fetching further evidence, even with authenticated tokens.

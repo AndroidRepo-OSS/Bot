@@ -114,7 +114,7 @@ are ignored. See [`.env.example`](.env.example) for annotated placeholders.
 | `AR_OPENCODE_ZEN_API_KEY` | yes | — | OpenCode Zen generation credential |
 | `AR_DATABASE_URL` | yes | — | `postgresql+asyncpg://` runtime database URL |
 | `AR_LOG_LEVEL` | no | `INFO` | `CRITICAL`, `ERROR`, `WARNING`, `INFO`, or `DEBUG` |
-| `AR_OPENCODE_ZEN_MODEL` | no | `deepseek-v4-flash` | OpenCode Zen model identifier |
+| `AR_OPENCODE_ZEN_MODEL` | no | `mimo-v2.6-flash-free` | OpenCode Zen model identifier; free access is temporary |
 | `AR_GITHUB_TOKEN` | no | — | Token for authenticated GitHub API requests |
 | `AR_GITLAB_TOKEN` | no | — | Token for authenticated GitLab API requests |
 
@@ -238,12 +238,12 @@ Failure to deliver an audit message does not fail the underlying workflow.
 
 ```text
 src/androidrepo_bot/
-├── app.py              # composition root and resource ownership
+├── app.py              # entry point, composition, and resource ownership
 ├── dispatcher.py       # Telegram admission, graceful drain, safe error reporting
 ├── config.py           # validated AR_* settings
-├── start.py            # global /start presentation
+├── http.py             # shared HTTP session and bounded response reads
 ├── posts/              # routes, preparation/publication workflows, FSM, and UI
-├── repositories/       # URL parsing, shared HTTP policy, GitHub/GitLab
+├── repositories/       # URL parsing, provider client policy, GitHub/GitLab
 ├── generation/         # draft models, evidence prompt, output schema, AI orchestration
 ├── media/              # NASA artwork and packaged banner renderer assets
 └── db/                 # SQLAlchemy models, operations, packaged migrations
@@ -255,17 +255,22 @@ sessions; the application owns the bot, database engine, and generation-agent
 lifecycle. There are no internal workspace distributions or compatibility
 layers.
 
-The posts package exposes command and callback routers. Its handlers translate
-Telegram updates, `DraftPreparer` owns provider-to-banner draft preparation,
-`DraftWorkflow` coordinates Telegram, FSM, and audit effects, and
+The posts package exposes command (including public `/start`) and callback
+routers. Its handlers translate Telegram updates, `DraftWorkflow` prepares
+drafts and coordinates Telegram, FSM, and audit effects, and
 `PublicationWorkflow` owns the complete publication, compensation, and
-reconciliation protocol. Generated draft and tag models live with the
-generation boundary rather than the Telegram layer.
+reconciliation protocol. Generated schemas, draft values, and tags live together
+in the generation models module; generation itself is a function receiving the
+application-owned agent. Provider transport, payload helpers, and concurrent
+resource collection live in the repository client module. The shared HTTP
+session is owned by the application HTTP module.
+
 Typed draft sessions live directly in aiogram's in-memory FSM storage through
 `state.py`, with native FSM states as the sole workflow-phase source. Reusable
-async filters inject verified callback context; aiogram's callback-answer and
-chat-action middleware handle acknowledgements and progress. Telegram-specific
-message operations stay in `telegram.py`.
+async filters inject verified callback context and typed FSM access; aiogram's
+callback-answer and chat-action middleware handle acknowledgements and progress.
+Telegram formatting, keyboards, callback filters, and message operations stay
+together in the Telegram module. Banner decoding lives with the renderer.
 
 Repository provider responses are bounded, parsed as untrusted JSON, and
 validated before normalization. Transient provider failures use bounded

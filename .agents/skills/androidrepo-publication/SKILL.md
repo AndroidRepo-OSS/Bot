@@ -29,6 +29,10 @@ transaction; each transition must account for that gap.
 - Preserve the three-calendar-month cooldown, owner checks, provider-stable
   identity, aliases, and monotonic first/last-seen bounds under concurrency.
 
+Reuse database reservation results directly for blocked and in-progress
+publication outcomes. `mark_publication_delivery` accepts the typed receiptless
+status (`uncertain` or `failed`); it does not establish non-delivery itself.
+
 Prefer typed ORM assignments inside `sessions.begin()` over untyped update
 maps. Do not rewrite deployed Alembic revisions; add one only if the schema
 needs to change. Log operation IDs, channel receipt IDs, and exception types,

@@ -7,11 +7,15 @@ import structlog
 from pydantic import Field
 
 from androidrepo_bot.errors import ExternalServiceError, RepositoryNotFoundError
-from androidrepo_bot.repositories.http import ProviderHttpClient
+from androidrepo_bot.repositories.client import (
+    ProviderHttpClient,
+    ProviderPayload,
+    fetch_languages,
+    fetch_repository_resources,
+    require_repository_path,
+)
 from androidrepo_bot.repositories.links import build_repository_links
 from androidrepo_bot.repositories.models import RepositoryDetails, RepositoryRef, RepositoryRelease, require_web_url
-from androidrepo_bot.repositories.payloads import ProviderPayload, require_repository_path
-from androidrepo_bot.repositories.resources import fetch_languages, fetch_repository_resources
 
 if TYPE_CHECKING:
     import aiohttp

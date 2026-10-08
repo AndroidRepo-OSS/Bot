@@ -6,11 +6,12 @@ prefer direct, typed code and the existing libraries over generic frameworks.
 
 ## Code map
 
-- `app.py`: composition and resource ownership.
+- `app.py`: CLI entry point, composition, and resource ownership.
 - `dispatcher.py`: aiogram admission, graceful draining, and safe error reporting.
-- `posts/`: Telegram routes, native FSM phases, draft preparation, and publication.
-- `repositories/`: public-provider access, normalized evidence, bounded HTTP, links.
-- `generation/`: prompts, structured outcomes, evidence-to-destination resolution.
+- `posts/`: command/callback routes, Telegram UI, native FSM, drafts, and publication.
+- `repositories/`: provider clients, normalized evidence, URL parsing, and links.
+- `http.py`: shared HTTP session and bounded response reads.
+- `generation/`: combined output models, prompts, and agent execution functions.
 - `media/`: NASA assets, validated media values, Pillow rendering, bundled licenses.
 - `db/`: SQLAlchemy transactions and packaged Alembic revisions.
 

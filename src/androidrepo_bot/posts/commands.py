@@ -4,15 +4,22 @@ from typing import TYPE_CHECKING
 import structlog
 from aiogram import F, Router, flags
 from aiogram.exceptions import TelegramAPIError
-from aiogram.filters import Command, CommandObject, StateFilter
+from aiogram.filters import Command, CommandObject, CommandStart, StateFilter
 from aiogram.utils.callback_answer import CallbackAnswerMiddleware
 from aiogram.utils.chat_action import ChatActionMiddleware
 from aiogram.utils.formatting import Bold, BotCommand, Text, as_list
 from sqlalchemy.exc import SQLAlchemyError
 
 from androidrepo_bot.posts.state import DraftState, PostDraftState
-from androidrepo_bot.posts.telegram import deactivate_previous, delete_draft_messages, pending_download
-from androidrepo_bot.posts.ui import DOWNLOAD_CALLBACK_PREFIX, DownloadDecision, DownloadDecisionCallback
+from androidrepo_bot.posts.telegram import (
+    DOWNLOAD_CALLBACK_PREFIX,
+    DownloadDecision,
+    DownloadDecisionCallback,
+    deactivate_previous,
+    delete_draft_messages,
+    pending_download,
+    start_keyboard,
+)
 from androidrepo_bot.repositories.parsing import RepositoryUrlError, parse_repository_url
 
 if TYPE_CHECKING:
@@ -181,3 +188,19 @@ def _positive_int(value: str) -> int | None:
     except ValueError:
         return None
     return parsed if parsed > 0 else None
+
+
+@router.message(CommandStart())
+async def handle_start(message: Message) -> None:
+    content = as_list(
+        Text("🤖 ", Bold("Android Repository Bot")),
+        Text(
+            "I help the Android Repository team turn public GitHub and GitLab projects into polished channel posts. ",
+            "I collect repository details, generate the description and banner, "
+            "and prepare everything for staff review ",
+            "before publication.",
+        ),
+        "Discover open-source Android projects in our channel and join the community discussion.",
+        sep="\n\n",
+    )
+    await message.answer(**content.as_kwargs(), reply_markup=start_keyboard())

@@ -24,7 +24,7 @@ dependencies = [
 ]
 
 [project.scripts]
-androidrepo-bot = "androidrepo_bot.cli:main"
+androidrepo-bot = "androidrepo_bot.app:main"
 
 [dependency-groups]
 dev = [

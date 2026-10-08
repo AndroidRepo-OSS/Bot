@@ -1,4 +1,4 @@
-from androidrepo_bot.cli import main
+from androidrepo_bot.app import main
 
 if __name__ == "__main__":
     main()

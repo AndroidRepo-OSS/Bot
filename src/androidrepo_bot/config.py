@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     log_level: LogLevel = "INFO"
 
     opencode_zen_api_key: SecretStr
-    opencode_zen_model: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] = "deepseek-v4-flash"
+    opencode_zen_model: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] = "mimo-v2.6-flash-free"
 
     github_token: SecretStr | None = None
     gitlab_token: SecretStr | None = None

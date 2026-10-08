@@ -9,9 +9,8 @@ from time import perf_counter
 from typing import TYPE_CHECKING, Literal
 
 import structlog
-from PIL import Image, ImageDraw, ImageEnhance, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageEnhance, ImageFont, ImageOps, UnidentifiedImageError
 
-from androidrepo_bot.media.imaging import ArtworkDecodeError, decode_artwork, decode_png_asset
 from androidrepo_bot.media.models import BannerImage, BannerRequest, SpaceArtwork
 from androidrepo_bot.media.nasa import fetch_nasa_artwork
 
@@ -321,3 +320,40 @@ def _stack_summary(request: BannerRequest) -> str:
 def _filename_stem(title: str) -> str:
     stem = "".join(character.lower() if character.isalnum() else "-" for character in title)
     return "-".join(filter(None, stem.split("-")))[:80] or "project"
+
+
+_ARTWORK_FORMATS = ("JPEG", "PNG", "WEBP", "TIFF")
+_MAX_SOURCE_PIXELS = 40_000_000
+
+
+class ArtworkDecodeError(ValueError):
+    pass
+
+
+def decode_artwork(content: bytes) -> Image.Image:
+    try:
+        return _decode_artwork(content)
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning, OSError, UnidentifiedImageError) as error:
+        msg = "Banner source image is not a safe supported image"
+        raise ArtworkDecodeError(msg) from error
+
+
+def _decode_artwork(content: bytes) -> Image.Image:
+    with Image.open(BytesIO(content), formats=_ARTWORK_FORMATS) as source:
+        _enforce_pixel_limit(source)
+        source.load()
+        with ImageOps.exif_transpose(source) as transposed:
+            return transposed.convert("RGB")
+
+
+def _enforce_pixel_limit(image: Image.Image) -> None:
+    if image.width * image.height <= _MAX_SOURCE_PIXELS:
+        return
+    msg = "Banner source image exceeds the pixel limit"
+    raise ArtworkDecodeError(msg)
+
+
+def decode_png_asset(content: bytes) -> Image.Image:
+    with Image.open(BytesIO(content), formats=("PNG",)) as source:
+        source.load()
+        return source.convert("RGBA")
