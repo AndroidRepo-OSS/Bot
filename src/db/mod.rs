@@ -1,4 +1,10 @@
-//! Durable SQLite persistence with explicit, serialized write transactions.
+//! File-backed SQLite persistence with explicit serialized write transactions.
+//!
+//! [`options`] centralizes WAL, FULL synchronization, foreign keys and timeout policy.
+//! [`migrate`] applies immutable embedded revisions; [`register`] stores stable
+//! repository identity and aliases. [`publications`] coordinates durable state only,
+//! never Telegram effects. Deploy on a local persistent filesystem with reliable locks.
+
 mod publications;
 use crate::{
     error::{Error, Result},
@@ -14,7 +20,17 @@ use sqlx::{
 };
 use std::{str::FromStr, time::Duration};
 
-/// Only file-backed SQLite URLs are supported: recovery must survive restarts.
+/// Validate a persistent SQLite URL and apply the application durability policy.
+///
+/// Accepts `sqlite://` file paths without query/fragment options. Enables file
+/// creation, foreign keys, WAL, `synchronous=FULL` and a ten-second busy timeout;
+/// disables SQL statement logging. Parent directories must already exist. This
+/// constructs options without opening a file.
+///
+/// # Errors
+///
+/// Returns [`Error::Config`] for an invalid URL, in-memory database or unsupported
+/// filename/URL options.
 pub fn options(url: &str) -> Result<SqliteConnectOptions> {
     let path = url
         .strip_prefix("sqlite://")
@@ -42,6 +58,15 @@ pub fn options(url: &str) -> Result<SqliteConnectOptions> {
         .disable_statement_logging())
 }
 
+/// Open a shared pool of at most eight connections using [`options`].
+///
+/// Uses a 15-second acquire timeout. The caller owns closing the pool after all
+/// admitted workflows have drained; opening does not apply migrations.
+///
+/// # Errors
+///
+/// Returns configuration errors for invalid URLs or [`Error::Database`] for
+/// connection/file failures.
 pub async fn connect(url: &str) -> Result<SqlitePool> {
     Ok(SqlitePoolOptions::new()
         .max_connections(8)
@@ -49,12 +74,28 @@ pub async fn connect(url: &str) -> Result<SqlitePool> {
         .connect_with(options(url)?)
         .await?)
 }
+/// Apply embedded SQLx revisions, preserving migration checksums.
+///
+/// Run as an explicit CLI step before polling; never alter already deployed SQL.
+///
+/// # Errors
+///
+/// Returns [`Error::Database`] if migration execution or revision verification fails.
 pub async fn migrate(pool: &SqlitePool) -> Result<()> {
     sqlx::migrate!()
         .run(pool)
         .await
         .map_err(|_| Error::Database)
 }
+/// Check that the required SQLite baseline was successfully applied.
+///
+/// This is a startup guard, not a full schema/checksum audit; use [`migrate`] for
+/// SQLx migration validation.
+///
+/// # Errors
+///
+/// Returns [`Error::Invalid`] if the baseline row is missing/unsuccessful, or
+/// [`Error::Database`] when the migration table cannot be queried.
 pub async fn verify(pool: &SqlitePool) -> Result<()> {
     let applied: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM _sqlx_migrations WHERE version = 202610220001 AND success)",
@@ -69,6 +110,15 @@ pub async fn verify(pool: &SqlitePool) -> Result<()> {
     Ok(())
 }
 
+/// Upsert stable provider identity and both requested and observed path aliases.
+///
+/// Acquires `BEGIN IMMEDIATE` before reading/writing. First/last observation
+/// timestamps and alias observation times remain monotonic. Returns the local
+/// repository ID used for cooldown and publication reservation.
+///
+/// # Errors
+///
+/// Returns [`Error::Database`] if transaction, constraints or persistence fail.
 pub async fn register(
     pool: &SqlitePool,
     repository: &Repository,

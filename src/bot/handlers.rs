@@ -1,4 +1,9 @@
-//! Admission, typed commands and callback transitions; no provider or rendering code.
+//! Typed commands, staff admission and owner-bound callback transitions.
+//!
+//! Only `/start` bypasses staff chat/topic checks. Callback admission checks owner,
+//! active message and phase together. Handlers delegate evidence/rendering to draft
+//! preparation and durable channel effects to [`super::publication`].
+
 use super::{
     App, DraftSession, State,
     drafts::{create, deactivate, revise},
@@ -14,15 +19,29 @@ use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use teloxide::{prelude::*, utils::command::BotCommands};
 
+/// Typed Telegram commands; only [`Self::Start`] bypasses staff/topic admission.
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase")]
 pub enum Command {
+    /// Public introduction; no staff/topic authorization required.
     Start,
+    /// Prepare a draft from the supplied repository-root URL.
     Post(String),
+    /// Deactivate and best-effort delete the caller’s active draft.
     Cancel,
+    /// Resolve an uncertain operation after staff inspect the channel.
     Reconcile(String),
 }
 
+/// Dispatch typed commands after enforcing staff chat/topic and user identity.
+///
+/// `/start` is public. An invalid `/post` URL preserves current state; a valid new
+/// request deactivates previous controls before attempting preparation.
+///
+/// # Errors
+///
+/// Returns sanitized Telegram errors when a response cannot be delivered.
+/// Workflow failures are otherwise passed to [`report`] for staff-safe reporting.
 pub async fn command(app: Arc<App>, message: Message, command: Command) -> Result<()> {
     if matches!(command, Command::Start) {
         return ui::start(&app.bot, &message).await;
@@ -62,6 +81,11 @@ pub async fn command(app: Arc<App>, message: Message, command: Command) -> Resul
     };
     report(&app, &message, result).await
 }
+/// Report a workflow failure to the user, safe logs and the audit topic.
+///
+/// # Errors
+///
+/// Returns a sanitized Telegram error if the user-facing failure notice cannot be sent.
 async fn report(app: &App, message: &Message, result: Result<()>) -> Result<()> {
     if let Err(error) = result {
         tracing::warn!(error = %error, "Workflow failed");
@@ -70,6 +94,15 @@ async fn report(app: &App, message: &Message, result: Result<()>) -> Result<()> 
     }
     Ok(())
 }
+/// Admit controls only for the owner, active message, topic and allowed phase.
+///
+/// Reads state briefly, then releases the mutex before I/O. Invalid controls do
+/// not transition state; valid data from [`Action::parse`] alone is insufficient.
+///
+/// # Errors
+///
+/// Returns sanitized Telegram errors for control updates and replies. Workflow
+/// failures are otherwise passed to [`report`].
 pub async fn callback(app: Arc<App>, callback: CallbackQuery) -> Result<()> {
     let Some(message) = callback
         .message
@@ -167,6 +200,14 @@ pub async fn callback(app: Arc<App>, callback: CallbackQuery) -> Result<()> {
     };
     report(&app, message, result).await
 }
+/// Present the durable publication outcome and remove or restore draft controls.
+///
+/// Recovery notices direct staff to inspect the channel and reconcile; this helper
+/// never retries a copy itself.
+///
+/// # Errors
+///
+/// Propagates reservation/delivery errors and sanitized Telegram reply/control errors.
 async fn publish(app: &App, source: &Message, session: Arc<DraftSession>) -> Result<()> {
     let outcome = publication::publish(app, &session, source.chat.id, session.owner).await?;
     let text = match outcome {
@@ -214,6 +255,12 @@ async fn publish(app: &App, source: &Message, session: Arc<DraftSession>) -> Res
     ui::say(&app.bot, source, text).await?;
     Ok(())
 }
+/// Restore normal review controls and leave confirmation phase after a handled refusal.
+///
+/// # Errors
+///
+/// Returns a sanitized Telegram error if the keyboard cannot be updated; in that
+/// case state is not replaced.
 async fn restore(app: &App, source: &Message, session: Arc<DraftSession>) -> Result<()> {
     app.bot
         .edit_message_reply_markup(source.chat.id, session.message)
@@ -228,6 +275,15 @@ async fn restore(app: &App, source: &Message, session: Arc<DraftSession>) -> Res
     );
     Ok(())
 }
+/// Parse staff inspection results and resolve an operation without copying again.
+///
+/// Accepts `<id> absent` or `<id> <message-id> <RFC-3339-time-with-timezone>`.
+/// The configured channel is checked by persistence; live leases prevent reconciliation.
+///
+/// # Errors
+///
+/// Returns [`Error::Invalid`] for invalid syntax, IDs, timestamps or forbidden
+/// operation transitions; propagates database and Telegram reply failures.
 async fn reconcile(app: &App, source: &Message, args: &str) -> Result<()> {
     let usage = Error::Invalid(
         "Usage: /reconcile <operation-id> absent, or /reconcile <operation-id> <channel-message-id> <ISO-8601-publication-time-with-timezone>",

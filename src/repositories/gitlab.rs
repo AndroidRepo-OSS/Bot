@@ -1,4 +1,8 @@
-//! GitLab nested namespaces, public visibility and branch-aware README paths.
+//! GitLab public metadata and nested-namespace README handling.
+//!
+//! [`fetch`] checks identity before secondary reads. README URLs are used only to
+//! recover an inspected path; file bytes are fetched through the GitLab project API.
+
 use super::client::{encode, path_valid};
 use super::{
     Repository, RepositoryRef,
@@ -13,25 +17,47 @@ use percent_encoding::percent_decode_str;
 use reqwest::{Client, header::HeaderMap};
 use serde::Deserialize;
 use url::Url;
+/// GitLab license fields used to choose a human-readable identifier.
 #[derive(Deserialize)]
 struct License {
+    /// Preferred human-readable short license identifier.
     nickname: Option<String>,
+    /// Fallback license key.
     key: Option<String>,
+    /// Fallback full license name.
     name: Option<String>,
 }
+/// GitLab repository metadata required for public visibility and identity checks.
 #[derive(Deserialize)]
 struct Gitlab {
+    /// Nonzero stable numeric project ID.
     id: u64,
+    /// Observed nested namespace/project path checked against the request.
     path_with_namespace: String,
+    /// Project display name.
     name: String,
+    /// Must equal `public` before secondary reads.
     visibility: String,
+    /// Optional untrusted project description.
     description: Option<String>,
+    /// Optional blob URL used only to recover the inspected README path.
     readme_url: Option<String>,
+    /// Branch prefix required to interpret the README blob path.
     default_branch: Option<String>,
+    /// Optional project topic list, empty when absent.
     #[serde(default)]
     topics: Vec<String>,
+    /// Optional public license metadata.
     license: Option<License>,
 }
+/// Read the optional README through the project API using its inspected file path.
+///
+/// Requires a matching GitLab blob URL and default branch; unsupported or absent
+/// metadata becomes `None`. Invalid UTF-8 in content is replaced lossily.
+///
+/// # Errors
+///
+/// Propagates provider read failures and rejects invalid README paths as payload errors.
 async fn gitlab_readme(
     client: &Client,
     root: &str,
@@ -74,6 +100,14 @@ async fn gitlab_readme(
         .transpose()
 }
 
+/// Check public GitLab identity before loading secondary repository resources.
+///
+/// The returned path must match the requested repository; redirects are not followed.
+///
+/// # Errors
+///
+/// Returns [`Error::NotFound`] for absent/private evidence, [`Error::Payload`] for
+/// inconsistent identity, or sanitized provider/JSON errors for resource failures.
 pub(super) async fn fetch(
     client: &Client,
     requested: &RepositoryRef,

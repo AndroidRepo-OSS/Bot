@@ -23,7 +23,7 @@ cargo run --release --locked -- migrate
 cargo run --release --locked -- run
 ```
 
-No subcommand defaults to `run`. `check-config` does not contact any service;
+Omitting the subcommand defaults to `run`. `check-config` does not contact any service;
 `migrate` requires only `database_url`. Commands load `config.toml` from the
 working directory. Use `--config /path/to/config.toml` before or after the
 subcommand to select another file. Settings come only from TOML; `.env` and
@@ -208,6 +208,64 @@ Any local PostgreSQL development data is not imported automatically.
 
 After deployment, never edit an applied SQL revision; add a new migration under
 `migrations/`. No credentials or media assets change.
+
+The baseline stores the following records. Draft sessions remain in memory and
+are not restored after a restart.
+
+| Table | Purpose and identity |
+| --- | --- |
+| `repository_apps` | Stable project identity, unique by provider and provider repository ID; current path and first/last observation times |
+| `repository_aliases` | Observed paths for a project, unique by project, full name and URL |
+| `post_attempts` | Cooldown refusals with requesting user, attempted path and blocked-until time |
+| `published_posts` | Completed publication title, JSON tags, actor, UTC timestamp and unique channel/message receipt |
+| `publication_operations` | Copy/compensation ownership, recovery state and receipt; at most one open operation per project |
+
+The rustdoc for `db::publications` lists state transitions and each function's
+lease, receipt and reconciliation preconditions. SQL constraints remain defined
+by the embedded migration, rather than by a separate schema representation.
+
+## Maintainer documentation
+
+Generate the internal reference with the pinned toolchain:
+
+```bash
+cargo doc --locked --no-deps
+# Open target/doc/androidrepo_bot/index.html, or use:
+cargo doc --locked --no-deps --open
+```
+
+This is a private binary crate, so Cargo documents private items by default.
+The landing page explains resource ownership and links to all modules. Module
+pages describe trust boundaries; item pages cover types, fields, variants,
+helpers, errors and publication cancellation requirements. CLI examples use
+shell blocks because these modules are not an externally importable library.
+The build/run and offline commands above provide operational examples.
+
+Follow the [Rustdoc Book](https://doc.rust-lang.org/rustdoc/how-to-write-documentation.html)
+and the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/documentation.html)
+when changing these contracts:
+
+- Use `//!` for crate/module overviews and `///` for items. Start with a short
+  summary, then explain behavior, units, side effects and caller obligations.
+- Link related Rust items with intra-doc links. Disambiguate functions/modules
+  and enums/macros when their names overlap.
+- Document fallible operations under `# Errors`; add `# Panics` for known panic
+  preconditions. Document cancellation where dropping a future affects durable
+  work. Unsafe code remains forbidden, so no unsafe API contracts are needed.
+- Give meaningful examples at the relevant workflow boundary. Mark shell and
+  non-Rust examples with their actual language. If adding Rust examples, keep
+  them compilable and use `?` for errors; do not hide broken examples with
+  `ignore` or add test suites without explicit authorization.
+- Update the affected contract alongside implementation changes. Keep
+  credentials, private text and populated configuration out of documentation.
+
+Clippy rejects missing documentation even on private items. Rustdoc rejects
+broken intra-doc links, invalid HTML tags and bare URLs. To additionally treat
+every documentation warning as an error, run:
+
+```bash
+RUSTDOCFLAGS='-D warnings' cargo doc --locked --no-deps
+```
 
 ## Verification and performance
 

@@ -42,3 +42,9 @@ unsafe_code = "forbid"
 [lints.clippy]
 unwrap_used = "deny"
 expect_used = "deny"
+missing_docs_in_private_items = "deny"
+
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
+invalid_html_tags = "deny"
+bare_urls = "deny"

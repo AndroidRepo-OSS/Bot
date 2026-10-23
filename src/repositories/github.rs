@@ -1,4 +1,8 @@
-//! GitHub public repository metadata and base64 README handling.
+//! GitHub metadata adapter with public visibility and requested-path checks.
+//!
+//! Only after these checks does [`fetch`] read README, language and release data
+//! concurrently. README base64 failures become absent content rather than raw errors.
+
 use super::{
     Repository, RepositoryRef,
     client::{self, readme_base},
@@ -12,31 +16,57 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use reqwest::{Client, header::HeaderMap};
 use serde::Deserialize;
 use url::Url;
+/// GitHub license fields used to choose a human-readable identifier.
 #[derive(Deserialize)]
 struct License {
+    /// Optional SPDX ID; `NOASSERTION` is discarded.
     spdx_id: Option<String>,
+    /// Human-readable fallback when no usable SPDX ID exists.
     name: Option<String>,
 }
+/// GitHub repository metadata required for public visibility and identity checks.
 #[derive(Deserialize)]
 struct Github {
+    /// Nonzero numeric repository identity.
     id: u64,
+    /// Preferred stable GraphQL node ID when present.
     node_id: Option<String>,
+    /// Observed owner/repository path checked against the request.
     full_name: String,
+    /// Project display name.
     name: String,
+    /// Private visibility flag; true forbids secondary evidence reads.
     private: bool,
+    /// Must equal `public`, including when authenticated.
     visibility: String,
+    /// Optional untrusted project description.
     description: Option<String>,
+    /// Optional project website URL subject to syntax filtering.
     homepage: Option<String>,
+    /// Optional project topic list, empty when absent.
     #[serde(default)]
     topics: Vec<String>,
+    /// Optional public license metadata.
     license: Option<License>,
 }
+/// GitHub README JSON containing base64 content, encoding and file path.
 #[derive(Deserialize)]
 struct Readme {
+    /// Base64-encoded README content.
     content: String,
+    /// Encoding marker; only base64 is supported.
     encoding: String,
+    /// Inspected file path used for relative-link resolution.
     path: String,
 }
+/// Decode the optional base64 README and retain its inspected file URL.
+///
+/// Missing resources, unsupported encodings and invalid base64 become `None`;
+/// invalid UTF-8 is replaced lossily.
+///
+/// # Errors
+///
+/// Propagates provider read failures and rejects invalid README paths as payload errors.
 async fn github_readme(
     client: &Client,
     root: &str,
@@ -65,6 +95,14 @@ async fn github_readme(
     )))
 }
 
+/// Check public GitHub identity before loading secondary repository resources.
+///
+/// The returned path must match the requested repository; redirects are not followed.
+///
+/// # Errors
+///
+/// Returns [`Error::NotFound`] for absent/private evidence, [`Error::Payload`] for
+/// inconsistent identity, or sanitized provider/JSON errors for resource failures.
 pub(super) async fn fetch(
     client: &Client,
     requested: &RepositoryRef,

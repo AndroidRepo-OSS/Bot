@@ -1,4 +1,8 @@
-//! Shared provider headers, resource reads and normalized evidence assembly.
+//! Shared provider policy and normalized evidence assembly.
+//!
+//! Sensitive headers stay scoped to provider API origins. Secondary metadata uses
+//! bounded reads; [`finish`] builds inert README links after identity validation.
+
 use super::{Provider, Release, Repository, RepositoryRef, links, web_url};
 use crate::{
     error::{Error, Result},
@@ -12,17 +16,24 @@ use reqwest::{
 use serde::Deserialize;
 use std::collections::HashMap;
 use url::Url;
+/// Shared subset of GitHub/GitLab release JSON; descriptions use provider-specific keys.
 #[derive(Deserialize)]
 struct ReleasePayload {
+    /// Optional release display name.
     name: Option<String>,
+    /// Provider release tag required to build the destination.
     tag_name: String,
+    /// GitHub release notes.
     body: Option<String>,
+    /// GitLab release notes.
     description: Option<String>,
 }
 
+/// Percent-encode an untrusted value as one API path component.
 pub(super) fn encode(value: &str) -> String {
     utf8_percent_encode(value, NON_ALPHANUMERIC).to_string()
 }
+/// Reject empty README paths, unsafe characters and empty/dot path components.
 pub(super) fn path_valid(value: &str) -> bool {
     !value.is_empty()
         && !value
@@ -30,6 +41,13 @@ pub(super) fn path_valid(value: &str) -> bool {
             .any(|c| c.is_control() || c.is_whitespace() || c == '\\')
         && !value.split('/').any(|part| matches!(part, "" | "." | ".."))
 }
+/// Build a provider web blob URL for resolving relative README links.
+///
+/// Uses the inspected file path and `HEAD`; it does not fetch that web URL.
+///
+/// # Errors
+///
+/// Returns [`Error::Payload`] for invalid file paths or an unrepresentable URL.
 pub(super) fn readme_base(reference: &RepositoryRef, path: &str) -> Result<Url> {
     if !path_valid(path) {
         return Err(Error::Payload);
@@ -46,6 +64,13 @@ pub(super) fn readme_base(reference: &RepositoryRef, path: &str) -> Result<Url> 
     ))
     .map_err(|_| Error::Payload)
 }
+/// Construct provider-specific API headers with a sensitive optional credential.
+///
+/// The caller must keep these headers on the selected provider origin.
+///
+/// # Errors
+///
+/// Returns [`Error::Config`] if the token cannot be represented as an HTTP header.
 pub(super) fn headers(provider: Provider, token: Option<&str>) -> Result<HeaderMap> {
     let mut headers = HeaderMap::new();
     if provider == Provider::Github {
@@ -78,6 +103,14 @@ pub(super) fn headers(provider: Provider, token: Option<&str>) -> Result<HeaderM
     }
     Ok(headers)
 }
+/// Read language weights and sort names by descending weight, then alphabetically.
+///
+/// A missing language resource becomes an empty list.
+///
+/// # Errors
+///
+/// Propagates bounded HTTP/JSON errors; returns [`Error::Payload`] for negative
+/// or nonfinite language weights.
 pub(super) async fn languages(
     client: &Client,
     root: &str,
@@ -93,6 +126,15 @@ pub(super) async fn languages(
     values.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
     Ok(values.into_iter().map(|(key, _)| key).collect())
 }
+/// Read the latest release and derive its destination from the inspected tag.
+///
+/// GitLab uses a sorted one-item list because its latest-release permalink redirects.
+/// A missing release resource or empty list returns `None`.
+///
+/// # Errors
+///
+/// Propagates provider read failures and returns [`Error::Payload`] for a blank tag
+/// or invalid derived destination.
 pub(super) async fn release(
     client: &Client,
     root: &str,
@@ -140,6 +182,14 @@ pub(super) async fn release(
     }))
 }
 
+/// Validate repository identity and assemble links from the observed evidence.
+///
+/// Normalizes a blank README to `None` and resolves its links with the inspected
+/// README file URL; destinations are never fetched here.
+///
+/// # Errors
+///
+/// Returns [`Error::Payload`] for empty/oversized provider IDs or display names.
 pub(super) fn finish(
     mut repository: Repository,
     readme: Option<(String, Url)>,

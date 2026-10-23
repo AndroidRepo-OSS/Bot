@@ -1,4 +1,10 @@
-//! Bounded structured generation. Only inspected link IDs can become destinations.
+//! Structured model results validated against one public evidence snapshot.
+//!
+//! [`GeneratedPost`] is untrusted JSON until [`GeneratedPost::resolve`] checks text,
+//! counts, tags and link IDs. [`Draft`] carries resolved URLs, while [`Outcome`] also
+//! represents non-Android, insufficient-evidence and missing-download decisions.
+//! The caller supplies trusted staff approval separately from repository content.
+
 mod client;
 mod prompt;
 mod tags;
@@ -10,49 +16,96 @@ pub use client::generate;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+/// A plain-text label and final URL resolved from inspected repository evidence.
 #[derive(Clone, Debug, Serialize)]
 pub struct PostLink {
+    /// Validated plain-text caption label.
     pub label: String,
+    /// Final destination copied from inspected evidence.
     pub url: Url,
 }
+/// Validated content prepared for staff review, with evidence-resolved destinations.
+///
+/// [`GeneratedPost::resolve`] validates model output; Telegram presentation separately
+/// checks the final caption budget. Direct field construction does not validate it.
 #[derive(Clone, Debug, Serialize)]
 pub struct Draft {
+    /// Plain-text project name, at most 100 Unicode scalar values.
     pub title: String,
+    /// Plain-text summary, at most 280 Unicode scalar values.
     pub summary: String,
+    /// Three to five distinct features, each at most 90 Unicode scalar values.
     pub features: Vec<String>,
+    /// Mandatory repository link followed by validated optional destinations.
     pub links: Vec<PostLink>,
+    /// Eligible inspected download destination, absent only under approved policy.
     pub download_url: Option<Url>,
+    /// One to three exact supported categories without leading hashtag markers.
     pub tags: Vec<String>,
 }
+/// Untrusted model-selected evidence ID and proposed plain-text label.
+///
+/// Unknown JSON fields are rejected; final URLs are supplied only during resolution.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GeneratedLink {
+    /// Untrusted exact evidence ID proposed by the model.
     id: String,
+    /// Untrusted label awaiting plain-text validation.
     label: String,
 }
+/// Strict JSON tool output before semantic validation.
+///
+/// Deserialization rejects unknown fields and requires `download_link_id` even when
+/// its value is `null`. [`Self::resolve`] checks text, tags and destination eligibility.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GeneratedPost {
+    /// Untrusted proposed project title.
     project_name: String,
+    /// Untrusted proposed summary.
     summary: String,
+    /// Untrusted proposed feature list.
     features: Vec<String>,
+    /// Untrusted optional destination IDs and labels.
     links: Vec<GeneratedLink>,
+    /// Required nullable selection; null needs staff approval and absent candidates.
     #[serde(deserialize_with = "Option::deserialize")]
     download_link_id: Option<String>,
+    /// Untrusted proposed category strings requiring exact allowlist membership.
     tags: Vec<String>,
 }
+/// Strict JSON explanation for a non-draft generation outcome.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Reason {
+    /// Untrusted explanation awaiting the 280-character plain-text check.
     reason: String,
 }
+/// One of the four accepted structured model results.
+///
+/// A missing-download decision requires a separate staff approval before retrying
+/// without a Download button; it is distinct from insufficient repository evidence.
 pub enum Outcome {
+    /// Validated post content ready for staff review.
     Draft(Draft),
+    /// Evidence indicates the project is outside Android scope, with a safe reason.
     NotAndroid(String),
+    /// Evidence cannot support a complete grounded draft, with a safe reason.
     Insufficient(String),
+    /// No eligible download exists and staff approval is still required.
     MissingDownload(String),
 }
 
+/// Normalize whitespace and validate a bounded plain-text model field.
+///
+/// `limit` counts Unicode scalar values, not bytes or UTF-16 units. Rejects empty
+/// text, URL markers, formatting delimiters, bullet prefixes and specified symbol/emoji
+/// ranges. This check does not prove factual accuracy or language.
+///
+/// # Errors
+///
+/// Returns [`Error::Generation`] when normalized content violates the text contract.
 pub fn validate_plain_text(value: &str, limit: usize) -> Result<String> {
     let value = value.split_whitespace().collect::<Vec<_>>().join(" ");
     let lowercase = value.to_lowercase();
@@ -64,6 +117,7 @@ pub fn validate_plain_text(value: &str, limit: usize) -> Result<String> {
     }
     Ok(value)
 }
+/// Check uniqueness after Unicode lowercasing without altering the original values.
 fn distinct<'a>(values: impl Iterator<Item = &'a str>) -> bool {
     let mut seen = std::collections::HashSet::new();
     values
@@ -71,6 +125,18 @@ fn distinct<'a>(values: impl Iterator<Item = &'a str>) -> bool {
         .all(|value| seen.insert(value))
 }
 impl GeneratedPost {
+    /// Resolve a model post against the same inspected repository snapshot.
+    ///
+    /// Requires 3–5 distinct features, 1–3 supported distinct tags, at most four optional
+    /// links and a 950-character content budget. Inserts the mandatory repository link;
+    /// optional selections exclude repository/donation links and the selected download.
+    /// `allow_missing` is staff approval, and only permits a null download when the
+    /// snapshot has no eligible download candidate. It does not permit invented URLs.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Generation`] for invalid text, counts, duplicates, tags, link IDs,
+    /// destination categories, missing mandatory/download evidence or excessive content.
     pub fn resolve(self, repository: &Repository, allow_missing: bool) -> Result<Draft> {
         if self.project_name.contains(['\r', '\n', '\t'])
             || !(3..=5).contains(&self.features.len())

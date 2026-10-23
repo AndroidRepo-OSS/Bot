@@ -1,10 +1,15 @@
-//! Parse CommonMark as inert HTML; never fetch a README destination.
+//! Extract CommonMark and HTML destinations as inert repository evidence.
+//!
+//! [`build`] never fetches link targets. It bounds scanning and extraction, ignores
+//! code/hidden content and image sources, and deduplicates normalized destinations.
+
 use super::{Link, LinkKind, web_url};
 use pulldown_cmark::{Parser, html};
 use scraper::{ElementRef, Html};
 use std::collections::HashSet;
 use url::Url;
 
+/// Whether an HTML node is code, executable/hidden markup or explicitly hidden.
 fn hidden(node: &scraper::Node) -> bool {
     node.as_element().is_some_and(|e| {
         matches!(
@@ -14,12 +19,16 @@ fn hidden(node: &scraper::Node) -> bool {
             || e.attr("aria-hidden") == Some("true")
     })
 }
+/// Build a deduplication key by normalizing trailing path slashes.
 fn key(url: &Url) -> String {
     let mut normalized = url.clone();
     let path = url.path().trim_end_matches('/');
     normalized.set_path(if path.is_empty() { "/" } else { path });
     normalized.to_string()
 }
+/// Classify a destination using known hosts, paths and visible label words.
+///
+/// This is an eligibility heuristic over inspected evidence, not a network check.
 fn classify(url: &Url, label: &str) -> LinkKind {
     let host = url.host_str().unwrap_or("");
     let path = url.path().to_ascii_lowercase();
@@ -59,6 +68,13 @@ fn classify(url: &Url, label: &str) -> LinkKind {
         LinkKind::Other
     }
 }
+/// Build deduplicated evidence links without visiting their destinations.
+///
+/// Always inserts `repository`, then optional `release` and `website` links. Scans
+/// at most 50,000 README characters and adds at most 20 unique README destinations
+/// with IDs `readme-1` through `readme-20`. Code, hidden markup and image sources
+/// are excluded; image alt text can label an enclosing link. Relative destinations
+/// resolve against the inspected README URL or a provider-specific fallback.
 pub fn build(
     root: Url,
     release: Option<&Url>,

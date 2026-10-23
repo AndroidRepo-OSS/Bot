@@ -1,4 +1,9 @@
+//! Exact supported channel hashtag vocabulary used by schema and validation.
+
 // Supported channel categories, retained from the original bot.
+/// Allowed channel categories, without a leading `#`.
+///
+/// Generation requires 1–3 distinct exact entries; presentation adds hashtag markers.
 pub const TAGS: &[&str] = &[
     "2FA",
     "AI_Chat",

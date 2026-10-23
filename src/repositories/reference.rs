@@ -1,20 +1,30 @@
+//! Strict repository-root parsing and general evidence URL syntax checks.
+//!
+//! [`RepositoryRef::parse`] accepts only supported HTTPS roots; [`web_url`] is a
+//! broader HTTP(S) syntax filter for destinations, not an outbound-fetch allowlist.
+
 use crate::error::{Error, Result};
 use serde::Serialize;
 use url::Url;
 
+/// Supported public hosted repository service; self-hosted instances are excluded.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Provider {
+    /// The public `github.com` service.
     Github,
+    /// The public `gitlab.com` service, including nested group namespaces.
     Gitlab,
 }
 impl Provider {
+    /// Return the lowercase provider key used in persistence.
     pub fn name(self) -> &'static str {
         match self {
             Self::Github => "github",
             Self::Gitlab => "gitlab",
         }
     }
+    /// Return the public web hostname used to construct repository URLs.
     pub fn host(self) -> &'static str {
         match self {
             Self::Github => "github.com",
@@ -22,13 +32,32 @@ impl Provider {
         }
     }
 }
+/// Provider and repository-root path, normally constructed by [`Self::parse`].
+///
+/// GitHub has one namespace component; GitLab permits nested groups. Fields are
+/// not intrinsically validated when constructing this value directly.
 #[derive(Clone, Debug, Serialize)]
 pub struct RepositoryRef {
+    /// Public host service for this path.
     pub provider: Provider,
+    /// Owner or nested GitLab group path, without the repository name.
     pub namespace: String,
+    /// Repository path component without a trailing `.git` suffix.
     pub name: String,
 }
 impl RepositoryRef {
+    /// Parse a clean HTTPS repository-root URL for GitHub or GitLab.
+    ///
+    /// Trims surrounding whitespace and accepts a trailing slash or `.git` suffix.
+    /// Rejects credentials, explicit ports, queries, fragments, encoded paths, dot
+    /// segments and provider subresources. Nested GitLab namespaces are supported.
+    /// For example, `https://gitlab.com/group/subgroup/project.git` has namespace
+    /// `group/subgroup` and name `project`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Invalid`] for unsupported URL forms or paths, and
+    /// [`Error::Payload`] for oversized namespace/name components.
     pub fn parse(value: &str) -> Result<Self> {
         let value = value.trim();
         let invalid = Error::Invalid(
@@ -95,14 +124,24 @@ impl RepositoryRef {
             name: (*name).into(),
         })
     }
+    /// Join the namespace and repository name with `/`, preserving observed casing.
     pub fn full_name(&self) -> String {
         format!("{}/{}", self.namespace, self.name)
     }
+    /// Construct the canonical HTTPS web root from the stored reference.
+    ///
+    /// Call [`Self::parse`] first when the components originate in untrusted input.
     pub fn url(&self) -> String {
         format!("https://{}/{}", self.provider.host(), self.full_name())
     }
 }
 
+/// Parse a bounded HTTP(S) destination without credentials.
+///
+/// Returns `None` for URLs over 2,048 bytes, whitespace/control characters,
+/// backslashes, missing hosts, credentials or port zero. Unlike [`RepositoryRef::parse`],
+/// this accepts other hosts, paths, query strings, fragments and nonzero ports.
+/// It validates syntax only and does not establish that a URL is safe to fetch.
 pub fn web_url(value: &str) -> Option<Url> {
     let value = value.trim();
     if value.len() > 2048

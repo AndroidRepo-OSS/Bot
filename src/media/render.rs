@@ -1,3 +1,9 @@
+//! Synchronous image decoding, text layout and attributed PNG composition.
+//!
+//! Decoder limits bound untrusted artwork; invalid remote bytes use the local
+//! fallback. Output always includes Android robot and artwork attribution. Async
+//! callers use [`super::render()`] to move CPU work onto a bounded blocking worker.
+
 use super::{Artwork, Banner};
 use crate::error::{Error, Result};
 use ab_glyph::{FontRef, VariableFont};
@@ -9,19 +15,33 @@ use image::{
 use imageproc::drawing::{draw_text_mut, text_size};
 use std::io::Cursor;
 
+/// Embedded Figtree variable font; license inventory lives in `assets/README.md`.
 const FONT: &[u8] = include_bytes!("assets/Figtree.ttf");
+/// Embedded synthetic black-hole image with generated-artwork attribution.
 const FALLBACK: &[u8] = include_bytes!("assets/black-hole-fallback.webp");
+/// Embedded Google Android robot artwork requiring visible CC BY 3.0 attribution.
 const ANDROID: &[u8] = include_bytes!("assets/android-head_flat.png");
+/// Output banner width in pixels.
 const WIDTH: u32 = 1920;
+/// Output banner height in pixels.
 const HEIGHT: u32 = 1080;
+/// Primary text color in RGBA.
 const WHITE: Rgba<u8> = Rgba([248, 248, 246, 255]);
+/// Secondary metadata and attribution text color in RGBA.
 const MUTED: Rgba<u8> = Rgba([189, 190, 194, 255]);
 
+/// Text to lay out on a banner; rendering performs wrapping and pixel-width clipping.
+///
+/// This does not validate model content. Use validated draft text in the staff workflow.
 pub struct BannerRequest {
+    /// Project title wrapped and clipped to the banner title area.
     pub title: String,
+    /// Observed repository name displayed in metadata.
     pub repository: String,
+    /// Technology/license/release summary displayed in metadata.
     pub stack: String,
 }
+/// Pair bundled image bytes with their own metadata and generated-artwork credit.
 fn fallback() -> Artwork {
     Artwork {
         bytes: bytes::Bytes::from_static(FALLBACK),
@@ -32,6 +52,15 @@ fn fallback() -> Artwork {
         credit: "Generated with OpenAI".into(),
     }
 }
+/// Decode an allowed image format with allocation, dimension and pixel limits.
+///
+/// Allows JPEG, PNG, WebP and TIFF; caps decoder allocation at 256 MiB, dimensions
+/// at 16,384 pixels per axis and image area at 40 million pixels. Applies orientation.
+///
+/// # Errors
+///
+/// Returns [`Error::Image`] for unsupported formats, exceeded limits or decode/
+/// orientation failures.
 fn decode(bytes: &[u8]) -> Result<DynamicImage> {
     let mut reader = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
@@ -62,6 +91,7 @@ fn decode(bytes: &[u8]) -> Result<DynamicImage> {
     decoded.apply_orientation(orientation);
     Ok(decoded)
 }
+/// Clip text at a Unicode scalar boundary until it and an ellipsis fit `max` pixels.
 fn ellipsis(value: &str, font: &FontRef<'_>, size: f32, max: u32) -> String {
     if text_size(size, font, value).0 <= max {
         return value.into();
@@ -75,6 +105,9 @@ fn ellipsis(value: &str, font: &FontRef<'_>, size: f32, max: u32) -> String {
     }
     String::new()
 }
+/// Wrap whitespace-separated title words into lines targeting 760 pixels.
+///
+/// Individual oversized words remain intact for subsequent font sizing and clipping.
 fn lines(value: &str, font: &FontRef<'_>, size: f32) -> Vec<String> {
     let mut lines = Vec::new();
     let mut line = String::new();
@@ -96,9 +129,27 @@ fn lines(value: &str, font: &FontRef<'_>, size: f32) -> Vec<String> {
     }
     lines
 }
+/// Render a banner using only embedded artwork, font and Android assets.
+///
+/// Performs CPU work synchronously; async callers should use a bounded blocking
+/// worker. See the crate-level CLI example for offline use without credentials.
+///
+/// # Errors
+///
+/// Returns [`Error::Image`] if bundled image/font decoding or PNG encoding fails.
 pub fn render_offline(request: BannerRequest) -> Result<Banner> {
     render(request, None)
 }
+/// Compose an attributed 1920 × 1080 RGB PNG synchronously.
+///
+/// Uses bundled artwork when none is supplied or remote decoding fails. Wraps and
+/// clips titles, renders metadata and keeps Android and artwork credits visible.
+/// Call [`super::render()`] from async workflows to bound and offload CPU work.
+///
+/// # Errors
+///
+/// Returns [`Error::Image`] for failures decoding required bundled assets, loading
+/// the font or encoding the PNG.
 pub fn render(request: BannerRequest, artwork: Option<Artwork>) -> Result<Banner> {
     let mut artwork = artwork.unwrap_or_else(fallback);
     let source = match decode(&artwork.bytes) {
@@ -231,6 +282,7 @@ pub fn render(request: BannerRequest, artwork: Option<Artwork>) -> Result<Banner
         artwork: artwork.id,
     })
 }
+/// Draw an attribution line in the shared 18-pixel muted text style.
 fn credit(image: &mut RgbaImage, font: &FontRef<'_>, x: i32, y: i32, text: &str) {
     draw_text_mut(image, MUTED, x, y, 18.0, font, text);
 }

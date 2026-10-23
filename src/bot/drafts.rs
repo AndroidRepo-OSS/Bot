@@ -1,4 +1,9 @@
-//! Draft creation and regeneration; state is replaced only after a usable message exists.
+//! Draft preparation and replacement after a usable Telegram message exists.
+//!
+//! [`create`] checks evidence/cooldown, generates content and sends a rendered review
+//! photo. [`revise`] preserves the previous draft on failure and swaps state before
+//! old-message cleanup. Channel copies belong to [`super::publication`].
+
 use super::{App, DraftSession, State, ui};
 use crate::{
     db,
@@ -12,6 +17,10 @@ use teloxide::{
     prelude::*,
     types::{InputFile, ParseMode},
 };
+/// Remove an owner’s active state and clear its message controls best effort.
+///
+/// When `delete` is true, also delete the draft and associated missing-README
+/// notice. State is removed before any Telegram request, so stale controls fail admission.
 pub(super) async fn deactivate(app: &App, source: &Message, owner: UserId, delete: bool) {
     let previous = app.states.lock().await.remove(&owner);
     if let Some(previous) = previous {
@@ -26,6 +35,17 @@ pub(super) async fn deactivate(app: &App, source: &Message, owner: UserId, delet
         }
     }
 }
+/// Inspect, register and generate a repository under one of four work permits.
+///
+/// Records cooldown refusals before generation. A valid draft becomes active only
+/// after the caption/banner message is sent; missing download evidence creates an
+/// owner-bound approval message. `allow_missing` must come from that approval.
+/// This may call the model provider and sends staff messages, never channel copies.
+///
+/// # Errors
+///
+/// Propagates sanitized provider, database, generation, rendering and Telegram
+/// failures. A closed work semaphore returns [`Error::External`].
 pub(super) async fn create(
     app: &App,
     source: &Message,
@@ -147,6 +167,13 @@ pub(super) async fn create(
     }
     Ok(())
 }
+/// Validate the final caption, render an attributed banner and send the review photo.
+///
+/// Returns the sent message and actual artwork ID; no workflow state is changed here.
+///
+/// # Errors
+///
+/// Propagates caption, renderer and Telegram failures.
 async fn send_draft(
     app: &App,
     source: &Message,
@@ -188,6 +215,16 @@ async fn send_draft(
     Ok((request.await?, banner.artwork))
 }
 
+/// Generate and send a replacement while retaining the current usable draft.
+///
+/// Uses the same repository snapshot. Stores the replacement before best-effort
+/// deletion of the previous message. Generation/send failure leaves the old draft
+/// active and is reported to staff; a previous no-download draft retains that policy.
+///
+/// # Errors
+///
+/// Returns [`Error::External`] if work admission closes, or a sanitized Telegram
+/// error if the failure notice cannot be sent. Replacement failures are handled locally.
 pub(super) async fn revise(app: &App, source: &Message, session: Arc<DraftSession>) -> Result<()> {
     let _permit = app
         .work_slots

@@ -1,4 +1,9 @@
-//! Telegram presentation: escaped HTML and UTF-16 caption accounting.
+//! Telegram HTML captions, callback keyboards and message helpers.
+//!
+//! [`caption`] escapes validated text and checks the visible UTF-16 budget. Keyboards
+//! encode typed intent only; handlers enforce authority. Staff cleanup is best effort
+//! and must never substitute for durable channel compensation.
+
 use crate::{
     error::{Error, Result},
     generation::Draft,
@@ -11,6 +16,7 @@ use teloxide::{
     },
 };
 
+/// Escape ampersands, angle brackets and double quotes for Telegram HTML.
 pub fn escape(value: &str) -> String {
     value
         .replace('&', "&amp;")
@@ -18,6 +24,15 @@ pub fn escape(value: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
 }
+/// Format a validated draft as escaped Telegram HTML.
+///
+/// Counts the fully assembled visible text in UTF-16 code units against the
+/// 1,024-unit photo-caption limit. Tags must already satisfy generation validation;
+/// this function adds their hashtag markers without revalidating them.
+///
+/// # Errors
+///
+/// Returns [`Error::Invalid`] if the visible caption exceeds 1,024 UTF-16 units.
 pub fn caption(draft: &Draft) -> Result<String> {
     let mut visible = format!("{}\n\n{}\n\n✨ Key Features:\n", draft.title, draft.summary);
     let mut html = format!(
@@ -54,17 +69,26 @@ pub fn caption(draft: &Draft) -> Result<String> {
     }
     Ok(html)
 }
+/// Recognized callback intent; authorization and phase checks live in [`super::handlers`].
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Action {
+    /// Enter publication confirmation from review phase.
     Publish,
+    /// Request the single channel copy from confirmation phase.
     Confirm,
+    /// Return from confirmation to review.
     Back,
+    /// Request replacement content while retaining the current usable draft.
     Regenerate,
+    /// Deactivate and remove the active draft.
     Cancel,
+    /// Explicitly approve generation when no download evidence exists.
     WithoutDownload,
+    /// Decline the missing-download prompt and deactivate it.
     CancelDownload,
 }
 impl Action {
+    /// Return the exact callback payload used by the inline keyboard.
     pub fn data(self) -> &'static str {
         match self {
             Self::Publish => "post:publish",
@@ -76,6 +100,9 @@ impl Action {
             Self::CancelDownload => "download_confirmation:cancel",
         }
     }
+    /// Recognize an exact callback payload without granting workflow permission.
+    ///
+    /// Unknown payloads return `None`; handlers must still verify owner, message and phase.
     pub fn parse(value: &str) -> Option<Self> {
         [
             Self::Publish,
@@ -90,9 +117,11 @@ impl Action {
         .find(|a| a.data() == value)
     }
 }
+/// Build a callback button with the exact payload for a typed action.
 fn button(label: &str, action: Action) -> Button {
     Button::callback(label, action.data())
 }
+/// Build channel-safe controls containing only an optional resolved Download URL.
 pub fn published(draft: &Draft) -> InlineKeyboardMarkup {
     InlineKeyboardMarkup::new(
         draft
@@ -101,6 +130,9 @@ pub fn published(draft: &Draft) -> InlineKeyboardMarkup {
             .map(|url| vec![Button::url("📥 Download", url.clone())]),
     )
 }
+/// Append review or confirmation controls to the optional Download button.
+///
+/// `confirming` selects Publish now/Back instead of Publish/Regenerate/Cancel.
 pub fn draft_keyboard(draft: &Draft, confirming: bool) -> InlineKeyboardMarkup {
     let mut keyboard = published(draft).inline_keyboard;
     if confirming {
@@ -115,12 +147,20 @@ pub fn draft_keyboard(draft: &Draft, confirming: bool) -> InlineKeyboardMarkup {
     }
     InlineKeyboardMarkup::new(keyboard)
 }
+/// Build the explicit proceed-without-download and cancel approval controls.
 pub fn missing_download() -> InlineKeyboardMarkup {
     InlineKeyboardMarkup::new([
         [button("Generate without download", Action::WithoutDownload)],
         [button("Cancel", Action::CancelDownload)],
     ])
 }
+/// Send plain text in the source chat/topic with link previews disabled.
+///
+/// This does not set HTML parse mode; use escaped HTML only in dedicated renderers.
+///
+/// # Errors
+///
+/// Returns a sanitized Telegram error if delivery fails.
 pub async fn say(bot: &Bot, source: &Message, text: impl Into<String>) -> Result<Message> {
     let mut request =
         bot.send_message(source.chat.id, text)
@@ -136,6 +176,10 @@ pub async fn say(bot: &Bot, source: &Message, text: impl Into<String>) -> Result
     }
     Ok(request.await?)
 }
+/// Send a best-effort audit to the configured staff topic.
+///
+/// The caller must supply safe text. Delivery failure emits a fixed warning and
+/// is not returned to the publication workflow.
 pub async fn audit(bot: &Bot, chat: i64, topic: i32, text: impl Into<String>) {
     if bot
         .send_message(ChatId(chat), text)
@@ -146,6 +190,7 @@ pub async fn audit(bot: &Bot, chat: i64, topic: i32, text: impl Into<String>) {
         tracing::warn!("Staff audit delivery failed");
     }
 }
+/// Clear stale workflow buttons best effort after state has been deactivated.
 pub async fn clear_controls(bot: &Bot, source: &Message, id: MessageId) {
     if bot
         .edit_message_reply_markup(source.chat.id, id)
@@ -156,11 +201,20 @@ pub async fn clear_controls(bot: &Bot, source: &Message, id: MessageId) {
         tracing::warn!("Could not deactivate old controls");
     }
 }
+/// Delete a staff draft/notice best effort; never use for channel compensation.
+///
+/// Durable channel deletion belongs to [`super::publication`].
 pub async fn delete(bot: &Bot, chat: ChatId, message: MessageId) {
     if bot.delete_message(chat, message).await.is_err() {
         tracing::warn!("Draft cleanup failed");
     }
 }
+/// Send the public introduction and project/community links in the source topic.
+///
+/// # Errors
+///
+/// Returns a sanitized Telegram error on delivery failure or [`Error::Payload`]
+/// if a bundled destination cannot be parsed.
 pub async fn start(bot: &Bot, source: &Message) -> Result<()> {
     let mut buttons = Vec::new();
     for (label, url) in [

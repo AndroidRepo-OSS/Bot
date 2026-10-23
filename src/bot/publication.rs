@@ -1,4 +1,9 @@
-//! A single non-retried copy, followed by durable completion or compensation.
+//! Single-attempt Telegram copy coordinated with durable SQLite recovery.
+//!
+//! [`publish`] commits a reservation before delivery and retains receipt handling
+//! through completion or compensation. Ambiguous delivery never causes an automatic
+//! recopy. Database transitions live in [`crate::db`], without network effects.
+
 use super::{App, DraftSession, ui};
 use crate::{
     db::{self, Delivery, Receipt, Reservation},
@@ -12,13 +17,37 @@ use teloxide::{
     types::{ChatId, MessageId},
 };
 
+/// Delivery result presented to staff after reservation and any recovery work.
 pub enum Outcome {
+    /// Durably completed publication with the stored receipt.
     Completed(Receipt),
+    /// Channel deletion was confirmed and the operation released.
     Compensated,
+    /// Repository cooldown expiry prevented copying.
     Blocked(chrono::DateTime<Utc>),
+    /// Another live copy operation owns delivery.
     InProgress(i32),
+    /// Unresolved operation ID and optional known receipt; staff must inspect/reconcile.
     Recovery(i32, Option<Receipt>),
 }
+/// Reserve durably, attempt one channel copy, then persist or compensate.
+///
+/// Requires the draft owner. A committed `copying` operation precedes the only copy,
+/// which has a 60-second timeout and no automatic retry. Ambiguous delivery blocks
+/// until reconciliation. After a receipt, failed persistence attempts durable
+/// compensation before deletion; unconfirmed deletion is treated conservatively.
+///
+/// # Cancellation
+///
+/// The draining dispatcher must retain this future through completion, including
+/// receipt persistence and compensation. Do not race the whole future against a
+/// shutdown timeout; forced process termination leaves recovery state in SQLite.
+///
+/// # Errors
+///
+/// Returns [`Error::Invalid`] for a different actor, sanitized database errors
+/// when reservation fails, or [`Error::Telegram`] after a definitive copy rejection
+/// has been stored. Unresolved effects are returned as [`Outcome::Recovery`].
 pub async fn publish(
     app: &App,
     session: &DraftSession,
@@ -118,6 +147,15 @@ pub async fn publish(
     // A failed/ambiguous deletion is conservatively treated as a visible post.
     recover_visible(app, receipt).await
 }
+/// Retry receipt persistence up to three times after an unconfirmed deletion.
+///
+/// Retries only database completion, never channel delivery or deletion. Returns a
+/// recovery outcome with the known receipt if durable completion remains unavailable.
+///
+/// # Errors
+///
+/// This implementation converts all persistence failures to [`Outcome::Recovery`];
+/// the result signature matches the surrounding publication workflow.
 async fn recover_visible(app: &App, receipt: Receipt) -> Result<Outcome> {
     for attempt in 0..3 {
         if let Ok(stored) = db::complete(&app.pool, receipt, false).await {

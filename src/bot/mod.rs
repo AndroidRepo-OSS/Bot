@@ -1,4 +1,10 @@
-//! Per-user draft workflow; teloxide serializes commands and callbacks by user.
+//! Staff workflow state, resource ownership and the draining Telegram dispatcher.
+//!
+//! [`run`] serializes commands and callbacks by user. [`State`] is authoritative for
+//! owner/message/phase admission; callbacks carry only intent. Draft preparation
+//! is bounded separately from CPU rendering. Shutdown retains admitted publication
+//! futures until their persistence/recovery work finishes, then closes SQLite.
+
 mod drafts;
 mod handlers;
 mod publication;
@@ -19,28 +25,49 @@ use teloxide::{
 };
 use tokio::sync::{Mutex, Semaphore};
 
+/// Resources and bounded work owned by the polling lifecycle.
+///
+/// The dispatcher serializes updates by user. State locks cover short map accesses
+/// only; network and database operations run outside those locks. Secrets in the
+/// configuration deliberately prevent deriving `Debug` for this context.
 pub struct App {
+    /// Telegram API client sharing the HTTP pool.
     pub bot: Bot,
+    /// Validated configuration and provider credentials.
     pub config: Config,
+    /// Shared redirect-disabled HTTP client.
     pub http: reqwest::Client,
+    /// Shared durable SQLite pool, closed after dispatcher drain.
     pub pool: SqlitePool,
+    /// Active per-user state; hold this lock only for short map operations.
     states: Mutex<HashMap<UserId, State>>,
+    /// Two permits held through artwork retrieval and blocking rendering.
     render_slots: Arc<Semaphore>,
+    /// Four permits limiting draft creation and regeneration.
     work_slots: Semaphore,
 }
+/// Active per-user workflow phase; callback payloads alone grant no authority.
 #[derive(Clone)]
 enum State {
+    /// Await an explicit owner decision before proceeding without a Download button.
     AwaitingDownloadApproval {
+        /// User who may answer the missing-download prompt.
         owner: UserId,
+        /// Active missing-download approval message.
         message: MessageId,
+        /// Repository to refetch after explicit approval.
         reference: RepositoryRef,
     },
+    /// Review a usable draft or confirm its publication.
     Draft {
+        /// Usable review message with validated content and evidence.
         session: Arc<DraftSession>,
+        /// Whether Publish now/Back controls are currently admitted.
         confirming: bool,
     },
 }
 impl State {
+    /// Return the only message whose workflow controls may currently be admitted.
     fn message(&self) -> MessageId {
         match self {
             Self::AwaitingDownloadApproval { message, .. } => *message,
@@ -48,16 +75,30 @@ impl State {
         }
     }
 }
+/// Usable review message and its matching evidence snapshot, draft and owner.
+///
+/// Shared snapshots survive awaits without holding the state mutex. The database
+/// repository ID refers to stable provider identity, rather than only the URL path.
 #[derive(Clone)]
 pub struct DraftSession {
+    /// User ID allowed to operate this draft.
     pub owner: UserId,
+    /// Active review photo message in the staff chat.
     pub message: MessageId,
+    /// Evidence snapshot used to resolve every selected destination.
     pub repository: Arc<Repository>,
+    /// Stable local repository identity returned by registration.
     pub repository_id: i32,
+    /// Validated content corresponding to the review message.
     pub draft: Draft,
+    /// Optional staff message warning that README evidence was absent.
     notice: Option<MessageId>,
 }
 impl App {
+    /// Send a best-effort staff audit through [`ui::audit`].
+    ///
+    /// Callers must supply safe categories and numeric context, never private evidence
+    /// or credentials. Failure logs a safe warning and does not abort the workflow.
     pub async fn audit(&self, text: impl Into<String>) {
         ui::audit(
             &self.bot,
@@ -67,6 +108,7 @@ impl App {
         )
         .await;
     }
+    /// Check staff chat and workflow topic; caller separately requires an identified user.
     fn authorized(&self, message: &Message) -> bool {
         message.chat.id.0 == self.config.staff_chat
             && message
@@ -74,6 +116,17 @@ impl App {
                 .is_some_and(|id| id.0.0 == self.config.post_topic)
     }
 }
+/// Configure Telegram commands and poll until dispatcher shutdown completes.
+///
+/// Owns a single polling loop, four draft-work slots and two render slots. Commands
+/// and callbacks share per-user isolation. SIGINT/SIGTERM stop polling and drain
+/// admitted work, including publication futures, before closing the SQLite pool.
+/// Startup deletes the webhook and updates command menus through Telegram.
+///
+/// # Errors
+///
+/// Returns sanitized Telegram errors when startup or dispatcher initialization
+/// fails. Individual workflow failures are reported through safe application errors.
 pub async fn run(config: Config, http: reqwest::Client, pool: SqlitePool) -> Result<()> {
     // Same HTTP pool and redirect policy; no retry adapter around channel copies.
     let bot = Bot::with_client(&config.bot_token, http.clone());

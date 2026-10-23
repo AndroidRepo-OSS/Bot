@@ -1,3 +1,8 @@
+//! Best-effort approved NASA artwork with strict origin, size and deadline bounds.
+//!
+//! [`fetch`] returns `None` when retrieval fails so the renderer can use attributed
+//! local artwork. No provider credentials are sent; only approved asset URLs are read.
+
 use super::Artwork;
 use crate::{
     error::{Error, Result},
@@ -9,6 +14,7 @@ use reqwest::Client;
 use serde::Deserialize;
 use std::{collections::HashSet, time::Duration};
 
+/// Approved NASA image IDs eligible for randomized banner artwork selection.
 const IDS: &[&str] = &[
     "PIA22085",
     "PIA22355",
@@ -48,34 +54,54 @@ const IDS: &[&str] = &[
     "PIA04218",
     "PIA07828",
 ];
+/// NASA search/asset API envelope.
 #[derive(Deserialize)]
 struct Payload {
+    /// API result collection.
     collection: Collection,
 }
+/// NASA collection containing metadata or asset records.
 #[derive(Deserialize)]
 struct Collection {
+    /// Metadata or asset records returned by NASA.
     items: Vec<Item>,
 }
+/// NASA result with optional image metadata, preview links and asset href.
 #[derive(Deserialize)]
 struct Item {
+    /// Optional image metadata records, empty when absent.
     #[serde(default)]
     data: Vec<Data>,
+    /// Optional relations including the required preview link.
     #[serde(default)]
     links: Vec<Link>,
+    /// Asset destination used by the asset-list response.
     href: Option<String>,
 }
+/// NASA image identity and bounded attribution metadata.
 #[derive(Deserialize)]
 struct Data {
+    /// Archive identity required to match the approved requested ID.
     nasa_id: String,
+    /// Nonblank image title bounded to 500 characters.
     title: String,
+    /// Optional originating center bounded to 200 characters.
     center: Option<String>,
+    /// Optional catalog timestamp bounded to 100 bytes.
     date_created: Option<String>,
 }
+/// NASA relation and optional destination, used to select the preview image.
 #[derive(Deserialize)]
 struct Link {
+    /// Relation marker; `preview` identifies the fallback candidate URL.
     rel: Option<String>,
+    /// Optional URL that must pass the approved asset-origin filter.
     href: Option<String>,
 }
+/// Accept only the approved NASA asset hostname and upgrade the scheme to HTTPS.
+///
+/// Returns `None` for malformed/credential-bearing URLs or explicit ports. The
+/// result is subsequently fetched with redirects disabled.
 fn asset_url(value: &str) -> Option<String> {
     let mut url = web_url(value)?;
     let authority = value.split_once("://")?.1.split('/').next()?;
@@ -85,6 +111,15 @@ fn asset_url(value: &str) -> Option<String> {
     url.set_scheme("https").ok()?;
     Some(url.into())
 }
+/// Read NASA JSON or encoded image bytes with an eight-second request timeout.
+///
+/// Requires a successful status and the expected content type. Images are bounded
+/// to 12 MiB; JSON uses [`http::METADATA_LIMIT`].
+///
+/// # Errors
+///
+/// Returns sanitized HTTP failures or [`Error::Payload`] for wrong media types
+/// and oversized responses.
 async fn read(client: &Client, url: &str, image: bool) -> Result<Bytes> {
     let response = client
         .get(url)
@@ -121,6 +156,10 @@ async fn read(client: &Client, url: &str, image: bool) -> Result<Bytes> {
     )
     .await
 }
+/// Try one randomly selected approved NASA ID within 20 seconds.
+///
+/// Returns `None` on timeout or any retrieval/validation failure and emits a safe
+/// fallback warning. Callers render the bundled attributed fallback in that case.
 pub async fn fetch(client: &Client) -> Option<Artwork> {
     let id = IDS[rand::random_range(0..IDS.len())];
     match tokio::time::timeout(Duration::from_secs(20), load(client, id)).await {
@@ -131,6 +170,15 @@ pub async fn fetch(client: &Client) -> Option<Artwork> {
         }
     }
 }
+/// Resolve one approved NASA image and its attribution without following redirects.
+///
+/// Requires matching metadata and an approved preview. Tries at most eight unique
+/// asset URLs, preferring large, medium and original variants in that order.
+///
+/// # Errors
+///
+/// Returns sanitized read/JSON errors, [`Error::Payload`] for invalid metadata,
+/// or [`Error::Image`] when no candidate image can be read.
 async fn load(client: &Client, id: &str) -> Result<Artwork> {
     let payload: Payload = serde_json::from_slice(
         &read(

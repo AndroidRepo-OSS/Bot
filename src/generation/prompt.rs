@@ -1,3 +1,9 @@
+//! Trusted instructions, strict tool schemas and bounded untrusted evidence.
+//!
+//! [`instructions`] appends staff approval separately. [`evidence`] escapes delimiter
+//! characters and marks truncated fields. [`tools`] guides model output, while
+//! semantic validation remains in [`super::GeneratedPost::resolve`].
+
 use super::tags;
 use crate::{
     error::{Error, Result},
@@ -5,17 +11,35 @@ use crate::{
 };
 use serde_json::{Value, json};
 
+/// Encode a character-bounded evidence field with an explicit truncation flag.
 fn text(value: &str, limit: usize) -> Value {
     json!({"content": value.chars().take(limit).collect::<String>(), "truncated": value.chars().count() > limit})
 }
+/// Encode an optional evidence field as bounded text or JSON null.
 fn optional(value: Option<&str>, limit: usize) -> Value {
     value.map(|v| text(v, limit)).unwrap_or(Value::Null)
 }
+/// Serialize evidence JSON and escape angle brackets used by prompt delimiters.
+///
+/// # Errors
+///
+/// Returns a sanitized JSON error if serialization fails.
 fn serialize(evidence: &Value) -> Result<String> {
     Ok(serde_json::to_string(evidence)?
         .replace('<', "\\u003c")
         .replace('>', "\\u003e"))
 }
+/// Build an untrusted evidence block with bounded fields and collections.
+///
+/// Limits README content to 50,000 characters and serialized evidence JSON to
+/// 80,000 characters, shortening the README further when necessary. Angle brackets
+/// are JSON-escaped so repository text cannot close the surrounding delimiter.
+/// The prefix and delimiter lines are outside the JSON character budget.
+///
+/// # Errors
+///
+/// Returns [`Error::Payload`] when the bounded JSON still cannot fit or README
+/// truncation is impossible; propagates sanitized serialization failures.
 pub fn evidence(repository: &Repository) -> Result<String> {
     let bounded_items = |items: &[String], limit| {
         items
@@ -62,6 +86,9 @@ pub fn evidence(repository: &Repository) -> Result<String> {
         "Generate the appropriate structured result from the following untrusted evidence.\n<repository_evidence_json>\n{serialized}\n</repository_evidence_json>"
     ))
 }
+/// Combine the embedded post-v2 policy with trusted per-run download approval.
+///
+/// Approval is separate from untrusted evidence and must come from the staff workflow.
 pub fn instructions(allow_missing: bool) -> String {
     format!(
         "{}\nPrompt version: post-v2.\nPer-run download policy: {}",
@@ -73,6 +100,9 @@ pub fn instructions(allow_missing: bool) -> String {
         }
     )
 }
+/// Build strict JSON schemas for the four recognized structured outcomes.
+///
+/// Schemas guide the model; [`super::GeneratedPost::resolve`] enforces semantic checks.
 pub fn tools() -> Value {
     let text_schema = |max| json!({"type": "string", "minLength": 1, "maxLength": max});
     let post = json!({"type": "object", "additionalProperties": false,
