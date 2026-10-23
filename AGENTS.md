@@ -43,7 +43,7 @@ Use the relevant skill in `.agents/skills/` for its domain:
   bundled asset bytes, licenses and rendered attribution.
 - Do not add Rust test suites, fixtures or eval datasets unless explicitly asked.
   Use temporary probes, public read-only APIs, offline rendering, isolated
-  PostgreSQL and local Telegram stubs. Do not call paid generation or send real
+  SQLite databases and local Telegram stubs. Do not call paid generation or send real
   Telegram messages as incidental verification.
 
 ## Verification
@@ -62,7 +62,7 @@ pre-commit run --all-files
 For prose-only changes run pre-commit at minimum. Include new unstaged files
 explicitly because `--all-files` checks tracked files. Review formatter changes
 and repeat affected checks. Domain skills describe manual scenarios; choose those
-relevant to the change. Publication/schema changes require disposable PostgreSQL;
+relevant to the change. Publication/schema changes require disposable SQLite;
 visible changes require rendering and inspection. Report offline limitations.
 
 Summarize behavior, risks and completed verification, including schema,

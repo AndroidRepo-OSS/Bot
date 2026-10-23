@@ -4,20 +4,19 @@ A Rust Telegram bot that turns public GitHub/GitLab evidence into reviewed
 Android Repository channel posts. Staff load a repository, review a generated
 English caption and 1920 × 1080 banner, then explicitly confirm publication.
 
-One binary owns the HTTP connection pool, PostgreSQL pool, bounded rendering
+One binary owns the HTTP connection pool, SQLite pool, bounded rendering
 work and teloxide dispatcher in a single Rust module tree.
 
 ## Build and run
 
-Install [Rust through rustup](https://www.rust-lang.org/tools/install) and provide
-a reachable PostgreSQL server. `rust-toolchain.toml` pins Rust 1.99.1 with Clippy
-and rustfmt. Native builds need a C/C++ compiler, CMake and pkg-config for the
-TLS dependencies.
+Install [Rust through rustup](https://www.rust-lang.org/tools/install).
+`rust-toolchain.toml` pins Rust 1.99.1 with Clippy and rustfmt. Native builds need a C/C++ compiler, CMake and pkg-config for the
+TLS dependencies and bundled SQLite.
 
 ```bash
 cargo build --release --locked
 cp .env.example .env
-# Fill in your Telegram, OpenCode and reachable PostgreSQL settings.
+# Fill in your Telegram, OpenCode and SQLite file settings.
 cargo run --release --locked -- check-config
 cargo run --release --locked -- migrate
 cargo run --release --locked -- run
@@ -27,8 +26,9 @@ No subcommand defaults to `run`. `check-config` does not contact any service;
 `migrate` requires only `AR_DATABASE_URL`. Both read `.env`, with process
 environment values taking precedence.
 
-Create the PostgreSQL database and user before running `migrate`. Run migrations
-successfully before starting the bot. Assets and SQL migrations are embedded in
+Choose a writable local SQLite file path; its parent directory must exist.
+`migrate` creates the file if missing. Run migrations successfully before starting
+the bot. Assets and SQL migrations are embedded in
 the executable; preserve the bundled asset licenses when distributing it.
 
 Read-only provider inspection and offline rendering are available without bot,
@@ -56,7 +56,7 @@ optional provider token if configured; it never invokes AI or Telegram.
 | `AR_LOG_TOPIC_ID` | yes | — | Positive topic ID for best-effort audits |
 | `AR_CHANNEL_ID` | yes | — | Target channel, nonzero ID |
 | `AR_OPENCODE_ZEN_API_KEY` | yes | — | OpenCode Console API credential |
-| `AR_DATABASE_URL` | yes | — | `postgresql://` or `postgres://` URL |
+| `AR_DATABASE_URL` | yes | — | Persistent file URL, e.g. `sqlite://androidrepo.db` |
 | `AR_LOG_LEVEL` | no | `INFO` | `CRITICAL`, `ERROR`, `WARNING`/`WARN`, `INFO`, `DEBUG` |
 | `AR_OPENCODE_ZEN_MODEL` | no | `mimo-v2.6-flash-free` | Model with Chat Completions tool calling |
 | `AR_GITHUB_TOKEN` | no | — | Optional GitHub API token |
@@ -91,7 +91,7 @@ Only HTTPS repository roots are accepted. Credentials, custom or explicit
 ports, encoded/dot paths, query strings, fragments and provider subresources are
 rejected. API credentials are scoped to their provider; public visibility is
 checked even when authenticated. Stable provider IDs and observed aliases are
-stored in PostgreSQL.
+stored in SQLite.
 
 README links are parsed as CommonMark and inert HTML. Code, hidden markup and
 image sources are excluded. The model selects inspected IDs, never final URLs.
@@ -109,8 +109,10 @@ caption is also checked against 1,024 UTF-16 units.
 ## Publication recovery
 
 A committed `copying` reservation precedes the only channel-copy request.
-Repository advisory locks and a unique open-operation index serialize bot
-instances. The cooldown is three PostgreSQL calendar months, calculated in UTC.
+SQLite `BEGIN IMMEDIATE` transactions acquire the writer lock before reading
+publication state; a unique open-operation index also prevents duplicate
+reservations. The cooldown is three calendar months in UTC, clamped to the last
+valid day of the destination month.
 An expired lease means **unresolved delivery**, never permission to copy again.
 
 The receipt and completed publication are committed atomically. If storing them
@@ -155,7 +157,7 @@ src/
 ├── generation/             # output validation, evidence prompt, tool-call client
 ├── media/                  # NASA fetch, bounded decoding, renderer, licensed assets
 └── db/                     # registration and transactional publication transitions
-migrations/                 # embedded SQLx revisions
+migrations/                 # embedded SQLite SQLx revisions
 ```
 
 `bot/` contains Telegram-facing behavior; providers, generation and rendering do
@@ -174,19 +176,27 @@ reservations blocked for reconciliation.
 
 ## Database upgrade
 
-Stop the bot and back up PostgreSQL before migration. Existing installations
-with Alembic history must first reach `20260812_0003` using the previous release.
-The Rust baseline adopts that version without recreating tables or deleting
-history. Fresh databases get the same baseline. Unknown or older schemas are
-rejected. The next SQL migration permits compensation leases on the existing
-operation table; no credentials or media assets change.
+SQLite uses WAL journaling, `synchronous=FULL`, foreign keys and a ten-second
+busy timeout. All writers acquire `BEGIN IMMEDIATE` before reading state. Keep
+the database on a local persistent filesystem with reliable file locks; multiple
+bot processes must use the same file on the same host. Do not share it over a
+network filesystem. Database URLs must use `sqlite://` with a nonempty file path;
+in-memory databases and URL query options are rejected so reservations survive
+restarts. Relative paths resolve from the process working directory; prefer an
+absolute path in deployments.
 
-Historical Alembic sources are available in Git history. The Rust binary embeds
-and applies numbered SQL files through SQLx. Its existing SQL revisions retain
-database adoption metadata for compatibility with deployed databases.
-Never edit a deployed SQL revision; add a new migration. Rollback to an old
-binary requires draining/reconciling operations first because the old bot does
-not understand active compensation leases.
+Stop and drain the bot before backing up the database. With every connection
+closed, preserve the database and any remaining `-wal`/`-shm` sidecars together.
+For a live backup, use SQLite's backup API rather than copying the main file.
+
+Run `migrate` before starting the bot. The embedded initial migration creates
+the SQLite schema with JSON tag arrays and UTC timestamp text. The bot has no
+production database yet, so the former PostgreSQL/Alembic baseline has been
+replaced. No PostgreSQL server or data import is required for a fresh installation.
+Any local PostgreSQL development data is not imported automatically.
+
+After deployment, never edit an applied SQL revision; add a new migration under
+`migrations/`. No credentials or media assets change.
 
 ## Verification and performance
 

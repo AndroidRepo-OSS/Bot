@@ -9,7 +9,7 @@ use crate::{
     generation::Draft,
     repositories::{Repository, RepositoryRef},
 };
-use sqlx::PgPool;
+use sqlx::SqlitePool;
 use std::{collections::HashMap, sync::Arc};
 use teloxide::{
     dispatching::UpdateHandler,
@@ -23,7 +23,7 @@ pub struct App {
     pub bot: Bot,
     pub config: Config,
     pub http: reqwest::Client,
-    pub pool: PgPool,
+    pub pool: SqlitePool,
     states: Mutex<HashMap<UserId, State>>,
     render_slots: Arc<Semaphore>,
     work_slots: Semaphore,
@@ -74,7 +74,7 @@ impl App {
                 .is_some_and(|id| id.0.0 == self.config.post_topic)
     }
 }
-pub async fn run(config: Config, http: reqwest::Client, pool: PgPool) -> Result<()> {
+pub async fn run(config: Config, http: reqwest::Client, pool: SqlitePool) -> Result<()> {
     // Same HTTP pool and redirect policy; no retry adapter around channel copies.
     let bot = Bot::with_client(&config.bot_token, http.clone());
     bot.delete_webhook().await?;

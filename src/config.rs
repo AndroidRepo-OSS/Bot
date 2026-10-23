@@ -42,10 +42,7 @@ impl Settings {
     }
     pub fn database_url(&self) -> Result<String> {
         let value = self.required("AR_DATABASE_URL")?;
-        let parsed = url::Url::parse(&value).map_err(|_| Error::Config("AR_DATABASE_URL"))?;
-        if !matches!(parsed.scheme(), "postgres" | "postgresql") || parsed.host_str().is_none() {
-            return Err(Error::Config("AR_DATABASE_URL must use postgresql://"));
-        }
+        crate::db::options(&value)?;
         Ok(value)
     }
     pub fn config(&self) -> Result<Config> {
