@@ -200,14 +200,14 @@ pre-commit run --all-files
 ```
 
 Install `pre-commit` as a development tool if needed; it is not a bot dependency.
-There is no Rust test suite. See [manual validation](docs/validation.md) for the
-performed checks and how to repeat the relevant scenarios safely.
+There is no Rust test suite. [AGENTS.md](AGENTS.md) lists project constraints and
+verification commands; domain-specific manual scenarios live in the repository
+[skills](.agents/skills/).
 
 Release builds use thin LTO and one codegen unit. Connection reuse, bounded
 concurrency and one-pass image compositing target the useful work in this bot.
 Network/model latency still dominates post creation. No end-to-end speedup over
-previous releases is claimed without comparable measurements. Source references and
-architecture decisions are recorded in [rewrite notes](docs/rewrite.md).
+previous releases is claimed without comparable measurements.
 
 ## Assets and licensing
 

@@ -1,32 +1,43 @@
 ---
 name: androidrepo-publication
-description: Change or review Android Repository Bot's publication reservations, Telegram compensation, PostgreSQL transitions, cooldown or reconciliation.
+description: Change or review Android Repository Bot's publication reservations, receipt persistence, compensation, cooldown or reconciliation.
 ---
 
 # Durable publication
 
-Read `src/bot/publication.rs`, `src/db/publications.rs` and the current SQL
-migrations together. The database and Telegram cannot share a transaction.
+Read `src/bot/publication.rs`, `src/db/publications.rs` and the affected SQL
+migrations together. Telegram delivery and database transitions cannot share a
+transaction; keep their coordination explicit.
 
-- Commit `copying` before the only copy request. Every transition takes the same
-  repository advisory lock before the operation row lock. Keep the unique open
-  operation and channel receipt constraints.
-- Read `clock_timestamp()` after lock waits. A live copy lease means in progress;
-  expiry means unresolved delivery, never permission for another copy.
-- Store the receipt, Publication and completed operation atomically. Keep the
-  future owned by the draining dispatcher; never cancel it after delivery.
-- Persist `compensating`, its receipt and lease before deletion. Live compensation
-  also blocks staff reconciliation. Only confirmed deletion releases the
-  reservation. Failed deletion retains recovery or a conservative Publication.
-- Known definitive API rejection can release an operation. Timeout, transport,
-  invalid response and unknown API errors cannot establish non-delivery.
+## Preserve
+
+- Commit `copying` before the single channel-copy request. Never automatically
+  retry a copy. Definitive API rejection may release the reservation; timeout,
+  transport failure, invalid response and unknown errors mean unresolved delivery.
+- Take the repository advisory lock before the operation row lock. Read the
+  database clock after waits. Keep unique open operations/receipts and the UTC
+  three-calendar-month cooldown, including month-end behavior.
+- A live lease prevents reconciliation; expiration never authorizes another copy.
+  Store the receipt, publication and completed operation atomically. Keep the
+  publication future owned by the draining dispatcher after delivery.
+- Persist `compensating`, its receipt and lease before deletion. Only confirmed
+  deletion releases the reservation. Ambiguous or failed deletion retains recovery
+  state or a conservatively recorded publication.
 - Reconciliation records a visible receipt or confirms absence; it never copies.
-  Validate the operation's channel and preserve idempotence/receipt matching.
-- Keep UTC three-calendar-month cooldown, stable provider IDs, alias history and
-  monotonic observation timestamps. Do not replace them with process locks or
-  fixed-day arithmetic.
+  Validate the operation's channel and preserve idempotence and receipt matching.
+- Preserve stable repository identity, alias history and monotonic observation
+  timestamps. Add SQL revisions instead of editing deployed migrations; keep
+  existing SQLx checksums and supported database adoption intact.
 
-Use a disposable PostgreSQL for reservations, concurrent contenders, live/expired
-leases and failure injection. Local API stubs can exercise delivery without a
-real channel. Add SQL revisions rather than editing deployed migrations; verify
-fresh and supported legacy adoption. See `docs/validation.md` and root checks.
+## Verify the affected boundary
+
+Use a disposable PostgreSQL instance and synthetic data, never production fault
+injection. Exercise the scenarios affected by the change: fresh migration and
+supported adoption; concurrent reservations; live/expired copy and compensation
+leases; repeated receipt completion; unique receipts; month-end cooldown; and
+interrupted compensation.
+
+For delivery changes, use a local Telegram API stub. Check definitive rejection,
+ambiguous response without a second copy, post-copy persistence failure,
+confirmed/failed compensation and reconciliation after expiry. Run the root
+checks and report which database/stub scenarios ran and which remain unverified.
