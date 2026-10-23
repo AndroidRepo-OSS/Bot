@@ -91,7 +91,7 @@ async fn execute(cli: Cli) -> Result<()> {
     }
     let allow_missing = cli.config.is_none() && matches!(command, Command::Inspect { .. });
     let config_path = cli.config.unwrap_or_else(|| PathBuf::from("config.toml"));
-    let settings = config::Settings::load(&config_path, allow_missing).await?;
+    let settings = config::FileSettings::load(&config_path, allow_missing).await?;
     if matches!(command, Command::Migrate) {
         let pool = db::connect(&settings.database_url()?).await?;
         db::migrate(&pool).await?;

@@ -23,13 +23,13 @@ pub enum LinkKind {
     Other,
 }
 impl LinkKind {
-    pub fn download(self) -> bool {
+    pub fn is_download_candidate(self) -> bool {
         matches!(
             self,
             Self::Release | Self::AppStore | Self::PackageRepository
         )
     }
-    pub fn optional(self) -> bool {
+    pub fn is_optional_destination(self) -> bool {
         !matches!(self, Self::Repository | Self::Donation)
     }
 }
@@ -65,7 +65,9 @@ impl Repository {
         self.links.iter().find(|link| link.id == id)
     }
     pub fn has_download(&self) -> bool {
-        self.links.iter().any(|link| link.kind.download())
+        self.links
+            .iter()
+            .any(|link| link.kind.is_download_candidate())
     }
 }
 

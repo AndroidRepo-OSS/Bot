@@ -20,7 +20,7 @@ pub struct Config {
 // No Debug: file settings also contain credentials.
 #[derive(Default, serde::Deserialize)]
 #[serde(default, deny_unknown_fields)]
-pub struct Settings {
+pub struct FileSettings {
     bot_token: Option<String>,
     staff_chat_id: Option<i64>,
     post_topic_id: Option<i32>,
@@ -41,7 +41,7 @@ fn required(value: &Option<String>, key: &'static str) -> Result<String> {
     optional(value).ok_or(Error::Config(key))
 }
 
-impl Settings {
+impl FileSettings {
     pub async fn load(path: &Path, allow_missing: bool) -> Result<Self> {
         let source = match tokio::fs::read_to_string(path).await {
             Ok(source) => source,

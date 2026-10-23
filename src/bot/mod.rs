@@ -30,7 +30,7 @@ pub struct App {
 }
 #[derive(Clone)]
 enum State {
-    Download {
+    AwaitingDownloadApproval {
         owner: UserId,
         message: MessageId,
         reference: RepositoryRef,
@@ -43,7 +43,7 @@ enum State {
 impl State {
     fn message(&self) -> MessageId {
         match self {
-            Self::Download { message, .. } => *message,
+            Self::AwaitingDownloadApproval { message, .. } => *message,
             Self::Draft { session, .. } => session.message,
         }
     }

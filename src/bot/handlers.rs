@@ -86,7 +86,7 @@ pub async fn callback(app: Arc<App>, callback: CallbackQuery) -> Result<()> {
     let action = callback.data.as_deref().and_then(Action::parse);
     let valid = match (&state, action) {
         (
-            Some(State::Download {
+            Some(State::AwaitingDownloadApproval {
                 owner: stored,
                 message: id,
                 ..
@@ -123,7 +123,10 @@ pub async fn callback(app: Arc<App>, callback: CallbackQuery) -> Result<()> {
         return Ok(());
     }
     let result = match (state, action) {
-        (Some(State::Download { reference, .. }), Some(Action::WithoutDownload)) => {
+        (
+            Some(State::AwaitingDownloadApproval { reference, .. }),
+            Some(Action::WithoutDownload),
+        ) => {
             deactivate(&app, message, owner, false).await;
             let result = create(&app, message, owner, reference, true).await;
             if result.is_ok() {
@@ -131,7 +134,7 @@ pub async fn callback(app: Arc<App>, callback: CallbackQuery) -> Result<()> {
             }
             result
         }
-        (Some(State::Download { .. }), Some(Action::CancelDownload))
+        (Some(State::AwaitingDownloadApproval { .. }), Some(Action::CancelDownload))
         | (Some(State::Draft { .. }), Some(Action::Cancel)) => {
             deactivate(&app, message, owner, true).await;
             ui::say(&app.bot, message, "🗑️ Draft cancelled.").await?;

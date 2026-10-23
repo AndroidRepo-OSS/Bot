@@ -137,7 +137,7 @@ pub(super) async fn create(
             let sent = request.await?;
             app.states.lock().await.insert(
                 owner,
-                State::Download {
+                State::AwaitingDownloadApproval {
                     owner,
                     message: sent.id,
                     reference,

@@ -1,9 +1,9 @@
+use super::tags;
 use crate::{
     error::{Error, Result},
     repositories::Repository,
 };
 use serde_json::{Value, json};
-include!("tags.rs");
 
 fn text(value: &str, limit: usize) -> Value {
     json!({"content": value.chars().take(limit).collect::<String>(), "truncated": value.chars().count() > limit})
@@ -32,7 +32,7 @@ pub fn evidence(repository: &Repository) -> Result<String> {
             "topics": bounded_items(&repository.topics, 30), "topics_truncated": repository.topics.len() > 30 || repository.topics.iter().any(|v| v.chars().count() > 100)},
         "readme": optional(repository.readme.as_deref(), 50_000),
         "latest_release": repository.release.as_ref().map(|r| json!({"name": text(&r.name, 200), "tag": text(&r.tag, 100), "description": optional(r.description.as_deref(), 8000)})),
-        "links": repository.links.iter().take(24).map(|link| json!({"id": link.id, "label": text(&link.label, 120), "kind": link.kind, "download_candidate": link.kind.download(), "url": text(link.url.as_str(), 512)})).collect::<Vec<_>>()
+        "links": repository.links.iter().take(24).map(|link| json!({"id": link.id, "label": text(&link.label, 120), "kind": link.kind, "download_candidate": link.kind.is_download_candidate(), "url": text(link.url.as_str(), 512)})).collect::<Vec<_>>()
     });
     let mut serialized = serialize(&evidence)?;
     if serialized.chars().count() > 80_000 {
@@ -81,7 +81,7 @@ pub fn tools() -> Value {
             "features": {"type": "array", "minItems": 3, "maxItems": 5, "items": text_schema(90)},
             "links": {"type": "array", "maxItems": 4, "items": {"type": "object", "additionalProperties": false, "required": ["id", "label"], "properties": {"id": text_schema(40), "label": text_schema(60)}}},
             "download_link_id": {"type": ["string", "null"], "maxLength": 40},
-            "tags": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "string", "enum": TAGS}}}});
+            "tags": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "string", "enum": tags::TAGS}}}});
     let reason = json!({"type": "object", "additionalProperties": false, "required": ["reason"], "properties": {"reason": text_schema(280)}});
     json!([
         {"type": "function", "function": {"name": "return_post_draft", "description": "Return a complete evidence-grounded Android post.", "parameters": post}},

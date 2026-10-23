@@ -1,4 +1,4 @@
-use super::{GeneratedPost, Outcome, Reason, plain, prompt};
+use super::{GeneratedPost, Outcome, Reason, prompt, validate_plain_text};
 use crate::{
     config::Config,
     error::{Error, Result},
@@ -105,7 +105,7 @@ fn resolve(response: Response, repository: &Repository, allow_missing: bool) -> 
             .map(Outcome::Draft);
     }
     let reason: Reason = serde_json::from_str(&call.function.arguments)?;
-    let reason = plain(&reason.reason, 280)?;
+    let reason = validate_plain_text(&reason.reason, 280)?;
     match call.function.name.as_str() {
         "not_android_project" => Ok(Outcome::NotAndroid(reason)),
         "insufficient_repository_evidence" => Ok(Outcome::Insufficient(reason)),

@@ -1,12 +1,13 @@
 //! Bounded structured generation. Only inspected link IDs can become destinations.
+mod client;
 mod prompt;
-mod service;
+mod tags;
 use crate::{
     error::{Error, Result},
     repositories::Repository,
 };
+pub use client::generate;
 use serde::{Deserialize, Serialize};
-pub use service::generate;
 use url::Url;
 
 #[derive(Clone, Debug, Serialize)]
@@ -52,7 +53,7 @@ pub enum Outcome {
     MissingDownload(String),
 }
 
-pub fn plain(value: &str, limit: usize) -> Result<String> {
+pub fn validate_plain_text(value: &str, limit: usize) -> Result<String> {
     let value = value.split_whitespace().collect::<Vec<_>>().join(" ");
     let lowercase = value.to_lowercase();
     if value.is_empty() || value.chars().count() > limit || lowercase.contains("http://") || lowercase.contains("https://") || lowercase.contains("www.")
@@ -78,19 +79,16 @@ impl GeneratedPost {
         {
             return Err(Error::Generation);
         }
-        let title = plain(&self.project_name, 100)?;
-        let summary = plain(&self.summary, 280)?;
+        let title = validate_plain_text(&self.project_name, 100)?;
+        let summary = validate_plain_text(&self.summary, 280)?;
         let features: Vec<_> = self
             .features
             .iter()
-            .map(|v| plain(v, 90))
+            .map(|v| validate_plain_text(v, 90))
             .collect::<Result<_>>()?;
         if !distinct(features.iter().map(String::as_str))
             || !distinct(self.tags.iter().map(String::as_str))
-            || self
-                .tags
-                .iter()
-                .any(|t| !prompt::TAGS.contains(&t.as_str()))
+            || self.tags.iter().any(|t| !tags::TAGS.contains(&t.as_str()))
         {
             return Err(Error::Generation);
         }
@@ -98,7 +96,7 @@ impl GeneratedPost {
             Some(id) => Some(
                 repository
                     .link(id)
-                    .filter(|link| link.kind.download())
+                    .filter(|link| link.kind.is_download_candidate())
                     .ok_or(Error::Generation)?
                     .url
                     .clone(),
@@ -120,10 +118,10 @@ impl GeneratedPost {
             }
             let link = repository
                 .link(&selected.id)
-                .filter(|link| link.kind.optional())
+                .filter(|link| link.kind.is_optional_destination())
                 .ok_or(Error::Generation)?;
             links.push(PostLink {
-                label: plain(&selected.label, 60)?,
+                label: validate_plain_text(&selected.label, 60)?,
                 url: link.url.clone(),
             });
         }
