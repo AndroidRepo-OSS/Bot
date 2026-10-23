@@ -275,10 +275,39 @@ cargo fmt --all -- --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo build --release --locked
 cargo doc --locked --no-deps
-pre-commit run --all-files
+prek run --all-files
 ```
 
-Install `pre-commit` as a development tool if needed; it is not a bot dependency.
+Install [prek](https://prek.j178.dev/) as a development tool and activate the Git
+hook in each checkout:
+
+```bash
+uv tool install prek==0.5.7
+prek install
+```
+
+[`prek.toml`](prek.toml) uses built-in Rust hooks for file hygiene, with no remote
+hook repositories or Python hook environments. Their versions follow the prek
+binary; the installation command pins the validated release, and the config
+requires at least that version. Review and validate the hooks when upgrading
+prek. It is not a bot dependency. See the
+[installation guide](https://prek.j178.dev/installation/) for other installers.
+
+Read-only hygiene checks run concurrently. Text fixers run sequentially to avoid
+editing the same files concurrently; Rust formatting and Clippy checks then run
+together. Rust checks include deleted files, and Clippy also runs for manifest,
+lockfile and pinned toolchain changes. The toolchain stays managed by rustup via
+`rust-toolchain.toml`.
+
+For focused local checks, use the hook groups; use the full run above before
+finishing a change:
+
+```bash
+prek run --all-files --group hygiene
+prek run --all-files --group rust
+prek validate-config prek.toml
+```
+
 There is no Rust test suite. [AGENTS.md](AGENTS.md) lists project constraints and
 verification commands; domain-specific manual scenarios live in the repository
 [skills](.agents/skills/).

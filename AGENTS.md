@@ -48,6 +48,11 @@ Use the relevant skill in `.agents/skills/` for its domain:
 
 ## Verification
 
+Use prek with `prek.toml`; common hooks are built into the prek binary. The README
+pins the validated prek release. After changing hook configuration, run
+`prek validate-config prek.toml`. The `hygiene` and `rust` groups support focused
+checks, but final verification runs every hook.
+
 For code/dependency changes run:
 
 ```bash
@@ -56,10 +61,10 @@ cargo fmt --all -- --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo build --release --locked
 cargo doc --locked --no-deps
-pre-commit run --all-files
+prek run --all-files
 ```
 
-For prose-only changes run pre-commit at minimum. Include new unstaged files
+For prose-only changes run prek at minimum. Include new unstaged files
 explicitly because `--all-files` checks tracked files. Review formatter changes
 and repeat affected checks. Domain skills describe manual scenarios; choose those
 relevant to the change. Publication/schema changes require disposable SQLite;

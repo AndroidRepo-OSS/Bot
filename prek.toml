@@ -1,0 +1,53 @@
+#:schema https://www.schemastore.org/prek.json
+minimum_prek_version = "0.5.7"
+
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "check-added-large-files", priority = 0, groups = ["hygiene"] },
+  { id = "check-case-conflict", priority = 0, groups = ["hygiene"] },
+  { id = "check-merge-conflict", priority = 0, groups = ["hygiene"] },
+  { id = "check-toml", priority = 0, groups = ["hygiene"] },
+  { id = "check-yaml", args = ["--disallow-unknown-tags"], priority = 0, groups = ["hygiene"] },
+  { id = "detect-private-key", priority = 0, groups = ["hygiene"] },
+  # Fixers share text files, so give each a separate priority.
+  { id = "mixed-line-ending", args = ["--fix=lf"], priority = 10, groups = ["hygiene"] },
+  { id = "end-of-file-fixer", priority = 20, groups = ["hygiene"] },
+  { id = "trailing-whitespace", priority = 30, groups = ["hygiene"] },
+]
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "prek-config"
+name = "prek configuration"
+entry = "prek validate-config prek.toml"
+language = "system"
+files = '^prek\.toml$'
+pass_filenames = false
+priority = 0
+groups = ["hygiene"]
+
+# Both Rust commands only check files and can run together after text fixes.
+[[repos.hooks]]
+id = "cargo-fmt"
+name = "Rust formatting"
+entry = "cargo fmt --all -- --check"
+language = "system"
+files = '(\.rs$|^Cargo\.toml$|^rust-toolchain\.toml$)'
+include_deleted = true
+pass_filenames = false
+priority = 40
+groups = ["rust"]
+
+[[repos.hooks]]
+id = "cargo-clippy"
+name = "Rust Clippy"
+entry = "cargo clippy --locked --all-targets -- -D warnings"
+language = "system"
+files = '(\.rs$|^Cargo\.(toml|lock)$|^rust-toolchain\.toml$)'
+include_deleted = true
+pass_filenames = false
+priority = 40
+groups = ["rust"]
