@@ -1,6 +1,6 @@
-//! Load configuration without mutating the process environment after Tokio starts.
+//! Typed TOML configuration; credentials never appear in diagnostics.
 use crate::error::{Error, Result};
-use std::{collections::HashMap, env};
+use std::path::Path;
 
 // No Debug: these values include credentials.
 pub struct Config {
@@ -17,80 +17,80 @@ pub struct Config {
     pub log_level: String,
 }
 
-pub struct Settings(HashMap<String, String>);
+// No Debug: file settings also contain credentials.
+#[derive(Default, serde::Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Settings {
+    bot_token: Option<String>,
+    staff_chat_id: Option<i64>,
+    post_topic_id: Option<i32>,
+    log_topic_id: Option<i32>,
+    channel_id: Option<i64>,
+    opencode_zen_api_key: Option<String>,
+    opencode_zen_model: Option<String>,
+    github_token: Option<String>,
+    gitlab_token: Option<String>,
+    database_url: Option<String>,
+    log_level: Option<String>,
+}
+
+fn optional(value: &Option<String>) -> Option<String> {
+    value.as_ref().filter(|v| !v.trim().is_empty()).cloned()
+}
+fn required(value: &Option<String>, key: &'static str) -> Result<String> {
+    optional(value).ok_or(Error::Config(key))
+}
+
 impl Settings {
-    pub fn load() -> Result<Self> {
-        let mut values = HashMap::new();
-        match dotenvy::from_path_iter(".env") {
-            Ok(entries) => {
-                for entry in entries {
-                    let (key, value) = entry.map_err(|_| Error::Config("invalid .env file"))?;
-                    values.insert(key, value);
-                }
+    pub async fn load(path: &Path, allow_missing: bool) -> Result<Self> {
+        let source = match tokio::fs::read_to_string(path).await {
+            Ok(source) => source,
+            Err(error) if allow_missing && error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(Self::default());
             }
-            Err(dotenvy::Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(_) => return Err(Error::Config("cannot read .env file")),
+            Err(_) => return Err(Error::Config("cannot read configuration file")),
+        };
+        // Parser errors can include source text containing secrets.
+        toml::from_str(&source)
+            .map_err(|_| Error::Config("invalid TOML configuration or field type"))
+    }
+
+    pub fn provider_token(&self, provider: crate::repositories::Provider) -> Option<String> {
+        match provider {
+            crate::repositories::Provider::Github => optional(&self.github_token),
+            crate::repositories::Provider::Gitlab => optional(&self.gitlab_token),
         }
-        values.extend(env::vars().filter(|(key, _)| key.starts_with("AR_")));
-        Ok(Self(values))
     }
-    pub fn optional(&self, key: &str) -> Option<String> {
-        self.0.get(key).filter(|v| !v.trim().is_empty()).cloned()
-    }
-    fn required(&self, key: &'static str) -> Result<String> {
-        self.optional(key).ok_or(Error::Config(key))
-    }
+
     pub fn database_url(&self) -> Result<String> {
-        let value = self.required("AR_DATABASE_URL")?;
+        let value = required(&self.database_url, "database_url")?;
         crate::db::options(&value)?;
         Ok(value)
     }
+
     pub fn config(&self) -> Result<Config> {
-        let integer = |key| {
-            self.required(key)?
-                .parse::<i64>()
-                .map_err(|_| Error::Config(key))
-        };
-        let nonzero = |key| {
-            integer(key).and_then(|v| {
-                if v != 0 {
-                    Ok(v)
-                } else {
-                    Err(Error::Config(key))
-                }
-            })
-        };
-        let topic = |key| {
-            integer(key).and_then(|v| {
-                i32::try_from(v)
-                    .ok()
-                    .filter(|v| *v > 0)
-                    .ok_or(Error::Config(key))
-            })
-        };
-        let log_level = self
-            .optional("AR_LOG_LEVEL")
-            .unwrap_or_else(|| "INFO".into());
+        let nonzero = |value: Option<i64>, key| value.filter(|v| *v != 0).ok_or(Error::Config(key));
+        let topic = |value: Option<i32>, key| value.filter(|v| *v > 0).ok_or(Error::Config(key));
+        let log_level = optional(&self.log_level).unwrap_or_else(|| "INFO".into());
         let log_level = match log_level.to_uppercase().as_str() {
             "CRITICAL" | "ERROR" => "error",
             "WARNING" | "WARN" => "warn",
             "INFO" => "info",
             "DEBUG" => "debug",
-            _ => return Err(Error::Config("AR_LOG_LEVEL")),
+            _ => return Err(Error::Config("log_level")),
         }
         .to_owned();
         Ok(Config {
-            bot_token: self.required("AR_BOT_TOKEN")?,
-            staff_chat: nonzero("AR_STAFF_CHAT_ID")?,
-            post_topic: topic("AR_POST_TOPIC_ID")?,
-            log_topic: topic("AR_LOG_TOPIC_ID")?,
-            channel: nonzero("AR_CHANNEL_ID")?,
-            zen_key: self.required("AR_OPENCODE_ZEN_API_KEY")?,
-            zen_model: self
-                .optional("AR_OPENCODE_ZEN_MODEL")
+            bot_token: required(&self.bot_token, "bot_token")?,
+            staff_chat: nonzero(self.staff_chat_id, "staff_chat_id")?,
+            post_topic: topic(self.post_topic_id, "post_topic_id")?,
+            log_topic: topic(self.log_topic_id, "log_topic_id")?,
+            channel: nonzero(self.channel_id, "channel_id")?,
+            zen_key: required(&self.opencode_zen_api_key, "opencode_zen_api_key")?,
+            zen_model: optional(&self.opencode_zen_model)
                 .unwrap_or_else(|| "mimo-v2.6-flash-free".into()),
-            github_token: self.optional("AR_GITHUB_TOKEN"),
-            gitlab_token: self.optional("AR_GITLAB_TOKEN"),
+            github_token: optional(&self.github_token),
+            gitlab_token: optional(&self.gitlab_token),
             database_url: self.database_url()?,
             log_level,
         })

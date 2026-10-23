@@ -13,7 +13,6 @@ base64 = "0.23"
 bytes = "1"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
-dotenvy = "0.15"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "tiff"] }
 imageproc = { version = "0.27", default-features = false, features = ["text"] }
 percent-encoding = "2"
@@ -27,6 +26,7 @@ sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio",
 teloxide = { git = "https://github.com/teloxide/teloxide.git", rev = "3c46b96e0dc0cabc75d6430c4566d7e2e12fd233", default-features = false, features = ["rustls", "macros"] }
 thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "sync", "time", "fs"] }
+toml = { version = "1", default-features = false, features = ["parse", "serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 url = { version = "2", features = ["serde"] }

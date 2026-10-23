@@ -20,10 +20,9 @@ pub fn options(url: &str) -> Result<SqliteConnectOptions> {
         .strip_prefix("sqlite://")
         .filter(|path| !path.is_empty() && !path.contains(['?', '#']) && *path != ":memory:")
         .ok_or(Error::Config(
-            "AR_DATABASE_URL must use sqlite:// with a persistent file path",
+            "database_url must use sqlite:// with a persistent file path",
         ))?;
-    let options =
-        SqliteConnectOptions::from_str(url).map_err(|_| Error::Config("AR_DATABASE_URL"))?;
+    let options = SqliteConnectOptions::from_str(url).map_err(|_| Error::Config("database_url"))?;
     let filename = options.get_filename().to_string_lossy();
     if filename.is_empty()
         || filename == ":memory:"
@@ -31,7 +30,7 @@ pub fn options(url: &str) -> Result<SqliteConnectOptions> {
         || path.contains('\0')
     {
         return Err(Error::Config(
-            "AR_DATABASE_URL must name a persistent SQLite file",
+            "database_url must name a persistent SQLite file",
         ));
     }
     Ok(options

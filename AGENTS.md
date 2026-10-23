@@ -39,8 +39,8 @@ Use the relevant skill in `.agents/skills/` for its domain:
   need; avoid generic service layers, global caches and custom allocators. Keep
   unsafe code forbidden and do not suppress lints to hide failures.
 - Add migrations for schema changes; never edit deployed revisions. Reflect
-  settings changes in `.env.example` and the README configuration table. Preserve
-  bundled asset bytes, licenses and rendered attribution.
+  settings changes in `config.example.toml` and the README configuration table.
+  Preserve bundled asset bytes, licenses and rendered attribution.
 - Do not add Rust test suites, fixtures or eval datasets unless explicitly asked.
   Use temporary probes, public read-only APIs, offline rendering, isolated
   SQLite databases and local Telegram stubs. Do not call paid generation or send real

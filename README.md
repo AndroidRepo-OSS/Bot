@@ -15,7 +15,8 @@ TLS dependencies and bundled SQLite.
 
 ```bash
 cargo build --release --locked
-cp .env.example .env
+cp config.example.toml config.toml
+chmod 600 config.toml
 # Fill in your Telegram, OpenCode and SQLite file settings.
 cargo run --release --locked -- check-config
 cargo run --release --locked -- migrate
@@ -23,8 +24,10 @@ cargo run --release --locked -- run
 ```
 
 No subcommand defaults to `run`. `check-config` does not contact any service;
-`migrate` requires only `AR_DATABASE_URL`. Both read `.env`, with process
-environment values taking precedence.
+`migrate` requires only `database_url`. Commands load `config.toml` from the
+working directory. Use `--config /path/to/config.toml` before or after the
+subcommand to select another file. Settings come only from TOML; `.env` and
+process environment variables are not loaded.
 
 Choose a writable local SQLite file path; its parent directory must exist.
 `migrate` creates the file if missing. Run migrations successfully before starting
@@ -48,28 +51,36 @@ optional provider token if configured; it never invokes AI or Telegram.
 
 ## Configuration
 
-| Variable | Required for polling | Default | Purpose |
+| TOML key | Required for polling | Default | Purpose |
 | --- | --- | --- | --- |
-| `AR_BOT_TOKEN` | yes | — | Telegram bot credential |
-| `AR_STAFF_CHAT_ID` | yes | — | Staff supergroup, nonzero ID |
-| `AR_POST_TOPIC_ID` | yes | — | Positive staff workflow topic ID |
-| `AR_LOG_TOPIC_ID` | yes | — | Positive topic ID for best-effort audits |
-| `AR_CHANNEL_ID` | yes | — | Target channel, nonzero ID |
-| `AR_OPENCODE_ZEN_API_KEY` | yes | — | OpenCode Console API credential |
-| `AR_DATABASE_URL` | yes | — | Persistent file URL, e.g. `sqlite://androidrepo.db` |
-| `AR_LOG_LEVEL` | no | `INFO` | `CRITICAL`, `ERROR`, `WARNING`/`WARN`, `INFO`, `DEBUG` |
-| `AR_OPENCODE_ZEN_MODEL` | no | `mimo-v2.6-flash-free` | Model with Chat Completions tool calling |
-| `AR_GITHUB_TOKEN` | no | — | Optional GitHub API token |
-| `AR_GITLAB_TOKEN` | no | — | Optional GitLab API token |
+| `bot_token` | yes | — | Telegram bot credential |
+| `staff_chat_id` | yes | — | Staff supergroup, nonzero ID |
+| `post_topic_id` | yes | — | Positive staff workflow topic ID |
+| `log_topic_id` | yes | — | Positive topic ID for best-effort audits |
+| `channel_id` | yes | — | Target channel, nonzero ID |
+| `opencode_zen_api_key` | yes | — | OpenCode Console API credential |
+| `database_url` | yes | — | Persistent file URL, e.g. `sqlite://androidrepo.db` |
+| `log_level` | no | `INFO` | `CRITICAL`, `ERROR`, `WARNING`/`WARN`, `INFO`, `DEBUG` |
+| `opencode_zen_model` | no | `mimo-v2.6-flash-free` | Model with Chat Completions tool calling |
+| `github_token` | no | — | Optional GitHub API token |
+| `gitlab_token` | no | — | Optional GitLab API token |
 
-The `AR_OPENCODE_ZEN_*` names are retained for existing deployments. Generation
-uses the current OpenCode endpoint
+Generation uses the OpenCode endpoint
 `https://opencode.ai/inference/openai/v1/chat/completions`. Choose a model that
 supports that API and tool calls; models exposed only through Responses or
 Anthropic Messages are not interchangeable. Free model availability is temporary;
 consult the [provider's current model documentation](https://opencode.ai/v2/docs/console/models/).
 
-Never commit `.env` or log credentials, raw external errors or private chat text.
+Copy [`config.example.toml`](config.example.toml) to `config.toml`. IDs are TOML
+integers; credentials, URLs, model names and log levels are strings. Unknown keys,
+invalid types and malformed TOML are rejected. Blank optional tokens are ignored.
+`inspect` also works when the default file is absent; an explicit `--config` path
+must exist. `render-banner` does not load configuration. SQLite relative paths
+resolve from the working directory, including when `--config` points elsewhere.
+
+Never commit a populated configuration file or log credentials, raw external
+errors or private chat text. The default `config.toml` is ignored by Git; keep
+custom configuration paths outside the repository.
 
 ## Staff workflow
 
@@ -138,7 +149,7 @@ The bot supplies the operation ID and any known receipt in its recovery notice.
 ```text
 src/
 ├── main.rs                 # CLI, configuration and resource composition
-├── config.rs               # AR_* settings; secrets have no Debug representation
+├── config.rs               # TOML settings; secrets have no Debug representation
 ├── error.rs                # safe errors without external response bodies
 ├── http.rs                 # shared pool, bounded reads and GET retries
 ├── bot/

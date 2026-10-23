@@ -1,51 +1,49 @@
-# Android Repository Bot environment example.
-#
-# Copy this file to `.env` and replace every required placeholder before
-# running `cargo run --release --locked -- run`.
-# The application reads `.env` and process environment variables prefixed with
-# `AR_`; process environment values take precedence. Empty optional token
-# values are ignored. Never commit the populated `.env` file.
+# Android Repository Bot configuration example.
+# Copy to config.toml and replace the required placeholders.
+# Use --config /path/to/config.toml to select another file.
+# Settings come only from TOML; environment variables are not loaded.
+# Never commit the populated file. Restrict its permissions (chmod 600).
 
 # Telegram
 # Required. Bot token issued by BotFather.
-AR_BOT_TOKEN=replace-with-your-bot-token
+bot_token = "replace-with-your-bot-token"
 
 # Required. Staff chat admitted to the post workflow.
 # Telegram supergroup and channel IDs commonly start with `-100`.
-AR_STAFF_CHAT_ID=-1001234567890
+staff_chat_id = -1001234567890
 
 # Required. Positive message-thread ID for the staff topic where `/post`,
 # `/cancel`, and draft callbacks are handled.
-AR_POST_TOPIC_ID=123
+post_topic_id = 123
 
 # Required. Positive message-thread ID for best-effort operational audit
 # messages. Audit delivery failures do not stop the main workflow.
-AR_LOG_TOPIC_ID=456
+log_topic_id = 456
 
 # Required. Target channel for explicitly confirmed posts.
 # The bot must have permission to copy messages into this channel.
-AR_CHANNEL_ID=-1009876543210
+channel_id = -1009876543210
 
 # Runtime logging
 # Optional. Accepted values: CRITICAL, ERROR, WARNING, INFO, DEBUG.
-AR_LOG_LEVEL=INFO
+log_level = "INFO"
 
 # AI generation
 # Required. OpenCode Console credential for the OpenAI-compatible inference endpoint.
-AR_OPENCODE_ZEN_API_KEY=replace-with-your-opencode-zen-api-key
+opencode_zen_api_key = "replace-with-your-opencode-zen-api-key"
 
 # Optional. Non-empty OpenCode Zen model identifier.
-AR_OPENCODE_ZEN_MODEL=mimo-v2.6-flash-free
+opencode_zen_model = "mimo-v2.6-flash-free"
 
 # Repository providers
 # Optional. Leave blank for anonymous public API requests. Configure tokens for
 # authenticated GitHub/GitLab requests and their associated rate limits.
-AR_GITHUB_TOKEN=
-AR_GITLAB_TOKEN=
+github_token = ""
+gitlab_token = ""
 
 # Persistence
 # Required. Persistent SQLite file URL; relative to the bot's working directory.
 # The parent directory must exist and be writable. The file is created if missing.
 # Use sqlite:///absolute/path/androidrepo.db for an absolute path.
-# The `migrate` subcommand loads this file too; environment values win.
-AR_DATABASE_URL=sqlite://androidrepo.db
+# The `migrate` subcommand requires only database_url from this file.
+database_url = "sqlite://androidrepo.db"

@@ -15,6 +15,9 @@ use std::path::PathBuf;
 #[derive(Parser)]
 #[command(version, about)]
 struct Cli {
+    /// TOML configuration file (defaults to config.toml).
+    #[arg(long, global = true)]
+    config: Option<PathBuf>,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -22,7 +25,7 @@ struct Cli {
 enum Command {
     /// Poll Telegram (the default when no command is supplied).
     Run,
-    /// Apply embedded SQL migrations; requires only AR_DATABASE_URL.
+    /// Apply embedded SQL migrations; requires only database_url.
     Migrate,
     /// Validate configuration without connecting to external services.
     CheckConfig,
@@ -86,7 +89,9 @@ async fn execute(cli: Cli) -> Result<()> {
         );
         return Ok(());
     }
-    let settings = config::Settings::load()?;
+    let allow_missing = cli.config.is_none() && matches!(command, Command::Inspect { .. });
+    let config_path = cli.config.unwrap_or_else(|| PathBuf::from("config.toml"));
+    let settings = config::Settings::load(&config_path, allow_missing).await?;
     if matches!(command, Command::Migrate) {
         let pool = db::connect(&settings.database_url()?).await?;
         db::migrate(&pool).await?;
@@ -96,14 +101,10 @@ async fn execute(cli: Cli) -> Result<()> {
     }
     if let Command::Inspect { url, output } = command {
         let reference = repositories::RepositoryRef::parse(&url)?;
-        let key = match reference.provider {
-            repositories::Provider::Github => "AR_GITHUB_TOKEN",
-            repositories::Provider::Gitlab => "AR_GITLAB_TOKEN",
-        };
         let repository = repositories::fetch(
             &http::client()?,
             &reference,
-            settings.optional(key).as_deref(),
+            settings.provider_token(reference.provider).as_deref(),
         )
         .await?;
         tokio::fs::write(output, serde_json::to_vec_pretty(&repository)?).await?;

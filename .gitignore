@@ -1,7 +1,7 @@
 # Local configuration
+/config.toml
 .env
 .env.*
-!.env.example
 
 # Editors and operating systems
 .idea/
