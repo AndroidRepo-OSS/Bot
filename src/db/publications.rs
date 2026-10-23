@@ -1,0 +1,292 @@
+//! The database/Telegram boundary is not atomic. Expired leases never allow recopying.
+use crate::{
+    error::{Error, Result},
+    generation::Draft,
+    repositories::RepositoryRef,
+};
+use chrono::{DateTime, Utc};
+use sqlx::{FromRow, PgPool, Postgres, Transaction};
+
+const LOCK_NAMESPACE: i32 = 1_095_789_890;
+type Tx<'a> = Transaction<'a, Postgres>;
+
+pub struct Intent<'a> {
+    pub repository_id: i32,
+    pub reference: &'a RepositoryRef,
+    pub draft: &'a Draft,
+    pub actor: i64,
+    pub source_chat: i64,
+    pub source_message: i32,
+    pub channel: i64,
+}
+#[derive(Debug)]
+pub enum Reservation {
+    Reserved(i32),
+    Blocked(DateTime<Utc>),
+    InProgress(i32),
+    Recovery(i32),
+}
+#[derive(Clone, Copy, Debug)]
+pub struct Receipt {
+    pub operation: i32,
+    pub channel: i64,
+    pub message: i32,
+    pub published_at: DateTime<Utc>,
+}
+pub enum Delivery {
+    Uncertain,
+    Rejected,
+}
+#[derive(FromRow)]
+struct Operation {
+    id: i32,
+    repository_app_id: i32,
+    channel_id: i64,
+    actor_user_id: i64,
+    title: String,
+    tags: Vec<String>,
+    status: String,
+    lease_expires_at: Option<DateTime<Utc>>,
+    channel_message_id: Option<i64>,
+    published_at: Option<DateTime<Utc>>,
+}
+async fn lock(tx: &mut Tx<'_>, repository: i32) -> Result<()> {
+    sqlx::query("SELECT pg_advisory_xact_lock($1,$2)")
+        .bind(LOCK_NAMESPACE)
+        .bind(repository)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+async fn now(tx: &mut Tx<'_>) -> Result<DateTime<Utc>> {
+    Ok(sqlx::query_scalar("SELECT clock_timestamp()")
+        .fetch_one(&mut **tx)
+        .await?)
+}
+async fn operation(tx: &mut Tx<'_>, id: i32) -> Result<Operation> {
+    let repository: i32 =
+        sqlx::query_scalar("SELECT repository_app_id FROM publication_operations WHERE id=$1")
+            .bind(id)
+            .fetch_optional(&mut **tx)
+            .await?
+            .ok_or(Error::Invalid("Publication operation does not exist."))?;
+    // All transitions acquire the advisory lock before any operation row lock.
+    lock(tx, repository).await?;
+    Ok(
+        sqlx::query_as("SELECT * FROM publication_operations WHERE id=$1 FOR UPDATE")
+            .bind(id)
+            .fetch_one(&mut **tx)
+            .await?,
+    )
+}
+async fn cooldown(tx: &mut Tx<'_>, repository: i32) -> Result<Option<DateTime<Utc>>> {
+    Ok(sqlx::query_scalar("SELECT published_at + interval '3 months' FROM published_posts WHERE repository_app_id=$1
+        AND published_at + interval '3 months' > clock_timestamp() ORDER BY published_at DESC LIMIT 1").bind(repository).fetch_optional(&mut **tx).await?)
+}
+async fn blocked_attempt(
+    tx: &mut Tx<'_>,
+    repository: i32,
+    reference: &RepositoryRef,
+    actor: i64,
+    until: DateTime<Utc>,
+) -> Result<()> {
+    sqlx::query("INSERT INTO post_attempts (repository_app_id,provider,namespace,name,url,requested_by_user_id,attempted_at,status,blocked_until,reason)
+        VALUES ($1,$2,$3,$4,$5,$6,clock_timestamp(),'blocked',$7,'cooldown')").bind(repository).bind(reference.provider.name())
+        .bind(&reference.namespace).bind(&reference.name).bind(reference.url()).bind(actor).bind(until).execute(&mut **tx).await?;
+    Ok(())
+}
+pub async fn eligibility(
+    pool: &PgPool,
+    repository: i32,
+    reference: &RepositoryRef,
+    actor: i64,
+) -> Result<Option<DateTime<Utc>>> {
+    let mut tx = pool.begin().await?;
+    let until = cooldown(&mut tx, repository).await?;
+    if let Some(until) = until {
+        blocked_attempt(&mut tx, repository, reference, actor, until).await?;
+    }
+    tx.commit().await?;
+    Ok(until)
+}
+pub async fn reserve(pool: &PgPool, intent: Intent<'_>) -> Result<Reservation> {
+    let mut tx = pool.begin().await?;
+    lock(&mut tx, intent.repository_id).await?;
+    let current = now(&mut tx).await?;
+    let open: Option<Operation> = sqlx::query_as("SELECT * FROM publication_operations WHERE repository_app_id=$1 AND status IN ('copying','compensating','uncertain') FOR UPDATE")
+        .bind(intent.repository_id).fetch_optional(&mut *tx).await?;
+    let result = if let Some(open) = open {
+        if open.status == "copying" && open.lease_expires_at.is_some_and(|lease| lease > current) {
+            Reservation::InProgress(open.id)
+        } else {
+            if open.status == "copying" {
+                sqlx::query("UPDATE publication_operations SET status='uncertain',lease_expires_at=NULL,updated_at=clock_timestamp() WHERE id=$1").bind(open.id).execute(&mut *tx).await?;
+            }
+            Reservation::Recovery(open.id)
+        }
+    } else if let Some(until) = cooldown(&mut tx, intent.repository_id).await? {
+        blocked_attempt(
+            &mut tx,
+            intent.repository_id,
+            intent.reference,
+            intent.actor,
+            until,
+        )
+        .await?;
+        Reservation::Blocked(until)
+    } else {
+        let id = sqlx::query_scalar("INSERT INTO publication_operations (repository_app_id,source_chat_id,source_message_id,channel_id,actor_user_id,title,tags,status,lease_expires_at,created_at,updated_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,'copying',clock_timestamp()+interval '2 minutes',clock_timestamp(),clock_timestamp()) RETURNING id")
+            .bind(intent.repository_id).bind(intent.source_chat).bind(i64::from(intent.source_message)).bind(intent.channel).bind(intent.actor)
+            .bind(&intent.draft.title).bind(&intent.draft.tags).fetch_one(&mut *tx).await?;
+        Reservation::Reserved(id)
+    };
+    tx.commit().await?;
+    Ok(result)
+}
+fn receipt_matches(op: &Operation, message: i32) -> Result<DateTime<Utc>> {
+    if op.channel_message_id != Some(i64::from(message)) {
+        return Err(Error::Invalid(
+            "Operation already has a different channel receipt.",
+        ));
+    }
+    op.published_at
+        .ok_or(Error::Invalid("Operation has no publication timestamp."))
+}
+async fn require_active(tx: &mut Tx<'_>, op: &Operation) -> Result<()> {
+    if matches!(op.status.as_str(), "completed" | "compensating") {
+        return Ok(());
+    }
+    if op.status != "copying" || op.lease_expires_at.is_none() {
+        return Err(Error::Invalid("Publication no longer owns the operation."));
+    }
+    let current = now(tx).await?;
+    if op.lease_expires_at.is_none_or(|lease| lease <= current) {
+        return Err(Error::Invalid(
+            "Publication lease expired; reconcile the channel.",
+        ));
+    }
+    Ok(())
+}
+async fn require_reconcilable(tx: &mut Tx<'_>, op: &Operation) -> Result<()> {
+    if matches!(op.status.as_str(), "copying" | "compensating") {
+        let current = now(tx).await?;
+        if op.lease_expires_at.is_some_and(|lease| lease > current) {
+            return Err(Error::Invalid(
+                "Publication is still in progress. Wait for its lease to expire.",
+            ));
+        }
+    }
+    Ok(())
+}
+/// Store both the receipt and completed operation atomically, or reconcile after inspection.
+pub async fn complete(pool: &PgPool, receipt: Receipt, reconciliation: bool) -> Result<Receipt> {
+    let mut tx = pool.begin().await?;
+    let op = operation(&mut tx, receipt.operation).await?;
+    if receipt.channel != op.channel_id {
+        return Err(Error::Invalid("Operation belongs to another channel."));
+    }
+    if reconciliation {
+        require_reconcilable(&mut tx, &op).await?;
+    } else {
+        require_active(&mut tx, &op).await?;
+    }
+    if !matches!(
+        op.status.as_str(),
+        "copying" | "uncertain" | "compensating" | "completed"
+    ) {
+        return Err(Error::Invalid(
+            "Operation cannot be completed in its current state.",
+        ));
+    }
+    let published_at = if matches!(op.status.as_str(), "compensating" | "completed") {
+        receipt_matches(&op, receipt.message)?
+    } else {
+        receipt.published_at
+    };
+    if op.status != "completed" {
+        let publication: Option<i32> = sqlx::query_scalar("INSERT INTO published_posts (repository_app_id,title,tags,created_by_user_id,channel_id,channel_message_id,published_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (channel_id,channel_message_id) DO NOTHING RETURNING id")
+            .bind(op.repository_app_id).bind(&op.title).bind(&op.tags).bind(op.actor_user_id).bind(op.channel_id).bind(i64::from(receipt.message)).bind(published_at).fetch_optional(&mut *tx).await?;
+        let publication = match publication {
+            Some(id) => id,
+            None => {
+                let (id, repository): (i32, i32) = sqlx::query_as("SELECT id,repository_app_id FROM published_posts WHERE channel_id=$1 AND channel_message_id=$2")
+                    .bind(op.channel_id).bind(i64::from(receipt.message)).fetch_one(&mut *tx).await?;
+                if repository != op.repository_app_id {
+                    return Err(Error::Invalid(
+                        "Channel receipt belongs to another repository.",
+                    ));
+                }
+                id
+            }
+        };
+        sqlx::query("UPDATE publication_operations SET status='completed',lease_expires_at=NULL,channel_message_id=$2,published_at=$3,published_post_id=$4,updated_at=clock_timestamp() WHERE id=$1")
+            .bind(op.id).bind(i64::from(receipt.message)).bind(published_at).bind(publication).execute(&mut *tx).await?;
+    }
+    tx.commit().await?;
+    Ok(Receipt {
+        published_at,
+        ..receipt
+    })
+}
+pub async fn begin_compensation(pool: &PgPool, receipt: Receipt) -> Result<bool> {
+    let mut tx = pool.begin().await?;
+    let op = operation(&mut tx, receipt.operation).await?;
+    if receipt.channel != op.channel_id {
+        return Err(Error::Invalid("Operation belongs to another channel."));
+    }
+    if matches!(op.status.as_str(), "completed" | "compensating") {
+        receipt_matches(&op, receipt.message)?;
+        return Ok(op.status == "compensating");
+    }
+    require_active(&mut tx, &op).await?;
+    sqlx::query("UPDATE publication_operations SET status='compensating',lease_expires_at=clock_timestamp()+interval '2 minutes',channel_message_id=$2,published_at=$3,updated_at=clock_timestamp() WHERE id=$1")
+        .bind(op.id).bind(i64::from(receipt.message)).bind(receipt.published_at).execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(true)
+}
+pub async fn finish_compensation(pool: &PgPool, id: i32) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    let op = operation(&mut tx, id).await?;
+    if !matches!(op.status.as_str(), "compensating" | "abandoned") {
+        return Err(Error::Invalid("Operation has no pending compensation."));
+    }
+    sqlx::query("UPDATE publication_operations SET status='abandoned',lease_expires_at=NULL,updated_at=clock_timestamp() WHERE id=$1").bind(id).execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(())
+}
+pub async fn mark_delivery(pool: &PgPool, id: i32, delivery: Delivery) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    let op = operation(&mut tx, id).await?;
+    let status = match delivery {
+        Delivery::Uncertain => "uncertain",
+        Delivery::Rejected => "failed",
+    };
+    if op.status != "copying" && op.status != status {
+        return Err(Error::Invalid(
+            "Operation already has another delivery state.",
+        ));
+    }
+    sqlx::query("UPDATE publication_operations SET status=$2,lease_expires_at=NULL,updated_at=clock_timestamp() WHERE id=$1").bind(id).bind(status).execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(())
+}
+pub async fn reconcile_absent(pool: &PgPool, id: i32, channel: i64) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    let op = operation(&mut tx, id).await?;
+    if op.channel_id != channel {
+        return Err(Error::Invalid("Operation belongs to another channel."));
+    }
+    require_reconcilable(&mut tx, &op).await?;
+    if op.status == "completed" {
+        return Err(Error::Invalid(
+            "A completed publication cannot be reconciled as absent.",
+        ));
+    }
+    if !matches!(op.status.as_str(), "failed" | "abandoned") {
+        sqlx::query("UPDATE publication_operations SET status='abandoned',lease_expires_at=NULL,updated_at=clock_timestamp() WHERE id=$1").bind(id).execute(&mut *tx).await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
