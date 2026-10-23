@@ -5,9 +5,7 @@ Android Repository channel posts. Staff load a repository, review a generated
 English caption and 1920 × 1080 banner, then explicitly confirm publication.
 
 One binary owns the HTTP connection pool, PostgreSQL pool, bounded rendering
-work and teloxide dispatcher. This is a Rust redesign, not a line-by-line Python
-port. There is no Python runtime, ORM, agent framework or workspace of small
-internal crates.
+work and teloxide dispatcher in a single Rust module tree.
 
 ## Build and run
 
@@ -71,8 +69,6 @@ supports that API and tool calls; models exposed only through Responses or
 Anthropic Messages are not interchangeable. Free model availability is temporary;
 consult the [provider's current model documentation](https://opencode.ai/v2/docs/console/models/).
 
-**Migration from Python:** change `postgresql+asyncpg://` to `postgresql://` in
-`.env` and deployment secrets. Python-specific commands and settings are removed.
 Never commit `.env` or log credentials, raw external errors or private chat text.
 
 ## Staff workflow
@@ -159,7 +155,7 @@ src/
 ├── generation/             # output validation, evidence prompt, tool-call client
 ├── media/                  # NASA fetch, bounded decoding, renderer, licensed assets
 └── db/                     # registration and transactional publication transitions
-migrations/                 # embedded SQLx revisions and historical Alembic sources
+migrations/                 # embedded SQLx revisions
 ```
 
 `bot/` contains Telegram-facing behavior; providers, generation and rendering do
@@ -178,15 +174,16 @@ reservations blocked for reconciliation.
 
 ## Database upgrade
 
-Stop the old bot and back up PostgreSQL before migration. Existing Python
-installations must first reach Alembic `20260812_0003` using the previous release.
+Stop the bot and back up PostgreSQL before migration. Existing installations
+with Alembic history must first reach `20260812_0003` using the previous release.
 The Rust baseline adopts that version without recreating tables or deleting
 history. Fresh databases get the same baseline. Unknown or older schemas are
 rejected. The next SQL migration permits compensation leases on the existing
 operation table; no credentials or media assets change.
 
-Historical Alembic sources are preserved under `migrations/legacy-alembic/` for
-audit only. The Rust binary embeds and applies numbered SQL files through SQLx.
+Historical Alembic sources are available in Git history. The Rust binary embeds
+and applies numbered SQL files through SQLx. Its existing SQL revisions retain
+database adoption metadata for compatibility with deployed databases.
 Never edit a deployed SQL revision; add a new migration. Rollback to an old
 binary requires draining/reconciling operations first because the old bot does
 not understand active compensation leases.
@@ -209,7 +206,7 @@ performed checks and how to repeat the relevant scenarios safely.
 Release builds use thin LTO and one codegen unit. Connection reuse, bounded
 concurrency and one-pass image compositing target the useful work in this bot.
 Network/model latency still dominates post creation. No end-to-end speedup over
-Python is claimed without comparable measurements. Source references and
+previous releases is claimed without comparable measurements. Source references and
 architecture decisions are recorded in [rewrite notes](docs/rewrite.md).
 
 ## Assets and licensing
