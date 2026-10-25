@@ -13,7 +13,7 @@ use std::time::Duration;
 /// Maximum provider/API metadata body size in bytes (4 MiB).
 pub const METADATA_LIMIT: usize = 4 * 1024 * 1024;
 
-/// Build the shared HTTP connection pool with redirects disabled.
+/// Build the shared HTTP connection pool with redirects and internal retries disabled.
 ///
 /// Uses a five-second connection timeout and a 30-second request timeout. Credentials
 /// are attached by callers to individual requests, never as pool-wide defaults.
@@ -25,6 +25,7 @@ pub fn client() -> Result<Client> {
     Ok(Client::builder()
         .user_agent("androidrepo-bot/0.1")
         .redirect(reqwest::redirect::Policy::none())
+        .retry(reqwest::retry::never())
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(30))
         .pool_idle_timeout(Duration::from_secs(90))

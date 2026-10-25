@@ -116,6 +116,46 @@ impl App {
                 .is_some_and(|id| id.0.0 == self.config.post_topic)
     }
 }
+/// Signal subscriptions installed before startup can perform external effects.
+pub struct ShutdownSignals {
+    /// Registered interrupt receiver, including interrupts received during startup.
+    #[cfg(unix)]
+    interrupt: tokio::signal::unix::Signal,
+    /// Registered termination receiver.
+    #[cfg(unix)]
+    terminate: tokio::signal::unix::Signal,
+    /// Registered Windows console interrupt receiver.
+    #[cfg(windows)]
+    interrupt: tokio::signal::windows::CtrlC,
+}
+impl ShutdownSignals {
+    /// Register process signals before database and Telegram initialization.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized I/O error if signal registration fails.
+    pub fn register() -> Result<Self> {
+        Ok(Self {
+            #[cfg(unix)]
+            interrupt: tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?,
+            #[cfg(unix)]
+            terminate: tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?,
+            #[cfg(windows)]
+            interrupt: tokio::signal::windows::ctrl_c()?,
+        })
+    }
+    /// Wait for a signal; a closed subscription also requests a safe drain.
+    async fn wait(&mut self) -> Result<()> {
+        #[cfg(unix)]
+        let received = tokio::select! {
+            value = self.interrupt.recv() => value,
+            value = self.terminate.recv() => value,
+        };
+        #[cfg(windows)]
+        let received = self.interrupt.recv().await;
+        received.ok_or(Error::Io)
+    }
+}
 /// Configure Telegram commands and poll until dispatcher shutdown completes.
 ///
 /// Owns a single polling loop, four draft-work slots and two render slots. Commands
@@ -126,8 +166,14 @@ impl App {
 /// # Errors
 ///
 /// Returns sanitized Telegram errors when startup or dispatcher initialization
-/// fails. Individual workflow failures are reported through safe application errors.
-pub async fn run(config: Config, http: reqwest::Client, pool: SqlitePool) -> Result<()> {
+/// fails, or an I/O error after draining if a signal subscription closes.
+/// Individual workflow failures are reported through safe application errors.
+pub async fn run(
+    config: Config,
+    http: reqwest::Client,
+    pool: SqlitePool,
+    mut signals: ShutdownSignals,
+) -> Result<()> {
     // Same HTTP pool and redirect policy; no retry adapter around channel copies.
     let bot = Bot::with_client(&config.bot_token, http.clone());
     bot.delete_webhook().await?;
@@ -173,39 +219,43 @@ pub async fn run(config: Config, http: reqwest::Client, pool: SqlitePool) -> Res
         .limit(20)
         .build();
     let token = dispatcher.shutdown_token();
-    let signal = tokio::spawn(async move {
-        #[cfg(unix)]
-        {
-            let mut terminate =
-                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-            tokio::select! { result = tokio::signal::ctrl_c() => result?, _ = terminate.recv() => {} }
-        }
-        #[cfg(not(unix))]
-        tokio::signal::ctrl_c().await?;
-        tracing::info!("Stopping admission and draining Telegram work");
-        // get_me may still be running during startup. Wait until the dispatcher
-        // starts, so a signal cannot be lost in that small window.
-        loop {
-            if let Ok(completion) = token.shutdown() {
-                completion.await;
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-        }
-        Ok::<_, std::io::Error>(())
-    });
     app.audit("Bot started.").await;
-    let result = dispatcher
-        .try_dispatch_with_listener(
-            listener,
-            Arc::new(|_: teloxide::RequestError| async {
-                tracing::warn!("Telegram polling failed; retrying with backoff");
-            }),
-        )
-        .await;
-    signal.abort();
-    let _ = signal.await;
+    let dispatch = dispatcher.try_dispatch_with_listener(
+        listener,
+        Arc::new(|_: teloxide::RequestError| async {
+            tracing::warn!("Telegram polling failed; retrying with backoff");
+        }),
+    );
+    tokio::pin!(dispatch);
+    let mut signal_result = Ok(());
+    let result = tokio::select! {
+        result = &mut dispatch => result,
+        result = signals.wait() => {
+            signal_result = result;
+            if signal_result.is_err() {
+                tracing::warn!("Signal subscription failed; draining Telegram work");
+            } else {
+                tracing::info!("Stopping admission and draining Telegram work");
+            }
+            // get_me runs before dispatch starts. Keep polling dispatch while waiting
+            // for the shutdown token to accept the request; never drop admitted work.
+            let shutdown = async {
+                loop {
+                    if let Ok(completion) = token.shutdown() {
+                        completion.await;
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                }
+            };
+            tokio::select! {
+                result = &mut dispatch => result,
+                () = shutdown => dispatch.await,
+            }
+        }
+    };
     app.audit("Bot stopped after draining admitted work.").await;
     pool.close().await;
-    result.map_err(Into::into)
+    result.map_err(Error::from)?;
+    signal_result
 }

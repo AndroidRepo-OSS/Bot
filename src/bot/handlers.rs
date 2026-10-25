@@ -229,7 +229,7 @@ async fn publish(app: &App, source: &Message, session: Arc<DraftSession>) -> Res
             restore(app, source, session).await?;
             format!(
                 "This repository is on cooldown until {}.",
-                until.format("%Y-%m-%d")
+                until.format("%Y-%m-%d %H:%M:%S UTC")
             )
         }
         Outcome::InProgress(id) => format!("⏳ Operation #{id} is still in progress."),

@@ -83,13 +83,51 @@ fn decode(bytes: &[u8]) -> Result<DynamicImage> {
     reader.limits(limits);
     let mut decoder = reader.into_decoder().map_err(|_| Error::Image)?;
     let (width, height) = decoder.dimensions();
-    if u64::from(width) * u64::from(height) > 40_000_000 {
+    if width == 0 || height == 0 || u64::from(width) * u64::from(height) > 40_000_000 {
         return Err(Error::Image);
     }
     let orientation = decoder.orientation().map_err(|_| Error::Image)?;
     let mut decoded = DynamicImage::from_decoder(decoder).map_err(|_| Error::Image)?;
     decoded.apply_orientation(orientation);
     Ok(decoded)
+}
+/// Crop centrally before resizing so extreme aspect ratios cannot enlarge intermediates.
+///
+/// Uses wide integer arithmetic and retains at least one source pixel per axis.
+///
+/// # Errors
+///
+/// Returns [`Error::Image`] for empty input or unrepresentable crop dimensions.
+fn cover(source: &DynamicImage) -> Result<RgbaImage> {
+    let (width, height) = (source.width(), source.height());
+    if width == 0 || height == 0 {
+        return Err(Error::Image);
+    }
+    let (crop_width, crop_height) =
+        if u64::from(width) * u64::from(HEIGHT) > u64::from(height) * u64::from(WIDTH) {
+            (
+                u32::try_from(u64::from(height) * u64::from(WIDTH) / u64::from(HEIGHT))
+                    .map_err(|_| Error::Image)?
+                    .max(1),
+                height,
+            )
+        } else {
+            (
+                width,
+                u32::try_from(u64::from(width) * u64::from(HEIGHT) / u64::from(WIDTH))
+                    .map_err(|_| Error::Image)?
+                    .max(1),
+            )
+        };
+    Ok(source
+        .crop_imm(
+            (width - crop_width) / 2,
+            (height - crop_height) / 2,
+            crop_width,
+            crop_height,
+        )
+        .resize_exact(WIDTH, HEIGHT, FilterType::Lanczos3)
+        .into_rgba8())
 }
 /// Clip text at a Unicode scalar boundary until it and an ellipsis fit `max` pixels.
 fn ellipsis(value: &str, font: &FontRef<'_>, size: f32, max: u32) -> String {
@@ -159,9 +197,7 @@ pub fn render(request: BannerRequest, artwork: Option<Artwork>) -> Result<Banner
             decode(&artwork.bytes)?
         }
     };
-    let mut image = source
-        .resize_to_fill(WIDTH, HEIGHT, FilterType::Lanczos3)
-        .into_rgba8();
+    let mut image = cover(&source)?;
     // One pass applies brightness, cool tint and a smooth left scrim; no full-size layers.
     for (x, y, pixel) in image.enumerate_pixels_mut() {
         let progress = ((x as f32 / WIDTH as f32 - 0.32) / 0.4).clamp(0.0, 1.0);

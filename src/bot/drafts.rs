@@ -80,13 +80,21 @@ pub(super) async fn create(
             source,
             format!(
                 "This repository is on cooldown until {}.",
-                until.format("%Y-%m-%d")
+                until.format("%Y-%m-%d %H:%M:%S UTC")
             ),
         )
         .await?;
         return Ok(());
     }
-    match generation::generate(&app.http, &app.config, &repository, allow_missing).await? {
+    match generation::generate(
+        &app.http,
+        &app.config,
+        &repository,
+        allow_missing,
+        |draft| ui::caption(draft).map(|_| ()),
+    )
+    .await?
+    {
         Generated::Draft(draft) => {
             let (message, artwork) = send_draft(app, source, &repository, &draft).await?;
             let mut session = DraftSession {
@@ -237,6 +245,7 @@ pub(super) async fn revise(app: &App, source: &Message, session: Arc<DraftSessio
             &app.config,
             &session.repository,
             session.draft.download_url.is_none(),
+            |draft| ui::caption(draft).map(|_| ()),
         )
         .await?
         else {

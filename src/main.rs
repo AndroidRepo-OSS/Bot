@@ -184,8 +184,9 @@ async fn execute(cli: Cli) -> Result<()> {
         println!("Configuration is valid.");
         return Ok(());
     }
+    let signals = bot::ShutdownSignals::register()?;
     let http = http::client()?;
     let pool = db::connect(&config.database_url).await?;
     db::verify(&pool).await?;
-    bot::run(config, http, pool).await
+    bot::run(config, http, pool, signals).await
 }

@@ -157,15 +157,16 @@ async fn cooldown(tx: &mut Tx<'_>, repository: i32) -> Result<Option<DateTime<Ut
     .await?;
     // Calendar addition clamps to the last valid day, matching PostgreSQL's UTC cooldown.
     // Check earlier posts too: month-end clamping can put their expiry after a later post's.
+    let mut latest = None;
     for date in dates {
         let until = date
             .checked_add_months(Months::new(3))
             .ok_or(Error::Database)?;
         if until > current {
-            return Ok(Some(until));
+            latest = Some(latest.map_or(until, |previous: DateTime<Utc>| previous.max(until)));
         }
     }
-    Ok(None)
+    Ok(latest)
 }
 
 /// Record a cooldown refusal in the caller’s transaction.

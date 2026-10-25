@@ -3,7 +3,7 @@
 //! [`generate`] limits total deadline, requests, response bytes and output tokens.
 //! Only one recognized tool call is accepted; free-form output never becomes a post.
 
-use super::{GeneratedPost, Outcome, Reason, prompt, validate_plain_text};
+use super::{Draft, GeneratedPost, Outcome, Reason, prompt, validate_plain_text};
 use crate::{
     config::Config,
     error::{Error, Result},
@@ -64,6 +64,7 @@ struct Function {
 /// Uses at most three requests, each with 2,048 output tokens, and a 6,144-token
 /// aggregate budget. Corrective requests follow invalid output, not arbitrary HTTP
 /// failures. `allow_missing` must reflect staff approval, never repository text.
+/// The consumer's synchronous `validate` checks the assembled draft on every attempt.
 /// This contacts the configured model provider and may consume billed tokens.
 ///
 /// # Errors
@@ -75,10 +76,11 @@ pub async fn generate(
     config: &Config,
     repository: &Repository,
     allow_missing: bool,
+    validate: impl Fn(&Draft) -> Result<()>,
 ) -> Result<Outcome> {
     tokio::time::timeout(
         Duration::from_secs(120),
-        run(client, config, repository, allow_missing),
+        run(client, config, repository, allow_missing, validate),
     )
     .await
     .map_err(|_| Error::Timeout)?
@@ -94,12 +96,13 @@ async fn run(
     config: &Config,
     repository: &Repository,
     allow_missing: bool,
+    validate: impl Fn(&Draft) -> Result<()>,
 ) -> Result<Outcome> {
     let mut messages = vec![
         json!({"role": "system", "content": prompt::instructions(allow_missing)}),
         json!({"role": "user", "content": prompt::evidence(repository)?}),
     ];
-    let mut consumed = 0;
+    let mut consumed = 0_u64;
     for attempt in 0..3 {
         let response = client.post("https://opencode.ai/inference/openai/v1/chat/completions")
             .bearer_auth(&config.zen_key).timeout(Duration::from_secs(120))
@@ -109,17 +112,24 @@ async fn run(
         }
         let response: Response =
             serde_json::from_slice(&http::bounded(response, 256 * 1024).await?)?;
-        consumed += response
-            .usage
-            .as_ref()
-            .map_or(2048, |usage| usage.completion_tokens);
+        consumed = consumed.saturating_add(
+            response
+                .usage
+                .as_ref()
+                .map_or(2048, |usage| usage.completion_tokens),
+        );
         if consumed > 6144 {
             return Err(Error::Generation);
         }
-        let outcome = resolve(response, repository, allow_missing);
+        let outcome = resolve(response, repository, allow_missing).and_then(|outcome| {
+            if let Outcome::Draft(draft) = &outcome {
+                validate(draft)?;
+            }
+            Ok(outcome)
+        });
         match outcome {
             Ok(outcome) => return Ok(outcome),
-            Err(_) if attempt < 2 => messages.push(json!({"role": "user", "content": "The result violated the output contract. Return exactly one output tool with bounded plain text, 3–5 distinct supported features, 1–3 valid tags, exact eligible link IDs, and total text <=950 characters. Omit duplicate destinations. A missing download outcome is permitted only without verified candidates and without staff approval. Do not invent claims."})),
+            Err(_) if attempt < 2 => messages.push(json!({"role": "user", "content": "The result violated the output contract. Return exactly one output tool with bounded plain text, 3–5 distinct supported features, 1–3 valid tags, exact eligible link IDs, and total text <=950 characters and an assembled caption <=1024 UTF-16 units (including headings, separators and labels). Shorten text when necessary. Omit duplicate destinations. A missing download outcome is permitted only without verified candidates and without staff approval. Do not invent claims."})),
             Err(_) => break,
         }
     }

@@ -5,7 +5,7 @@
 
 use super::{Link, LinkKind, web_url};
 use pulldown_cmark::{Parser, html};
-use scraper::{ElementRef, Html};
+use scraper::Html;
 use std::collections::HashSet;
 use url::Url;
 
@@ -136,7 +136,7 @@ pub fn build(
                 .chars()
                 .any(|c| c.is_control() || c.is_whitespace() || c == '\\')
         {
-            return;
+            return false;
         }
         let resolved = if destination.starts_with('#') {
             root.join(destination)
@@ -144,10 +144,10 @@ pub fn build(
             base.join(destination)
         };
         let Some(url) = resolved.ok().and_then(|url| web_url(url.as_str())) else {
-            return;
+            return false;
         };
         if !known.insert(key(&url)) {
-            return;
+            return false;
         }
         count += 1;
         let label = label.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -164,39 +164,45 @@ pub fn build(
             url,
             kind,
         });
+        count == 20
     };
-    for node in document.tree.nodes() {
-        if node.ancestors().any(|ancestor| hidden(ancestor.value())) || hidden(node.value()) {
+    // Enter/exit frames visit each visible node once and skip hidden subtrees.
+    // Anchor labels are accumulated during that same traversal.
+    let mut pending = vec![(document.tree.root(), false)];
+    let mut anchors: Vec<(Option<&str>, String)> = Vec::new();
+    while let Some((node, exiting)) = pending.pop() {
+        if hidden(node.value()) {
             continue;
         }
-        if let Some(element) = ElementRef::wrap(node)
-            && element.value().name() == "a"
-        {
-            if let Some(href) = element.value().attr("href") {
-                let mut label = String::new();
-                for descendant in element.descendants() {
-                    if descendant
-                        .ancestors()
-                        .any(|ancestor| hidden(ancestor.value()))
-                    {
-                        continue;
-                    }
-                    if let Some(text) = descendant.value().as_text() {
-                        label.push_str(text);
-                    }
-                    if let Some(e) = descendant.value().as_element()
-                        && e.name() == "img"
-                    {
-                        label.push_str(e.attr("alt").unwrap_or(""));
-                    }
+        let element = node.value().as_element();
+        let is_anchor = element.is_some_and(|element| element.name() == "a");
+        if exiting {
+            if is_anchor && let Some((href, label)) = anchors.pop() {
+                if let Some((_, parent)) = anchors.last_mut() {
+                    parent.push_str(&label);
                 }
-                add(href, label);
+                if let Some(href) = href
+                    && add(href, label)
+                {
+                    break;
+                }
             }
-        } else if let Some(text) = node.value().as_text() {
-            if node
-                .ancestors()
-                .any(|a| a.value().as_element().is_some_and(|e| e.name() == "a"))
+            continue;
+        }
+        pending.push((node, true));
+        pending.extend(node.children().rev().map(|child| (child, false)));
+        if let Some(element) = element {
+            if is_anchor {
+                anchors.push((element.attr("href"), String::new()));
+            } else if element.name() == "img"
+                && let Some((_, label)) = anchors.last_mut()
             {
+                label.push_str(element.attr("alt").unwrap_or(""));
+            }
+        }
+        if let Some(text) = node.value().as_text() {
+            if let Some((_, label)) = anchors.last_mut() {
+                label.push_str(text);
                 continue;
             }
             for word in text
@@ -205,13 +211,20 @@ pub fn build(
             {
                 let mut value = word.trim_end_matches(['.', ',', ';', ':', '!', '?']);
                 for (open, close) in [('(', ')'), ('[', ']'), ('{', '}')] {
-                    while value.ends_with(close)
-                        && value.matches(close).count() > value.matches(open).count()
-                    {
+                    let excess = value
+                        .matches(close)
+                        .count()
+                        .saturating_sub(value.matches(open).count());
+                    for _ in 0..excess {
+                        if !value.ends_with(close) {
+                            break;
+                        }
                         value = &value[..value.len() - 1];
                     }
                 }
-                add(value, value.into());
+                if add(value, value.into()) {
+                    return links;
+                }
             }
         }
     }

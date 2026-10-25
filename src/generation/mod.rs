@@ -26,8 +26,9 @@ pub struct PostLink {
 }
 /// Validated content prepared for staff review, with evidence-resolved destinations.
 ///
-/// [`GeneratedPost::resolve`] validates model output; Telegram presentation separately
-/// checks the final caption budget. Direct field construction does not validate it.
+/// [`GeneratedPost::resolve`] validates model output; the consumer validator supplied
+/// to [`generate`] checks the assembled presentation on each attempt. Direct field
+/// construction does not validate it.
 #[derive(Clone, Debug, Serialize)]
 pub struct Draft {
     /// Plain-text project name, at most 100 Unicode scalar values.

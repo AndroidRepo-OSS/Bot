@@ -115,7 +115,7 @@ requests, 2,048 output tokens each, 6,144 total, within 120 seconds. Evidence
 fields and collections are bounded, README text is limited to 50,000 characters,
 and escaped evidence JSON to 80,000. Drafts require distinct features and tags,
 plain text, eligible link selections and a 950-character text budget. The final
-caption is also checked against 1,024 UTF-16 units.
+caption is also checked against 1,024 UTF-16 units inside each corrective attempt.
 
 ## Publication recovery
 
@@ -123,7 +123,8 @@ A committed `copying` reservation precedes the only channel-copy request.
 SQLite `BEGIN IMMEDIATE` transactions acquire the writer lock before reading
 publication state; a unique open-operation index also prevents duplicate
 reservations. The cooldown is three calendar months in UTC, clamped to the last
-valid day of the destination month.
+valid day of the destination month. When several publications apply, the latest
+expiry wins; staff see the full UTC expiry time.
 An expired lease means **unresolved delivery**, never permission to copy again.
 
 The receipt and completed publication are committed atomically. If storing them
@@ -179,9 +180,12 @@ repository interfaces, service containers or generic workflow engines.
 
 The dispatcher serializes updates by user. State mutexes protect only short map
 operations, never network calls. Up to four draft jobs and two render jobs run
-concurrently. HTTP requests share a connection pool; independent repository
+concurrently. HTTP requests share a connection pool with internal retries disabled; only the
+bounded metadata GET loop retries. Independent repository
 resources load concurrently. Image decoding and rendering use `spawn_blocking`.
-SIGINT/SIGTERM stop polling and drain dispatcher work before the database closes.
+Images are cropped centrally before final resizing to bound intermediate sizes.
+Signal subscriptions are registered before startup effects. SIGINT/SIGTERM and
+subscription failures stop polling and drain dispatcher work before the database closes.
 Allow sufficient shutdown grace time: forced termination leaves unfinished
 reservations blocked for reconciliation.
 
