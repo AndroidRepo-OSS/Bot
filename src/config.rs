@@ -23,10 +23,10 @@ pub struct Config {
     pub log_topic: i32,
     /// Nonzero target channel ID for publication.
     pub channel: i64,
-    /// OpenCode API credential; never include it in logs.
-    pub zen_key: String,
+    /// NVIDIA API credential; never include it in logs.
+    pub nvidia_key: String,
     /// Chat Completions model identifier supporting tool calls.
-    pub zen_model: String,
+    pub nvidia_model: String,
     /// Optional GitHub API credential scoped to the GitHub origin.
     pub github_token: Option<String>,
     /// Optional GitLab API credential scoped to the GitLab origin.
@@ -56,10 +56,10 @@ pub struct FileSettings {
     log_topic_id: Option<i32>,
     /// Optional input: nonzero target channel ID for publication.
     channel_id: Option<i64>,
-    /// Optional input: openCode API credential; never include it in logs.
-    opencode_zen_api_key: Option<String>,
+    /// Optional input: NVIDIA API credential; never include it in logs.
+    nvidia_api_key: Option<String>,
     /// Optional input: chat Completions model identifier supporting tool calls.
-    opencode_zen_model: Option<String>,
+    nvidia_model: Option<String>,
     /// Optional input: optional GitHub API credential scoped to the GitHub origin.
     github_token: Option<String>,
     /// Optional input: optional GitLab API credential scoped to the GitLab origin.
@@ -153,9 +153,9 @@ impl FileSettings {
             post_topic: topic(self.post_topic_id, "post_topic_id")?,
             log_topic: topic(self.log_topic_id, "log_topic_id")?,
             channel: nonzero(self.channel_id, "channel_id")?,
-            zen_key: required(&self.opencode_zen_api_key, "opencode_zen_api_key")?,
-            zen_model: optional(&self.opencode_zen_model)
-                .unwrap_or_else(|| "mimo-v2.6-flash-free".into()),
+            nvidia_key: required(&self.nvidia_api_key, "nvidia_api_key")?,
+            nvidia_model: optional(&self.nvidia_model)
+                .unwrap_or_else(|| "nvidia/nemotron-3.5-super-vl-120b-a12b".into()),
             github_token: optional(&self.github_token),
             gitlab_token: optional(&self.gitlab_token),
             database_url: self.database_url()?,

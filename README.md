@@ -17,7 +17,7 @@ TLS dependencies and bundled SQLite.
 cargo build --release --locked
 cp config.example.toml config.toml
 chmod 600 config.toml
-# Fill in your Telegram, OpenCode and SQLite file settings.
+# Fill in your Telegram, NVIDIA and SQLite file settings.
 cargo run --release --locked -- check-config
 cargo run --release --locked -- migrate
 cargo run --release --locked -- run
@@ -58,18 +58,43 @@ optional provider token if configured; it never invokes AI or Telegram.
 | `post_topic_id` | yes | — | Positive staff workflow topic ID |
 | `log_topic_id` | yes | — | Positive topic ID for best-effort audits |
 | `channel_id` | yes | — | Target channel, nonzero ID |
-| `opencode_zen_api_key` | yes | — | OpenCode Console API credential |
+| `nvidia_api_key` | yes | — | NVIDIA API Catalog credential |
 | `database_url` | yes | — | Persistent file URL, e.g. `sqlite://androidrepo.db` |
 | `log_level` | no | `INFO` | `CRITICAL`, `ERROR`, `WARNING`/`WARN`, `INFO`, `DEBUG` |
-| `opencode_zen_model` | no | `mimo-v2.6-flash-free` | Model with Chat Completions tool calling |
+| `nvidia_model` | no | `nvidia/nemotron-3.5-super-vl-120b-a12b` | Model with Chat Completions tool calling |
 | `github_token` | no | — | Optional GitHub API token |
 | `gitlab_token` | no | — | Optional GitLab API token |
 
-Generation uses the OpenCode endpoint
-`https://opencode.ai/inference/openai/v1/chat/completions`. Choose a model that
-supports that API and tool calls; models exposed only through Responses or
-Anthropic Messages are not interchangeable. Free model availability is temporary;
-consult the [provider's current model documentation](https://opencode.ai/v2/docs/console/models/).
+Generation uses NVIDIA's hosted Chat Completions endpoint
+`https://integrate.api.nvidia.com/v1/chat/completions`. The default,
+[Nemotron 3.5 Super VL](https://build.nvidia.com/nvidia/nemotron-3.5-super-vl-120b-a12b/modelcard),
+was released on October 15, 2026 and supports document understanding and tool use.
+It is selected for evidence analysis and structured drafting; the newer Bolt E4B
+BF16 release is primarily intended for customization and research rather than
+production inference. This choice has not been benchmarked on the bot's workload.
+
+Requests require one output tool, disable parallel tool calls and set
+`reasoning_effort` to `"none"` so the existing 2,048-token
+completion budget is reserved for the result. The three-submission, 6,144-token and
+120-second total bounds remain in force. Model overrides must support these
+parameters and Chat Completions tool calls; see the
+[NVIDIA API reference](https://docs.api.nvidia.com/nim/reference/nvidia-nemotron-3_5-super-vl-120b-a12b-infer).
+
+HTTP 202 responses are pending work, not completed generations. The bot follows a
+bounded, path-safe `NVCF-REQID` only through NVIDIA's fixed status endpoint
+`https://api.nvcf.nvidia.com/v2/nvcf/pexec/status/{requestId}`, with at most 120
+status reads spaced by one second, all within the same 120-second total deadline.
+It never resubmits an inference because of a pending response or HTTP/transport
+failure. Authentication, request configuration, rate/quota and availability errors
+are reported separately from invalid generated content. Logs contain only safe
+categories and numeric request context. Invalid results receive contract-specific
+corrections, without echoing rejected model text or relaxing evidence validation.
+
+When migrating from OpenCode, replace `opencode_zen_api_key` with `nvidia_api_key`
+and remove `opencode_zen_model` or replace it with `nvidia_model`. Obtain a new
+credential from the [NVIDIA API Catalog](https://build.nvidia.com/); OpenCode keys
+cannot authenticate to NVIDIA. Legacy setting names are rejected. Hosted API
+access is subject to NVIDIA's availability, quotas and service terms.
 
 Copy [`config.example.toml`](config.example.toml) to `config.toml`. IDs are TOML
 integers; credentials, URLs, model names and log levels are strings. Unknown keys,

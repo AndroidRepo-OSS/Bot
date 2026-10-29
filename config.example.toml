@@ -29,11 +29,11 @@ channel_id = -1009876543210
 log_level = "INFO"
 
 # AI generation
-# Required. OpenCode Console credential for the OpenAI-compatible inference endpoint.
-opencode_zen_api_key = "replace-with-your-opencode-zen-api-key"
+# Required. NVIDIA API Catalog credential for the OpenAI-compatible inference endpoint.
+nvidia_api_key = "replace-with-your-nvidia-api-key"
 
-# Optional. Non-empty OpenCode Zen model identifier.
-opencode_zen_model = "mimo-v2.6-flash-free"
+# Optional. Non-empty NVIDIA Nemotron model identifier supporting tools and reasoning_effort=none.
+nvidia_model = "nvidia/nemotron-3.5-super-vl-120b-a12b"
 
 # Repository providers
 # Optional. Leave blank for anonymous public API requests. Configure tokens for

@@ -8,10 +8,7 @@
 mod client;
 mod prompt;
 mod tags;
-use crate::{
-    error::{Error, Result},
-    repositories::Repository,
-};
+use crate::repositories::Repository;
 pub use client::generate;
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -98,6 +95,75 @@ pub enum Outcome {
     MissingDownload(String),
 }
 
+/// Safe validation categories used to build corrective instructions without external text.
+#[derive(Clone, Copy, Debug)]
+enum Rejection {
+    /// The response did not select exactly one recognized output tool.
+    Tool,
+    /// Tool arguments did not match the declared JSON schema.
+    Schema,
+    /// Generation exhausted its output token limit.
+    Truncated,
+    /// A field is empty or exceeds its character limit.
+    TextLength,
+    /// A field contains forbidden formatting or delimiters.
+    TextFormat,
+    /// Feature count or uniqueness violates the draft contract.
+    Features,
+    /// Tags violate the count, uniqueness or allowlist requirements.
+    Tags,
+    /// Optional link count, uniqueness or eligibility is invalid.
+    Links,
+    /// Download selection or missing-download outcome violates staff policy.
+    Download,
+    /// Combined content exceeds the draft character budget.
+    ContentLength,
+    /// The assembled caption failed the consumer's presentation check.
+    Caption,
+}
+impl Rejection {
+    /// Return a trusted, specific correction; never interpolate rejected model output.
+    fn correction(self) -> &'static str {
+        match self {
+            Self::Tool => {
+                "Return exactly one recognized output tool, never free-form text or multiple calls."
+            }
+            Self::Schema => {
+                "Return valid JSON arguments matching every required field and type in the selected tool schema; omit unknown fields."
+            }
+            Self::Truncated => {
+                "The output was truncated. Return a shorter complete result within 2048 output tokens."
+            }
+            Self::TextLength => {
+                "Keep all text nonempty and within its field limit: name 100, summary/reason 280, each feature 90 and link label 60 characters."
+            }
+            Self::TextFormat => {
+                "Use bounded plain text without URLs, markup, hashtags, emoji, bullet prefixes or delimiter characters; keep the project name on one line."
+            }
+            Self::Features => {
+                "Return 3–5 distinct evidence-supported features; do not repeat the same capability."
+            }
+            Self::Tags => {
+                "Return 1–3 distinct tags using exact entries from the declared tag enum."
+            }
+            Self::Links => {
+                "Return at most four distinct eligible optional link IDs from the supplied evidence; exclude repository, donation and the selected download destination."
+            }
+            Self::Download => {
+                "Select an exact verified download-candidate ID. Null requires no candidates and explicit staff approval; missing_download_source requires no candidates and no approval."
+            }
+            Self::ContentLength => {
+                "Shorten the result: combined name, summary, features, repository label, optional labels and hashtags must fit 950 characters."
+            }
+            Self::Caption => {
+                "Shorten the result so the assembled caption fits 1024 UTF-16 units, including headings, separators and labels."
+            }
+        }
+    }
+}
+/// Validation result retaining only a safe contract category.
+type ValidationResult<T> = std::result::Result<T, Rejection>;
+
 /// Normalize whitespace and validate a bounded plain-text model field.
 ///
 /// `limit` counts Unicode scalar values, not bytes or UTF-16 units. Rejects empty
@@ -106,15 +172,18 @@ pub enum Outcome {
 ///
 /// # Errors
 ///
-/// Returns [`Error::Generation`] when normalized content violates the text contract.
-pub fn validate_plain_text(value: &str, limit: usize) -> Result<String> {
+/// Returns a safe rejection category when normalized content violates the text contract.
+fn validate_plain_text(value: &str, limit: usize) -> ValidationResult<String> {
     let value = value.split_whitespace().collect::<Vec<_>>().join(" ");
     let lowercase = value.to_lowercase();
-    if value.is_empty() || value.chars().count() > limit || lowercase.contains("http://") || lowercase.contains("https://") || lowercase.contains("www.")
+    if value.is_empty() || value.chars().count() > limit {
+        return Err(Rejection::TextLength);
+    }
+    if lowercase.contains("http://") || lowercase.contains("https://") || lowercase.contains("www.")
         || value.contains(['<', '>', '`', '#']) || value.contains("**") || value.contains("__") || value.contains("~~") || value.contains("](")
         || value.chars().any(|c| matches!(c, '\u{2022}' | '\u{2023}' | '\u{2043}' | '\u{25aa}' | '\u{25ab}' | '\u{25e6}' | '\u{2600}'..='\u{27bf}' | '\u{1f000}'..='\u{1faff}'))
         || ["- ", "+ ", "* "].iter().any(|prefix| value.starts_with(prefix)) {
-        return Err(Error::Generation);
+        return Err(Rejection::TextFormat);
     }
     Ok(value)
 }
@@ -136,15 +205,20 @@ impl GeneratedPost {
     ///
     /// # Errors
     ///
-    /// Returns [`Error::Generation`] for invalid text, counts, duplicates, tags, link IDs,
+    /// Returns a safe rejection category for invalid text, counts, duplicates, tags, link IDs,
     /// destination categories, missing mandatory/download evidence or excessive content.
-    pub fn resolve(self, repository: &Repository, allow_missing: bool) -> Result<Draft> {
-        if self.project_name.contains(['\r', '\n', '\t'])
-            || !(3..=5).contains(&self.features.len())
-            || !(1..=3).contains(&self.tags.len())
-            || self.links.len() > 4
-        {
-            return Err(Error::Generation);
+    fn resolve(self, repository: &Repository, allow_missing: bool) -> ValidationResult<Draft> {
+        if self.project_name.contains(['\r', '\n', '\t']) {
+            return Err(Rejection::TextFormat);
+        }
+        if !(3..=5).contains(&self.features.len()) {
+            return Err(Rejection::Features);
+        }
+        if !(1..=3).contains(&self.tags.len()) {
+            return Err(Rejection::Tags);
+        }
+        if self.links.len() > 4 {
+            return Err(Rejection::Links);
         }
         let title = validate_plain_text(&self.project_name, 100)?;
         let summary = validate_plain_text(&self.summary, 280)?;
@@ -152,41 +226,43 @@ impl GeneratedPost {
             .features
             .iter()
             .map(|v| validate_plain_text(v, 90))
-            .collect::<Result<_>>()?;
-        if !distinct(features.iter().map(String::as_str))
-            || !distinct(self.tags.iter().map(String::as_str))
+            .collect::<ValidationResult<_>>()?;
+        if !distinct(features.iter().map(String::as_str)) {
+            return Err(Rejection::Features);
+        }
+        if !distinct(self.tags.iter().map(String::as_str))
             || self.tags.iter().any(|t| !tags::TAGS.contains(&t.as_str()))
         {
-            return Err(Error::Generation);
+            return Err(Rejection::Tags);
         }
         let download_url = match self.download_link_id.as_deref() {
             Some(id) => Some(
                 repository
                     .link(id)
                     .filter(|link| link.kind.is_download_candidate())
-                    .ok_or(Error::Generation)?
+                    .ok_or(Rejection::Download)?
                     .url
                     .clone(),
             ),
             None if allow_missing && !repository.has_download() => None,
-            None => return Err(Error::Generation),
+            None => return Err(Rejection::Download),
         };
-        let mandatory = repository.link("repository").ok_or(Error::Generation)?;
+        let mandatory = repository.link("repository").ok_or(Rejection::Links)?;
         let mut links = vec![PostLink {
             label: "Repository".into(),
             url: mandatory.url.clone(),
         }];
         if !distinct(self.links.iter().map(|link| link.id.as_str())) {
-            return Err(Error::Generation);
+            return Err(Rejection::Links);
         }
         for selected in self.links {
             if Some(&selected.id) == self.download_link_id.as_ref() {
-                return Err(Error::Generation);
+                return Err(Rejection::Links);
             }
             let link = repository
                 .link(&selected.id)
                 .filter(|link| link.kind.is_optional_destination())
-                .ok_or(Error::Generation)?;
+                .ok_or(Rejection::Links)?;
             links.push(PostLink {
                 label: validate_plain_text(&selected.label, 60)?,
                 url: link.url.clone(),
@@ -202,7 +278,7 @@ impl GeneratedPost {
                 .map(|v| v.chars().count() + 1)
                 .sum::<usize>();
         if length > 950 {
-            return Err(Error::Generation);
+            return Err(Rejection::ContentLength);
         }
         Ok(Draft {
             title,
